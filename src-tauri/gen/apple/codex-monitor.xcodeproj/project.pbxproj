@@ -241,15 +241,6 @@
 			path = Sources;
 			sourceTree = "<group>";
 		};
-		8A851D3110FA91F307B978D2 /* dictation */ = {
-			isa = PBXGroup;
-			children = (
-				B0EB030210E75E48850FA83C /* mod.rs */,
-				67EF668BDD675019CDF40504 /* real.rs */,
-			);
-			path = dictation;
-			sourceTree = "<group>";
-		};
 		8B6C2150457718F38C7FCA0B /* src */ = {
 			isa = PBXGroup;
 			children = (
@@ -272,7 +263,6 @@
 				A129D8219A1A13FA984555C6 /* backend */,
 				74B7A9B5A8090991AAF921E0 /* bin */,
 				97E70EBFACB0FDAD50E1332C /* codex */,
-				8A851D3110FA91F307B978D2 /* dictation */,
 				00C678587D406CBBBC7DB473 /* files */,
 				41BDAF45DFACDE58DB7F6CF9 /* git */,
 				2D83F316741CCD9EEFB040D4 /* remote_backend */,

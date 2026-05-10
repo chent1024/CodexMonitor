@@ -1,9 +1,11 @@
 import type { RateLimitSnapshot } from "../../../types";
-import { formatRelativeTime } from "../../../utils/time";
 
 type UsageLabels = {
   sessionPercent: number | null;
   weeklyPercent: number | null;
+  weeklyRemainingPercent: number | null;
+  sessionWindowLabel: string;
+  weeklyWindowLabel: string;
   sessionResetLabel: string | null;
   weeklyResetLabel: string | null;
   creditsLabel: string | null;
@@ -13,13 +15,43 @@ type UsageLabels = {
 const clampPercent = (value: number) =>
   Math.min(Math.max(Math.round(value), 0), 100);
 
+const pad2 = (value: number) => String(value).padStart(2, "0");
+
+function formatResetDate(timestamp: number) {
+  const date = new Date(timestamp);
+  return `${pad2(date.getMonth() + 1)}/${pad2(date.getDate())} ${pad2(
+    date.getHours(),
+  )}:${pad2(date.getMinutes())}`;
+}
+
 function formatResetLabel(resetsAt?: number | null) {
   if (typeof resetsAt !== "number" || !Number.isFinite(resetsAt)) {
     return null;
   }
   const resetMs = resetsAt > 1_000_000_000_000 ? resetsAt : resetsAt * 1000;
-  const relative = formatRelativeTime(resetMs).replace(/^in\s+/i, "");
-  return `Resets ${relative}`;
+  return `Resets ${formatResetDate(resetMs)}`;
+}
+
+function formatWindowLimitLabel(
+  windowDurationMins: number | null | undefined,
+  fallback: string,
+) {
+  if (
+    typeof windowDurationMins !== "number" ||
+    !Number.isFinite(windowDurationMins) ||
+    windowDurationMins <= 0
+  ) {
+    return fallback;
+  }
+
+  const roundedMins = Math.round(windowDurationMins);
+  if (roundedMins % (60 * 24) === 0) {
+    return `${roundedMins / (60 * 24)}天`;
+  }
+  if (roundedMins % 60 === 0) {
+    return `${roundedMins / 60}小时`;
+  }
+  return `${roundedMins}分钟`;
 }
 
 function formatCreditsLabel(accountRateLimits: RateLimitSnapshot | null) {
@@ -64,10 +96,23 @@ export function getUsageLabels(
         ? 100 - clampPercent(globalUsagePercent)
         : clampPercent(globalUsagePercent)
       : null;
+  const weeklyRemainingPercent =
+    typeof globalUsagePercent === "number"
+      ? 100 - clampPercent(globalUsagePercent)
+      : null;
 
   return {
     sessionPercent,
     weeklyPercent,
+    weeklyRemainingPercent,
+    sessionWindowLabel: formatWindowLimitLabel(
+      accountRateLimits?.primary?.windowDurationMins,
+      "本轮会话",
+    ),
+    weeklyWindowLabel: formatWindowLimitLabel(
+      accountRateLimits?.secondary?.windowDurationMins,
+      "本周",
+    ),
     sessionResetLabel: formatResetLabel(accountRateLimits?.primary?.resetsAt),
     weeklyResetLabel: formatResetLabel(accountRateLimits?.secondary?.resetsAt),
     creditsLabel: formatCreditsLabel(accountRateLimits),

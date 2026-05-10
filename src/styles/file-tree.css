@@ -1,5 +1,5 @@
 .file-tree-panel {
-  gap: 10px;
+  gap: 7px;
 }
 
 .file-tree-count {
@@ -8,7 +8,9 @@
 }
 
 .file-tree-toggle {
-  padding: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
 }
 
 .file-tree-toggle svg {
@@ -16,20 +18,22 @@
   height: 14px;
 }
 
-.file-tree-search-filter {
+.file-tree-filter-toggle {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
   padding: 0;
   color: var(--text-faint);
 }
 
-.file-tree-search-filter:hover {
+.file-tree-filter-toggle:hover {
   color: var(--text-emphasis);
+  transform: none;
+  box-shadow: none;
 }
 
-.file-tree-search-filter.is-active {
+.file-tree-filter-toggle.is-active {
   background: var(--surface-active);
   color: var(--text-emphasis);
   border-color: var(--border-accent-soft);
@@ -38,11 +42,42 @@
 .file-tree-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
   overflow-y: auto;
   flex: 1;
-  padding-right: 2px;
+  margin-inline: -12px;
+  padding-inline: 12px;
   min-height: 0;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.file-tree-list::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.file-tree-list:hover,
+.file-tree-list:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 36%, transparent) transparent;
+}
+
+.file-tree-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-tree-list::-webkit-scrollbar-thumb {
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.file-tree-list:hover::-webkit-scrollbar-thumb,
+.file-tree-list:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 30%, transparent);
+  background-clip: content-box;
 }
 
 .file-tree-virtual {
@@ -78,9 +113,10 @@
 .file-tree-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: 8px;
+  gap: 5px;
+  height: var(--file-tree-row-height, 22px);
+  padding: 0 6px;
+  border-radius: 2px;
   cursor: pointer;
   border: 1px solid transparent;
   background: transparent;
@@ -88,13 +124,14 @@
   font-size: 11px;
   text-align: left;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .file-tree-row-wrap {
   position: relative;
   display: flex;
   align-items: center;
-  min-height: var(--file-tree-row-height, 28px);
+  min-height: var(--file-tree-row-height, 22px);
 }
 
 .file-tree-row.is-file {
@@ -103,8 +140,10 @@
 
 .file-tree-row:hover,
 .file-tree-row-wrap:hover .file-tree-row {
-  background: var(--surface-hover);
-  border-color: var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-hover) 48%, transparent);
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
 }
 
 .file-tree-row.is-folder {
@@ -112,8 +151,8 @@
 }
 
 .file-tree-chevron {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -127,8 +166,8 @@
 }
 
 .file-tree-spacer {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 .file-tree-icon {

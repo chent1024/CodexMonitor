@@ -18,8 +18,8 @@ type PanelTabsProps = {
 };
 
 const defaultTabs: PanelTab[] = [
-  { id: "git", label: "Git", icon: <GitBranch aria-hidden /> },
   { id: "files", label: "Files", icon: <Folder aria-hidden /> },
+  { id: "git", label: "Git", icon: <GitBranch aria-hidden /> },
   { id: "prompts", label: "Prompts", icon: <ScrollText aria-hidden /> },
 ];
 

@@ -4,7 +4,6 @@ import type {
   AppSettings,
   CodexDoctorResult,
   CodexUpdateResult,
-  DictationModelStatus,
   WorkspaceSettings,
   WorkspaceGroup,
   WorkspaceInfo,
@@ -60,10 +59,6 @@ export type SettingsViewProps = {
   onTestNotificationSound: () => void;
   onTestSystemNotification: () => void;
   onMobileConnectSuccess?: () => Promise<void> | void;
-  dictationModelStatus?: DictationModelStatus | null;
-  onDownloadDictationModel?: () => void;
-  onCancelDictationDownload?: () => void;
-  onRemoveDictationModel?: () => void;
   initialSection?: CodexSection;
 };
 
@@ -93,10 +88,6 @@ export function SettingsView({
   onTestNotificationSound,
   onTestSystemNotification,
   onMobileConnectSuccess,
-  dictationModelStatus,
-  onDownloadDictationModel,
-  onCancelDictationDownload,
-  onRemoveDictationModel,
   initialSection,
 }: SettingsViewProps) {
   const {
@@ -132,10 +123,6 @@ export function SettingsView({
     onDeleteWorkspaceGroup,
     onAssignWorkspaceGroup,
     onMobileConnectSuccess,
-    dictationModelStatus,
-    onDownloadDictationModel,
-    onCancelDictationDownload,
-    onRemoveDictationModel,
   });
 
   useSettingsViewCloseShortcuts(onClose);
@@ -154,13 +141,13 @@ export function SettingsView({
     >
       <div className="settings-titlebar">
         <div className="settings-title" id="settings-modal-title">
-          Settings
+          设置
         </div>
         <button
           type="button"
           className="ghost icon-button settings-close"
           onClick={onClose}
-          aria-label="Close settings"
+          aria-label="关闭设置"
         >
           <X aria-hidden />
         </button>
@@ -183,10 +170,10 @@ export function SettingsView({
                   type="button"
                   className="settings-mobile-back"
                   onClick={() => setShowMobileDetail(false)}
-                  aria-label="Back to settings sections"
+                  aria-label="返回设置分区"
                 >
                   <ChevronLeft aria-hidden />
-                  Sections
+                  分区
                 </button>
                 <div className="settings-mobile-detail-title">{activeSectionLabel}</div>
               </div>

@@ -99,6 +99,12 @@ beforeEach(() => {
 });
 
 describe("useGitPanelController preload behavior", () => {
+  it("uses the file explorer panel by default", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    expect(result.current.filePanelMode).toBe("files");
+  });
+
   it("does not preload diffs when disabled and panel is hidden", () => {
     const { result } = renderHook(() => useGitPanelController(makeProps()));
 

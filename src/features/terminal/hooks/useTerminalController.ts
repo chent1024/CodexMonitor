@@ -9,6 +9,7 @@ type UseTerminalControllerOptions = {
   activeWorkspaceId: string | null;
   activeWorkspace: WorkspaceInfo | null;
   terminalOpen: boolean;
+  codeFontSize: number;
   onCloseTerminalPanel?: () => void;
   onDebug: (entry: DebugEntry) => void;
 };
@@ -17,6 +18,7 @@ export function useTerminalController({
   activeWorkspaceId,
   activeWorkspace,
   terminalOpen,
+  codeFontSize,
   onCloseTerminalPanel,
   onDebug,
 }: UseTerminalControllerOptions) {
@@ -71,6 +73,7 @@ export function useTerminalController({
     activeTerminalId,
     isVisible: terminalOpen,
     focusRequestVersion,
+    codeFontSize,
     onDebug,
     onSessionExit: (workspaceId, terminalId) => {
       const shouldClosePanel =

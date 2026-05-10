@@ -42,8 +42,8 @@ export function SettingsOpenAppsSection({
 }: SettingsOpenAppsSectionProps) {
   return (
     <SettingsSection
-      title="Open in"
-      subtitle="Customize the Open in menu shown in the title bar and file previews."
+      title="打开方式"
+      subtitle="自定义标题栏和文件预览中的“打开方式”菜单。"
     >
       <div className="settings-open-apps">
         {openAppDrafts.map((target, index) => {
@@ -55,12 +55,12 @@ export function SettingsOpenAppsSection({
             target.kind !== "command" || Boolean(target.command?.trim());
           const isComplete = labelValid && appNameValid && commandValid;
           const incompleteHint = !labelValid
-            ? "Label required"
+            ? "必须填写标签"
             : target.kind === "app"
-              ? "App name required"
+              ? "必须填写应用名"
               : target.kind === "command"
-                ? "Command required"
-                : "Complete required fields";
+                ? "必须填写命令"
+                : "请补全必填字段";
 
           return (
             <div
@@ -78,68 +78,68 @@ export function SettingsOpenAppsSection({
               </div>
               <div className="settings-open-app-fields">
                 <label className="settings-open-app-field settings-open-app-field--label">
-                  <span className="settings-visually-hidden">Label</span>
+                  <span className="settings-visually-hidden">标签</span>
                   <input
                     className="settings-input settings-input--compact settings-open-app-input settings-open-app-input--label"
                     value={target.label}
-                    placeholder="Label"
+                    placeholder="标签"
                     onChange={(event) =>
                       onOpenAppDraftChange(index, {
                         label: event.target.value,
                       })
                     }
                     onBlur={onCommitOpenApps}
-                    aria-label={`Open app label ${index + 1}`}
+                    aria-label={`打开方式标签 ${index + 1}`}
                     data-invalid={!labelValid || undefined}
                   />
                 </label>
                 <label className="settings-open-app-field settings-open-app-field--type">
-                  <span className="settings-visually-hidden">Type</span>
+                  <span className="settings-visually-hidden">类型</span>
                   <select
                     className="settings-select settings-select--compact settings-open-app-kind"
                     value={target.kind}
                     onChange={(event) =>
                       onOpenAppKindChange(index, event.target.value as OpenAppTarget["kind"])
                     }
-                    aria-label={`Open app type ${index + 1}`}
+                    aria-label={`打开方式类型 ${index + 1}`}
                   >
-                    <option value="app">App</option>
-                    <option value="command">Command</option>
+                    <option value="app">应用</option>
+                    <option value="command">命令</option>
                     <option value="finder">{fileManagerName()}</option>
                   </select>
                 </label>
                 {target.kind === "app" && (
                   <label className="settings-open-app-field settings-open-app-field--appname">
-                    <span className="settings-visually-hidden">App name</span>
+                    <span className="settings-visually-hidden">应用名</span>
                     <input
                       className="settings-input settings-input--compact settings-open-app-input settings-open-app-input--appname"
                       value={target.appName ?? ""}
-                      placeholder="App name"
+                      placeholder="应用名"
                       onChange={(event) =>
                         onOpenAppDraftChange(index, {
                           appName: event.target.value,
                         })
                       }
                       onBlur={onCommitOpenApps}
-                      aria-label={`Open app name ${index + 1}`}
+                      aria-label={`打开方式应用名 ${index + 1}`}
                       data-invalid={!appNameValid || undefined}
                     />
                   </label>
                 )}
                 {target.kind === "command" && (
                   <label className="settings-open-app-field settings-open-app-field--command">
-                    <span className="settings-visually-hidden">Command</span>
+                    <span className="settings-visually-hidden">命令</span>
                     <input
                       className="settings-input settings-input--compact settings-open-app-input settings-open-app-input--command"
                       value={target.command ?? ""}
-                      placeholder="Command"
+                      placeholder="命令"
                       onChange={(event) =>
                         onOpenAppDraftChange(index, {
                           command: event.target.value,
                         })
                       }
                       onBlur={onCommitOpenApps}
-                      aria-label={`Open app command ${index + 1}`}
+                      aria-label={`打开方式命令 ${index + 1}`}
                       data-invalid={!commandValid || undefined}
                     />
                   </label>
@@ -150,14 +150,14 @@ export function SettingsOpenAppsSection({
                     <input
                       className="settings-input settings-input--compact settings-open-app-input settings-open-app-input--args"
                       value={target.argsText}
-                      placeholder="Args"
+                      placeholder="参数"
                       onChange={(event) =>
                         onOpenAppDraftChange(index, {
                           argsText: event.target.value,
                         })
                       }
                       onBlur={onCommitOpenApps}
-                      aria-label={`Open app args ${index + 1}`}
+                      aria-label={`打开方式参数 ${index + 1}`}
                     />
                   </label>
                 )}
@@ -169,7 +169,7 @@ export function SettingsOpenAppsSection({
                     title={incompleteHint}
                     aria-label={incompleteHint}
                   >
-                    Incomplete
+                    未完成
                   </span>
                 )}
                 <label className="settings-open-app-default">
@@ -180,7 +180,7 @@ export function SettingsOpenAppsSection({
                     onChange={() => onSelectOpenAppDefault(target.id)}
                     disabled={!isComplete}
                   />
-                  Default
+                  默认
                 </label>
                 <div className="settings-open-app-order">
                   <button
@@ -188,7 +188,7 @@ export function SettingsOpenAppsSection({
                     className="ghost icon-button"
                     onClick={() => onMoveOpenApp(index, "up")}
                     disabled={index === 0}
-                    aria-label="Move up"
+                    aria-label="上移"
                   >
                     <ChevronUp aria-hidden />
                   </button>
@@ -197,7 +197,7 @@ export function SettingsOpenAppsSection({
                     className="ghost icon-button"
                     onClick={() => onMoveOpenApp(index, "down")}
                     disabled={index === openAppDrafts.length - 1}
-                    aria-label="Move down"
+                    aria-label="下移"
                   >
                     <ChevronDown aria-hidden />
                   </button>
@@ -207,8 +207,8 @@ export function SettingsOpenAppsSection({
                   className="ghost icon-button"
                   onClick={() => onDeleteOpenApp(index)}
                   disabled={openAppDrafts.length <= 1}
-                  aria-label="Remove app"
-                  title="Remove app"
+                  aria-label="删除应用"
+                  title="删除应用"
                 >
                   <Trash2 aria-hidden />
                 </button>
@@ -219,13 +219,13 @@ export function SettingsOpenAppsSection({
       </div>
       <div className="settings-open-app-footer">
         <button type="button" className="ghost" onClick={onAddOpenApp}>
-          Add app
+          添加应用
         </button>
         <div className="settings-help">
-          Commands receive the selected path as the final argument.{" "}
+          命令会将选中的路径作为最后一个参数传入。{" "}
           {isMacPlatform()
-            ? "Apps open via `open -a` with optional args."
-            : "Apps run as an executable with optional args."}
+            ? "应用会通过 `open -a` 启动，并可附加可选参数。"
+            : "应用会作为可执行程序启动，并可附加可选参数。"}
         </div>
       </div>
     </SettingsSection>

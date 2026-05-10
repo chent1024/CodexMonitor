@@ -1,29 +1,29 @@
 @import "./themes.css";
 
 .app.reduced-transparency {
-  --surface-sidebar: rgba(18, 18, 18, 0.92);
-  --surface-sidebar-opaque: rgb(18, 18, 18);
-  --surface-topbar: rgba(10, 14, 20, 0.94);
-  --surface-right-panel: rgba(9, 12, 20, 0.92);
-  --surface-composer: rgba(10, 14, 20, 0.94);
-  --surface-messages: rgba(8, 10, 16, 0.94);
-  --surface-card: rgba(30, 32, 40, 0.94);
-  --surface-card-strong: rgba(38, 40, 48, 0.96);
-  --surface-card-muted: rgba(24, 26, 34, 0.9);
-  --surface-item: rgba(28, 30, 38, 0.88);
-  --surface-control: rgba(40, 44, 55, 0.7);
-  --surface-control-hover: rgba(54, 60, 72, 0.8);
-  --surface-control-disabled: rgba(40, 44, 55, 0.5);
-  --surface-hover: rgba(46, 50, 62, 0.7);
+  --surface-sidebar: rgba(37, 37, 38, 0.98);
+  --surface-sidebar-opaque: rgb(37, 37, 38);
+  --surface-topbar: rgba(24, 24, 24, 0.98);
+  --surface-right-panel: rgba(37, 37, 38, 0.98);
+  --surface-composer: rgba(37, 37, 38, 0.98);
+  --surface-messages: rgba(30, 30, 30, 0.98);
+  --surface-card: rgba(37, 37, 38, 0.96);
+  --surface-card-strong: rgba(45, 45, 48, 0.98);
+  --surface-card-muted: rgba(42, 42, 43, 0.94);
+  --surface-item: rgba(43, 43, 43, 0.92);
+  --surface-control: rgba(45, 45, 48, 0.88);
+  --surface-control-hover: rgba(58, 58, 60, 0.92);
+  --surface-control-disabled: rgba(45, 45, 48, 0.62);
+  --surface-hover: rgba(42, 45, 46, 0.86);
   --surface-active: rgba(100, 200, 255, 0.18);
-  --surface-approval: rgba(12, 16, 26, 0.92);
-  --surface-debug: rgba(12, 16, 26, 0.92);
-  --surface-command: rgba(12, 14, 20, 0.95);
-  --surface-diff-card: rgba(14, 18, 28, 0.9);
-  --surface-bubble: rgba(42, 46, 58, 0.9);
+  --surface-approval: rgba(37, 37, 38, 0.96);
+  --surface-debug: rgba(37, 37, 38, 0.96);
+  --surface-command: rgba(30, 30, 30, 0.98);
+  --surface-diff-card: rgba(37, 37, 38, 0.94);
+  --surface-bubble: rgba(45, 45, 48, 0.92);
   --surface-bubble-user: rgba(77, 153, 255, 0.55);
-  --surface-context-core: rgba(16, 20, 30, 0.96);
-  --surface-popover: rgba(16, 20, 30, 0.995);
+  --surface-context-core: rgba(37, 37, 38, 0.98);
+  --surface-popover: rgba(37, 37, 38, 0.995);
 }
 
 * {
@@ -55,7 +55,7 @@ body {
   border-radius: 0;
   overflow: hidden;
   position: relative;
-  --main-topbar-height: 44px;
+  --main-topbar-height: 42px;
   /* Shared Codex Monitor chrome language */
   --cm-surface-row: color-mix(in srgb, var(--surface-card) 44%, transparent);
   --cm-surface-panel-soft: color-mix(in srgb, var(--surface-card) 56%, transparent);
@@ -82,6 +82,7 @@ body {
   --cm-border-accent-strong: color-mix(in srgb, var(--border-accent) 46%, transparent);
   transition: grid-template-columns 220ms ease;
   font-family: var(--ui-font-family);
+  font-size: var(--ui-font-size, 13px);
 }
 
 .app.is-resizing,
@@ -139,7 +140,7 @@ body {
 }
 
 .titlebar-toggle-right {
-  right: calc(14px + var(--window-caption-width, 0px) + var(--window-caption-gap, 0px));
+  right: calc(10px + var(--window-caption-width, 0px) + var(--window-caption-gap, 0px));
 }
 
 .window-caption-controls {
@@ -154,7 +155,7 @@ body {
 }
 
 .window-caption-control {
-  width: 46px;
+  width: 38px;
   height: var(--main-topbar-height, 44px);
   border: none;
   border-radius: 0;

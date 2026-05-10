@@ -27,12 +27,12 @@ export function RenameThreadPrompt({
     <ModalShell
       className="worktree-modal"
       onBackdropClick={onCancel}
-      ariaLabel="Rename thread"
+      ariaLabel="重命名会话"
     >
-      <div className="ds-modal-title worktree-modal-title">Rename thread</div>
-      <div className="ds-modal-subtitle worktree-modal-subtitle">Current name: "{currentName}"</div>
+      <div className="ds-modal-title worktree-modal-title">重命名会话</div>
+      <div className="ds-modal-subtitle worktree-modal-subtitle">当前名称：“{currentName}”</div>
       <label className="ds-modal-label worktree-modal-label" htmlFor="thread-rename">
-        New name
+        新名称
       </label>
       <input
         id="thread-rename"
@@ -57,7 +57,7 @@ export function RenameThreadPrompt({
           onClick={onCancel}
           type="button"
         >
-          Cancel
+          取消
         </button>
         <button
           className="primary ds-modal-button worktree-modal-button"
@@ -65,7 +65,7 @@ export function RenameThreadPrompt({
           type="button"
           disabled={name.trim().length === 0}
         >
-          Rename
+          重命名
         </button>
       </div>
     </ModalShell>

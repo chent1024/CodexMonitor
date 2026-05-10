@@ -68,11 +68,11 @@ describe("SettingsAgentsSection", () => {
     render(<SettingsAgentsSection {...props} />);
 
     const improveButton = screen.getByRole("button", {
-      name: "Generate fields for new agent",
+      name: "为新智能体生成字段",
     }) as HTMLButtonElement;
     expect(improveButton.disabled).toBe(true);
 
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "researcher" } });
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "researcher" } });
     expect(improveButton.disabled).toBe(false);
   });
 
@@ -90,15 +90,15 @@ describe("SettingsAgentsSection", () => {
       />,
     );
 
-    const createName = screen.getByLabelText("Name") as HTMLInputElement;
-    const createDescription = screen.getByLabelText("Description") as HTMLTextAreaElement;
+    const createName = screen.getByLabelText("名称") as HTMLInputElement;
+    const createDescription = screen.getByLabelText("描述") as HTMLTextAreaElement;
     const createDeveloperInstructions = screen.getByLabelText(
-      "Developer instructions",
+      "开发者说明",
     ) as HTMLTextAreaElement;
     fireEvent.change(createName, { target: { value: "researcher" } });
     fireEvent.change(createDescription, { target: { value: "flaky tests" } });
     fireEvent.click(
-      screen.getByRole("button", { name: "Generate fields for new agent" }),
+      screen.getByRole("button", { name: "为新智能体生成字段" }),
     );
 
     await waitFor(() => {
@@ -121,10 +121,10 @@ describe("SettingsAgentsSection", () => {
     );
     render(<SettingsAgentsSection {...props} onUpdateAgent={onUpdateAgent} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    const nameInputs = screen.getAllByLabelText("Name") as HTMLInputElement[];
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    const nameInputs = screen.getAllByLabelText("名称") as HTMLInputElement[];
     fireEvent.change(nameInputs[1], { target: { value: "researcher-v2" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateAgent).toHaveBeenCalledTimes(1);
@@ -147,7 +147,7 @@ describe("SettingsAgentsSection", () => {
     const onSetMaxDepth = vi.fn(async () => true);
     render(<SettingsAgentsSection {...props} onSetMaxDepth={onSetMaxDepth} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Increase max depth" }));
+    fireEvent.click(screen.getByRole("button", { name: "增加最大深度" }));
 
     await waitFor(() => {
       expect(onSetMaxDepth).toHaveBeenCalledWith(2);
@@ -165,7 +165,7 @@ describe("SettingsAgentsSection", () => {
       />,
     );
 
-    const increaseDepthButton = screen.getByRole("button", { name: "Increase max depth" });
+    const increaseDepthButton = screen.getByRole("button", { name: "增加最大深度" });
     expect((increaseDepthButton as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(increaseDepthButton);
     expect(onSetMaxDepth).not.toHaveBeenCalled();

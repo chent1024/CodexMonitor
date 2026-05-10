@@ -38,6 +38,7 @@ describe("useAppSettings", () => {
         remoteBackendHost: "example:1234",
         personality: "unknown",
         uiFontFamily: "",
+        uiFontSize: 50,
         codeFontFamily: "  ",
         codeFontSize: 25,
       } as unknown) as AppSettings,
@@ -50,6 +51,7 @@ describe("useAppSettings", () => {
     expect(result.current.settings.uiScale).toBe(UI_SCALE_MAX);
     expect(result.current.settings.theme).toBe("system");
     expect(result.current.settings.uiFontFamily).toContain("system-ui");
+    expect(result.current.settings.uiFontSize).toBe(16);
     expect(result.current.settings.codeFontFamily).toContain("ui-monospace");
     expect(result.current.settings.codeFontSize).toBe(16);
     expect(result.current.settings.personality).toBe("friendly");
@@ -69,7 +71,6 @@ describe("useAppSettings", () => {
     expect(result.current.settings.uiFontFamily).toContain("system-ui");
     expect(result.current.settings.codeFontFamily).toContain("ui-monospace");
     expect(result.current.settings.backendMode).toBe("local");
-    expect(result.current.settings.dictationModelId).toBe("base");
     expect(result.current.settings.interruptShortcut).toBeTruthy();
   });
 
@@ -85,6 +86,7 @@ describe("useAppSettings", () => {
       theme: "nope" as unknown as AppSettings["theme"],
       uiScale: 0.04,
       uiFontFamily: "",
+      uiFontSize: 2,
       codeFontFamily: "  ",
       codeFontSize: 2,
       notificationSoundsEnabled: false,
@@ -95,6 +97,7 @@ describe("useAppSettings", () => {
       theme: "dark",
       uiScale: 2.4,
       uiFontFamily: "Avenir, sans-serif",
+      uiFontSize: 14,
       codeFontFamily: "JetBrains Mono, monospace",
       codeFontSize: 13,
       notificationSoundsEnabled: false,
@@ -111,6 +114,7 @@ describe("useAppSettings", () => {
         theme: "system",
         uiScale: 0.1,
         uiFontFamily: expect.stringContaining("system-ui"),
+        uiFontSize: 11,
         codeFontFamily: expect.stringContaining("ui-monospace"),
         codeFontSize: 9,
         notificationSoundsEnabled: false,

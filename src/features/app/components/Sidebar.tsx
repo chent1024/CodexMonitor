@@ -71,11 +71,11 @@ function groupFlatThreadRowsByTimeBucket(
   nowMs: number,
 ): ThreadBucket[] {
   const bucketLabels: Record<ThreadBucket["id"], string> = {
-    now: "Now",
-    today: "Earlier today",
-    yesterday: "Yesterday",
-    week: "This week",
-    older: "Older",
+    now: "刚刚",
+    today: "今天稍早",
+    yesterday: "昨天",
+    week: "本周",
+    older: "更早",
   };
   const order: ThreadBucket["id"][] = ["now", "today", "yesterday", "week", "older"];
   const bucketMap = new Map<ThreadBucket["id"], FlatThreadRow[]>();
@@ -255,7 +255,9 @@ export const Sidebar = memo(function Sidebar({
     });
   const {
     sessionPercent,
-    weeklyPercent,
+    weeklyRemainingPercent,
+    sessionWindowLabel,
+    weeklyWindowLabel,
     sessionResetLabel,
     weeklyResetLabel,
     creditsLabel,
@@ -358,9 +360,9 @@ export const Sidebar = memo(function Sidebar({
   const accountButtonLabel = accountEmail
     ? accountEmail
     : accountInfo?.type === "apikey"
-      ? "API key"
-      : "Sign in to Codex";
-  const accountActionLabel = accountEmail ? "Switch account" : "Sign in";
+      ? "API 密钥"
+      : "登录 Codex";
+  const accountActionLabel = accountEmail ? "切换账户" : "登录";
   const showAccountSwitcher = Boolean(activeWorkspaceId);
   const accountSwitchDisabled = accountSwitching || !activeWorkspaceId;
   const accountCancelDisabled = !accountSwitching || !activeWorkspaceId;
@@ -920,7 +922,7 @@ export const Sidebar = memo(function Sidebar({
           {pinnedThreadRows.length > 0 && (
             <div className="pinned-section">
               <div className="sidebar-section-header">
-                <div className="sidebar-section-title">Pinned conversations</div>
+                <div className="sidebar-section-title">置顶会话</div>
                 <div className="sidebar-section-count">{pinnedRootCount}</div>
               </div>
               <PinnedThreadList
@@ -1015,21 +1017,23 @@ export const Sidebar = memo(function Sidebar({
           {!groupedWorkspacesForRender.length && (
             <div className="empty">
               {isSearchActive
-                ? "No conversations match your search."
-                : "Add a workspace to start."}
+                ? "没有匹配搜索条件的会话。"
+                : "先添加一个项目开始使用。"}
             </div>
           )}
           {isThreadsOnlyMode &&
             groupedWorkspacesForRender.length > 0 &&
             flatThreadRows.length === 0 &&
             pinnedThreadRows.length === 0 && (
-              <div className="empty">No conversations yet.</div>
+              <div className="empty">还没有会话。</div>
             )}
         </div>
       </div>
       <SidebarBottomRail
         sessionPercent={sessionPercent}
-        weeklyPercent={weeklyPercent}
+        weeklyRemainingPercent={weeklyRemainingPercent}
+        sessionWindowLabel={sessionWindowLabel}
+        weeklyWindowLabel={weeklyWindowLabel}
         sessionResetLabel={sessionResetLabel}
         weeklyResetLabel={weeklyResetLabel}
         creditsLabel={creditsLabel}

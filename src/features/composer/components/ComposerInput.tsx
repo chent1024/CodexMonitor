@@ -10,15 +10,10 @@ import type { AutocompleteItem } from "../hooks/useComposerAutocomplete";
 import ImagePlus from "lucide-react/dist/esm/icons/image-plus";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
-import Mic from "lucide-react/dist/esm/icons/mic";
-import Square from "lucide-react/dist/esm/icons/square";
-import X from "lucide-react/dist/esm/icons/x";
 import { useComposerImageDrop } from "../hooks/useComposerImageDrop";
 import { ComposerMobileActionsMenu } from "./ComposerMobileActionsMenu";
 import { ComposerSuggestionsPopover } from "./ComposerSuggestionsPopover";
 import { ComposerAttachments } from "./ComposerAttachments";
-import { DictationWaveform } from "../../dictation/components/DictationWaveform";
-import { useComposerDictationControls } from "../hooks/useComposerDictationControls";
 import { useComposerInputLayout } from "../hooks/useComposerInputLayout";
 import { useComposerMobileActions } from "../hooks/useComposerMobileActions";
 import type { ReviewPromptState, ReviewPromptStep } from "../../threads/hooks/useReviewPrompt";
@@ -32,16 +27,6 @@ type ComposerInputProps = {
   isProcessing: boolean;
   onStop: () => void;
   onSend: () => void;
-  dictationState?: "idle" | "listening" | "processing";
-  dictationLevel?: number;
-  dictationEnabled?: boolean;
-  onToggleDictation?: () => void;
-  onCancelDictation?: () => void;
-  onOpenDictationSettings?: () => void;
-  dictationError?: string | null;
-  onDismissDictationError?: () => void;
-  dictationHint?: string | null;
-  onDismissDictationHint?: () => void;
   attachments?: string[];
   onAddAttachment?: () => void;
   onAttachImages?: (paths: string[]) => void;
@@ -90,16 +75,6 @@ export function ComposerInput({
   isProcessing,
   onStop,
   onSend,
-  dictationState = "idle",
-  dictationLevel = 0,
-  dictationEnabled = false,
-  onToggleDictation,
-  onCancelDictation,
-  onOpenDictationSettings,
-  dictationError = null,
-  onDismissDictationError,
-  dictationHint = null,
-  onDismissDictationHint,
   attachments = [],
   onAddAttachment,
   onAttachImages,
@@ -164,23 +139,6 @@ export function ComposerInput({
     }
     onSend();
   }, [canStop, onSend, onStop]);
-  const {
-    handleMicClick,
-    isDictating,
-    isDictationBusy,
-    isDictationProcessing,
-    micAriaLabel,
-    micDisabled,
-    micTitle,
-  } = useComposerDictationControls({
-    disabled,
-    dictationEnabled,
-    dictationState,
-    onToggleDictation,
-    onCancelDictation,
-    onOpenDictationSettings,
-  });
-
   const handleTextareaChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
       onTextChange(event.target.value, event.target.selectionStart);
@@ -221,11 +179,6 @@ export function ComposerInput({
     onToggleExpand();
   }, [disabled, onToggleExpand]);
 
-  const handleMobileDictationClick = useCallback(() => {
-    setMobileActionsOpen(false);
-    handleMicClick();
-  }, [handleMicClick]);
-
   return (
     <div className={`composer-input${isPhoneLayout && isPhoneTallInput ? " is-phone-tall" : ""}`}>
       <div
@@ -255,21 +208,13 @@ export function ComposerInput({
           <ComposerMobileActionsMenu
             disabled={disabled}
             handleMobileAttachClick={handleMobileAttachClick}
-            handleMobileDictationClick={handleMobileDictationClick}
             handleMobileExpandClick={handleMobileExpandClick}
-            isDictating={isDictating}
-            isDictationProcessing={isDictationProcessing}
             isExpanded={isExpanded}
-            micAriaLabel={micAriaLabel}
-            micDisabled={micDisabled}
             mobileActionsOpen={mobileActionsOpen}
             mobileActionsRef={mobileActionsRef}
             onAddAttachment={onAddAttachment}
             onToggleExpand={onToggleExpand}
             setMobileActionsOpen={setMobileActionsOpen}
-            showDictationAction={Boolean(
-              onToggleDictation || onOpenDictationSettings || onCancelDictation,
-            )}
           />
           <textarea
             ref={textareaRef}
@@ -304,30 +249,11 @@ export function ComposerInput({
               </button>
             )}
             <button
-              className={`composer-action composer-action--mic${
-                isDictationBusy ? " is-active" : ""
-              }${isDictationProcessing ? " is-processing is-stop" : ""}${
-                micDisabled ? " is-disabled" : ""
-              }`}
-              onClick={handleMicClick}
-              disabled={micDisabled}
-              aria-label={micAriaLabel}
-              title={micTitle}
-            >
-              {isDictationProcessing ? (
-                <X aria-hidden />
-              ) : isDictating ? (
-                <Square aria-hidden />
-              ) : (
-                <Mic aria-hidden />
-              )}
-            </button>
-            <button
               className={`composer-action${canStop ? " is-stop" : " is-send"}${
                 canStop && isProcessing ? " is-loading" : ""
               }`}
               onClick={handleActionClick}
-              disabled={(disabled && !canStop) || isDictationBusy || (!canStop && !canSend)}
+              disabled={(disabled && !canStop) || (!canStop && !canSend)}
               aria-label={canStop ? "Stop" : sendLabel}
               title={canStop ? "Stop" : sendLabel}
             >
@@ -352,39 +278,6 @@ export function ComposerInput({
             </button>
           </div>
         </div>
-        {isDictationBusy && (
-          <DictationWaveform
-            active={isDictating}
-            processing={dictationState === "processing"}
-            level={dictationLevel}
-          />
-        )}
-        {dictationError && (
-          <div className="composer-dictation-error" role="status">
-            <span>{dictationError}</span>
-            <button
-              type="button"
-              className="ghost composer-dictation-error-dismiss"
-              onClick={onDismissDictationError}
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-        {dictationHint && (
-          <div className="composer-dictation-hint" role="status">
-            <span>{dictationHint}</span>
-            {onDismissDictationHint && (
-              <button
-                type="button"
-                className="ghost composer-dictation-error-dismiss"
-                onClick={onDismissDictationHint}
-              >
-                Dismiss
-              </button>
-            )}
-          </div>
-        )}
         <ComposerSuggestionsPopover
           highlightIndex={highlightIndex}
           highlightedBranchIndex={highlightedBranchIndex}

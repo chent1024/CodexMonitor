@@ -17,7 +17,7 @@ describe("RenameThreadPrompt", () => {
       />,
     );
 
-    const input = screen.getByLabelText("New name");
+    const input = screen.getByLabelText("新名称");
     fireEvent.keyDown(input, { key: "Escape" });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onCancel).toHaveBeenCalledTimes(1);

@@ -24,6 +24,7 @@ type UseTerminalSessionOptions = {
   activeTerminalId: string | null;
   isVisible: boolean;
   focusRequestVersion: number;
+  codeFontSize: number;
   onDebug?: (entry: DebugEntry) => void;
   onSessionExit?: (workspaceId: string, terminalId: string) => void;
 };
@@ -36,6 +37,7 @@ type TerminalAppearance = {
     selection?: string;
   };
   fontFamily: string;
+  fontSize: number;
 };
 
 export type TerminalSessionState = {
@@ -78,6 +80,7 @@ function getTerminalAppearance(container: HTMLElement | null): TerminalAppearanc
         cursor: "#d9dee7",
       },
       fontFamily: "Menlo, Monaco, \"Courier New\", monospace",
+      fontSize: 12,
     };
   }
 
@@ -99,6 +102,10 @@ function getTerminalAppearance(container: HTMLElement | null): TerminalAppearanc
     styles.getPropertyValue("--terminal-font-family").trim() ||
     styles.getPropertyValue("--code-font-family").trim() ||
     "Menlo, Monaco, \"Courier New\", monospace";
+  const parsedFontSize = Number.parseFloat(
+    styles.getPropertyValue("--code-font-size").trim() || "12",
+  );
+  const fontSize = Number.isFinite(parsedFontSize) ? parsedFontSize : 12;
 
   return {
     theme: {
@@ -108,6 +115,7 @@ function getTerminalAppearance(container: HTMLElement | null): TerminalAppearanc
       selection: selection || undefined,
     },
     fontFamily,
+    fontSize,
   };
 }
 
@@ -116,6 +124,7 @@ export function useTerminalSession({
   activeTerminalId,
   isVisible,
   focusRequestVersion,
+  codeFontSize,
   onDebug,
   onSessionExit,
 }: UseTerminalSessionOptions): TerminalSessionState {
@@ -258,7 +267,7 @@ export function useTerminalSession({
       const appearance = getTerminalAppearance(containerRef.current);
       const terminal = new Terminal({
         cursorBlink: true,
-        fontSize: 12,
+        fontSize: appearance.fontSize,
         fontFamily: appearance.fontFamily,
         allowTransparency: true,
         theme: appearance.theme,
@@ -291,6 +300,18 @@ export function useTerminalSession({
       });
     }
   }, [isVisible, onDebug]);
+
+  useEffect(() => {
+    if (!isVisible || !terminalRef.current) {
+      return;
+    }
+    const appearance = getTerminalAppearance(containerRef.current);
+    terminalRef.current.options.fontFamily = appearance.fontFamily;
+    terminalRef.current.options.fontSize = appearance.fontSize;
+    terminalRef.current.options.theme = appearance.theme;
+    fitAddonRef.current?.fit();
+    refreshTerminal();
+  }, [codeFontSize, isVisible, refreshTerminal]);
 
   useEffect(() => {
     return () => {

@@ -55,7 +55,7 @@ function ShortcutField({
           className="settings-input settings-input--shortcut"
           value={formatShortcut(shortcutDrafts[item.draftKey])}
           onKeyDown={(event) => onShortcutKeyDown(event, item.settingKey)}
-          placeholder="Type shortcut"
+          placeholder="按下快捷键"
           readOnly
         />
         <button
@@ -63,7 +63,7 @@ function ShortcutField({
           className="ghost settings-button-compact"
           onClick={() => onClearShortcut(item.settingKey)}
         >
-          Clear
+          清除
         </button>
       </div>
       <div className="settings-help">{item.help}</div>
@@ -82,134 +82,134 @@ export function SettingsShortcutsSection({
   const groups = useMemo<ShortcutGroup[]>(
     () => [
       {
-        title: "File",
-        subtitle: "Create agents and worktrees from the keyboard.",
+        title: "文件",
+        subtitle: "通过键盘创建智能体和 worktree。",
         items: [
           {
-            label: "New Agent",
+            label: "新建智能体",
             draftKey: "newAgent",
             settingKey: "newAgentShortcut",
-            help: `Default: ${formatShortcut("cmd+n")}`,
+            help: `默认：${formatShortcut("cmd+n")}`,
           },
           {
-            label: "New Worktree Agent",
+            label: "新建 Worktree 智能体",
             draftKey: "newWorktreeAgent",
             settingKey: "newWorktreeAgentShortcut",
-            help: `Default: ${formatShortcut("cmd+shift+n")}`,
+            help: `默认：${formatShortcut("cmd+shift+n")}`,
           },
           {
-            label: "New Clone Agent",
+            label: "新建克隆智能体",
             draftKey: "newCloneAgent",
             settingKey: "newCloneAgentShortcut",
-            help: `Default: ${formatShortcut("cmd+alt+n")}`,
+            help: `默认：${formatShortcut("cmd+alt+n")}`,
           },
           {
-            label: "Archive active thread",
+            label: "归档当前会话",
             draftKey: "archiveThread",
             settingKey: "archiveThreadShortcut",
-            help: `Default: ${formatShortcut(isMac ? "cmd+ctrl+a" : "ctrl+alt+a")}`,
+            help: `默认：${formatShortcut(isMac ? "cmd+ctrl+a" : "ctrl+alt+a")}`,
           },
         ],
       },
       {
         title: "Composer",
-        subtitle: "Cycle between model, access, reasoning, and collaboration modes.",
+        subtitle: "在模型、访问、推理和协作模式间切换。",
         items: [
           {
-            label: "Cycle model",
+            label: "切换模型",
             draftKey: "model",
             settingKey: "composerModelShortcut",
-            help: `Press a new shortcut while focused. Default: ${formatShortcut("cmd+shift+m")}`,
+            help: `聚焦后按新的快捷键。默认：${formatShortcut("cmd+shift+m")}`,
           },
           {
-            label: "Cycle access mode",
+            label: "切换访问模式",
             draftKey: "access",
             settingKey: "composerAccessShortcut",
-            help: `Default: ${formatShortcut("cmd+shift+a")}`,
+            help: `默认：${formatShortcut("cmd+shift+a")}`,
           },
           {
-            label: "Cycle reasoning mode",
+            label: "切换推理模式",
             draftKey: "reasoning",
             settingKey: "composerReasoningShortcut",
-            help: `Default: ${formatShortcut("cmd+shift+r")}`,
+            help: `默认：${formatShortcut("cmd+shift+r")}`,
           },
           {
-            label: "Cycle collaboration mode",
+            label: "切换协作模式",
             draftKey: "collaboration",
             settingKey: "composerCollaborationShortcut",
-            help: `Default: ${formatShortcut("shift+tab")}`,
+            help: `默认：${formatShortcut("shift+tab")}`,
           },
           {
-            label: "Stop active run",
+            label: "停止当前运行",
             draftKey: "interrupt",
             settingKey: "interruptShortcut",
-            help: `Default: ${formatShortcut(getDefaultInterruptShortcut())}`,
+            help: `默认：${formatShortcut(getDefaultInterruptShortcut())}`,
           },
         ],
       },
       {
-        title: "Panels",
-        subtitle: "Toggle sidebars and panels.",
+        title: "面板",
+        subtitle: "切换侧边栏和面板显示。",
         items: [
           {
-            label: "Toggle projects sidebar",
+            label: "切换项目侧边栏",
             draftKey: "projectsSidebar",
             settingKey: "toggleProjectsSidebarShortcut",
-            help: `Default: ${formatShortcut("cmd+shift+p")}`,
+            help: `默认：${formatShortcut("cmd+shift+p")}`,
           },
           {
-            label: "Toggle git sidebar",
+            label: "切换 Git 侧边栏",
             draftKey: "gitSidebar",
             settingKey: "toggleGitSidebarShortcut",
-            help: `Default: ${formatShortcut("cmd+shift+g")}`,
+            help: `默认：${formatShortcut("cmd+shift+g")}`,
           },
           {
-            label: "Branch switcher",
+            label: "分支切换器",
             draftKey: "branchSwitcher",
             settingKey: "branchSwitcherShortcut",
-            help: `Default: ${formatShortcut("cmd+b")}`,
+            help: `默认：${formatShortcut("cmd+b")}`,
           },
           {
-            label: "Toggle debug panel",
+            label: "切换调试面板",
             draftKey: "debugPanel",
             settingKey: "toggleDebugPanelShortcut",
-            help: `Default: ${formatShortcut("cmd+shift+d")}`,
+            help: `默认：${formatShortcut("cmd+shift+d")}`,
           },
           {
-            label: "Toggle terminal panel",
+            label: "切换终端面板",
             draftKey: "terminal",
             settingKey: "toggleTerminalShortcut",
-            help: `Default: ${formatShortcut("cmd+shift+t")}`,
+            help: `默认：${formatShortcut("cmd+shift+t")}`,
           },
         ],
       },
       {
-        title: "Navigation",
-        subtitle: "Cycle between agents and workspaces.",
+        title: "导航",
+        subtitle: "在智能体和项目间切换。",
         items: [
           {
-            label: "Next agent",
+            label: "下一个智能体",
             draftKey: "cycleAgentNext",
             settingKey: "cycleAgentNextShortcut",
-            help: `Default: ${formatShortcut(isMac ? "cmd+ctrl+down" : "ctrl+alt+down")}`,
+            help: `默认：${formatShortcut(isMac ? "cmd+ctrl+down" : "ctrl+alt+down")}`,
           },
           {
-            label: "Previous agent",
+            label: "上一个智能体",
             draftKey: "cycleAgentPrev",
             settingKey: "cycleAgentPrevShortcut",
-            help: `Default: ${formatShortcut(isMac ? "cmd+ctrl+up" : "ctrl+alt+up")}`,
+            help: `默认：${formatShortcut(isMac ? "cmd+ctrl+up" : "ctrl+alt+up")}`,
           },
           {
-            label: "Next workspace",
+            label: "下一个项目",
             draftKey: "cycleWorkspaceNext",
             settingKey: "cycleWorkspaceNextShortcut",
-            help: `Default: ${formatShortcut(isMac ? "cmd+shift+down" : "ctrl+alt+shift+down")}`,
+            help: `默认：${formatShortcut(isMac ? "cmd+shift+down" : "ctrl+alt+shift+down")}`,
           },
           {
-            label: "Previous workspace",
+            label: "上一个项目",
             draftKey: "cycleWorkspacePrev",
             settingKey: "cycleWorkspacePrevShortcut",
-            help: `Default: ${formatShortcut(isMac ? "cmd+shift+up" : "ctrl+alt+shift+up")}`,
+            help: `默认：${formatShortcut(isMac ? "cmd+shift+up" : "ctrl+alt+shift+up")}`,
           },
         ],
       },
@@ -235,18 +235,18 @@ export function SettingsShortcutsSection({
 
   return (
     <SettingsSection
-      title="Shortcuts"
-      subtitle="Customize keyboard shortcuts for file actions, composer, panels, and navigation."
+      title="快捷键"
+      subtitle="自定义文件操作、Composer、面板和导航相关的快捷键。"
     >
       <div className="settings-field settings-shortcuts-search">
         <label className="settings-field-label" htmlFor="settings-shortcuts-search">
-          Search shortcuts
+          搜索快捷键
         </label>
         <div className="settings-field-row">
           <input
             id="settings-shortcuts-search"
             className="settings-input"
-            placeholder="Search shortcuts"
+            placeholder="搜索快捷键"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
           />
@@ -256,11 +256,11 @@ export function SettingsShortcutsSection({
               className="ghost settings-button-compact"
               onClick={() => setSearchQuery("")}
             >
-              Clear
+              清除
             </button>
           )}
         </div>
-        <div className="settings-help">Filter by section name, action, or default shortcut.</div>
+        <div className="settings-help">可按分组名、动作名称或默认快捷键过滤。</div>
       </div>
       {filteredGroups.map((group, index) => (
         <div key={group.title}>
@@ -279,7 +279,7 @@ export function SettingsShortcutsSection({
       ))}
       {filteredGroups.length === 0 && (
         <div className="settings-empty">
-          No shortcuts match {normalizedSearchQuery ? `"${searchQuery.trim()}"` : "your search"}.
+          没有匹配{normalizedSearchQuery ? `“${searchQuery.trim()}”` : "当前搜索"}的快捷键。
         </div>
       )}
     </SettingsSection>

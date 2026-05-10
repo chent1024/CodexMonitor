@@ -46,7 +46,5 @@
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Codex Monitor</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Allow access to the microphone for dictation.</string>
 </dict>
 </plist>

@@ -52,7 +52,6 @@ function ComposerHarness({ initialText = "", editorSettings }: HarnessProps) {
       draftText={draftText}
       onDraftChange={setDraftText}
       textareaRef={textareaRef}
-      dictationEnabled={false}
       editorSettings={editorSettings}
     />
   );

@@ -209,24 +209,14 @@ export function GitDiffPanel({
   onPickGitRoot,
   onInitGitRepo,
   initGitRepoLoading = false,
-  commitMessage = "",
-  commitMessageLoading = false,
-  commitMessageError = null,
-  onCommitMessageChange,
-  onGenerateCommitMessage,
-  onCommit,
-  onCommitAndPush: _onCommitAndPush,
-  onCommitAndSync: _onCommitAndSync,
   onPull,
   onFetch,
   onPush,
   onSync: _onSync,
-  commitLoading = false,
   pullLoading = false,
   fetchLoading = false,
   pushLoading = false,
   syncLoading: _syncLoading = false,
-  commitError = null,
   pullError = null,
   fetchError = null,
   pushError = null,
@@ -559,8 +549,6 @@ export function GitDiffPanel({
   const errorScope = `${workspaceId ?? "no-workspace"}:${normalizedGitRoot || "no-git-root"}:${mode}`;
   const hasAnyChanges = stagedFiles.length > 0 || unstagedFiles.length > 0;
   const showApplyWorktree = mode === "diff" && Boolean(onApplyWorktreeChanges) && hasAnyChanges;
-  const canGenerateCommitMessage = hasAnyChanges;
-  const showGenerateCommitMessage = mode === "diff" && Boolean(onGenerateCommitMessage) && hasAnyChanges;
   const commitsBehind = logBehind;
 
   const sidebarErrorCandidates = useMemo(() => {
@@ -574,9 +562,7 @@ export function GitDiffPanel({
             { key: "push", message: pushErrorMessage, action: pushErrorAction ?? undefined },
             { key: "pull", message: pullError },
             { key: "fetch", message: fetchError },
-            { key: "commit", message: commitError },
             { key: "sync", message: syncError },
-            { key: "commitMessage", message: commitMessageError },
             { key: "git", message: error },
             { key: "worktreeApply", message: worktreeApplyError },
             { key: "gitRootScan", message: gitRootScanError },
@@ -595,8 +581,6 @@ export function GitDiffPanel({
         message: entry.message as string,
       }));
   }, [
-    commitError,
-    commitMessageError,
     error,
     fetchError,
     gitRootScanError,
@@ -714,21 +698,13 @@ export function GitDiffPanel({
           gitRootCandidates={gitRootCandidates}
           gitRoot={gitRoot}
           onSelectGitRoot={onSelectGitRoot}
-          showGenerateCommitMessage={showGenerateCommitMessage}
           showApplyWorktree={showApplyWorktree}
-          commitMessage={commitMessage}
-          onCommitMessageChange={onCommitMessageChange}
-          commitMessageLoading={commitMessageLoading}
-          canGenerateCommitMessage={canGenerateCommitMessage}
-          onGenerateCommitMessage={onGenerateCommitMessage}
           worktreeApplyTitle={worktreeApplyTitle}
           worktreeApplyLoading={worktreeApplyLoading}
           worktreeApplySuccess={worktreeApplySuccess}
           onApplyWorktreeChanges={onApplyWorktreeChanges}
           stagedFiles={stagedFiles}
           unstagedFiles={unstagedFiles}
-          commitLoading={commitLoading}
-          onCommit={onCommit}
           commitsAhead={commitsAhead}
           commitsBehind={commitsBehind}
           onPull={onPull}

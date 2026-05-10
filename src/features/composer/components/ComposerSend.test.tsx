@@ -84,7 +84,6 @@ function ComposerHarness({
       draftText={draftText}
       onDraftChange={setDraftText}
       textareaRef={textareaRef}
-      dictationEnabled={false}
     />
   );
 }

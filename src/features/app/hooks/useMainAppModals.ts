@@ -125,12 +125,6 @@ type UseMainAppModalsArgs = {
     handleTestNotificationSound: () => void;
     handleTestSystemNotification: () => void;
     handleMobileConnectSuccess?: () => Promise<void> | void;
-    dictationModel: {
-      status?: SettingsViewProps["dictationModelStatus"];
-      download?: () => void;
-      cancel?: () => void;
-      remove?: () => void;
-    };
   };
 };
 
@@ -194,10 +188,6 @@ function buildSettingsViewProps({
     onTestNotificationSound: settings.handleTestNotificationSound,
     onTestSystemNotification: settings.handleTestSystemNotification,
     onMobileConnectSuccess: settings.handleMobileConnectSuccess,
-    dictationModelStatus: settings.dictationModel.status,
-    onDownloadDictationModel: settings.dictationModel.download,
-    onCancelDictationDownload: settings.dictationModel.cancel,
-    onRemoveDictationModel: settings.dictationModel.remove,
   };
 }
 

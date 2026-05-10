@@ -8,6 +8,51 @@ export function normalizeEffortValue(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+const GPT_MODEL_SEGMENT_LABELS: Record<string, string> = {
+  codex: "Codex",
+  mini: "Mini",
+  spark: "Spark",
+  nano: "Nano",
+  pro: "Pro",
+  max: "Max",
+  turbo: "Turbo",
+  realtime: "Realtime",
+  audio: "Audio",
+  transcribe: "Transcribe",
+};
+
+function formatModelSegment(segment: string) {
+  const normalized = segment.trim();
+  if (!normalized) {
+    return null;
+  }
+  const lower = normalized.toLowerCase();
+  if (GPT_MODEL_SEGMENT_LABELS[lower]) {
+    return GPT_MODEL_SEGMENT_LABELS[lower];
+  }
+  if (/^\d+(?:\.\d+)*$/.test(normalized)) {
+    return normalized;
+  }
+  return `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
+}
+
+export function formatModelDisplayName(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  const withoutPrefix = trimmed.replace(/^gpt[-_\s]*/i, "");
+  if (withoutPrefix === trimmed) {
+    return trimmed;
+  }
+  const formatted = withoutPrefix
+    .split(/[-_\s]+/)
+    .map(formatModelSegment)
+    .filter((segment): segment is string => Boolean(segment))
+    .join(" ");
+  return formatted || trimmed;
+}
+
 function extractModelItems(response: unknown): unknown[] {
   if (!response || typeof response !== "object") {
     return [];
@@ -83,7 +128,9 @@ export function parseModelListResponse(response: unknown): ModelOption[] {
       const record = item as Record<string, unknown>;
       const modelSlug = String(record.model ?? record.id ?? "");
       const rawDisplayName = String(record.displayName || record.display_name || "");
-      const displayName = rawDisplayName.trim().length > 0 ? rawDisplayName : modelSlug;
+      const displayName = formatModelDisplayName(
+        rawDisplayName.trim().length > 0 ? rawDisplayName : modelSlug,
+      );
       return {
         id: String(record.id ?? record.model ?? ""),
         model: modelSlug,

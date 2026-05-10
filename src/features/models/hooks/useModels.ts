@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DebugEntry, ModelOption, WorkspaceInfo } from "../../../types";
 import { getConfigModel, getModelList } from "../../../services/tauri";
 import {
+  formatModelDisplayName,
   normalizeEffortValue,
   parseModelListResponse,
 } from "../utils/modelListResponse";
@@ -216,7 +217,7 @@ export function useModels({
         const configOption: ModelOption = {
           id: configModelFromConfig,
           model: configModelFromConfig,
-          displayName: `${configModelFromConfig} (config)`,
+          displayName: `${formatModelDisplayName(configModelFromConfig)} (config)`,
           description: CONFIG_MODEL_DESCRIPTION,
           supportedReasoningEfforts: [],
           defaultReasoningEffort: null,

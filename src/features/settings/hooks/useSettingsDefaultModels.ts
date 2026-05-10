@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ModelOption, WorkspaceInfo } from "@/types";
 import { connectWorkspace, getConfigModel, getModelList } from "@services/tauri";
-import { parseModelListResponse } from "@/features/models/utils/modelListResponse";
+import {
+  formatModelDisplayName,
+  parseModelListResponse,
+} from "@/features/models/utils/modelListResponse";
 
 type SettingsDefaultModelsState = {
   models: ModelOption[];
@@ -138,7 +141,7 @@ export function useSettingsDefaultModels(projects: WorkspaceInfo[]) {
               {
                 id: configModel,
                 model: configModel,
-                displayName: `${configModel} (config)`,
+                displayName: `${formatModelDisplayName(configModel)} (config)`,
                 description: CONFIG_MODEL_DESCRIPTION,
                 supportedReasoningEfforts: [],
                 defaultReasoningEffort: null,

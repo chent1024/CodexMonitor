@@ -7,8 +7,8 @@ export function useCodeCssVars(appSettings: AppSettings) {
       return;
     }
     const root = document.documentElement;
+    root.style.setProperty("--ui-font-size", `${appSettings.uiFontSize}px`);
     root.style.setProperty("--code-font-family", appSettings.codeFontFamily);
     root.style.setProperty("--code-font-size", `${appSettings.codeFontSize}px`);
-  }, [appSettings.codeFontFamily, appSettings.codeFontSize]);
+  }, [appSettings.codeFontFamily, appSettings.codeFontSize, appSettings.uiFontSize]);
 }
-

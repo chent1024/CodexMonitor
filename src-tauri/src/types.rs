@@ -513,6 +513,8 @@ pub(crate) struct AppSettings {
     pub(crate) automatic_app_update_checks_enabled: bool,
     #[serde(default = "default_ui_font_family", rename = "uiFontFamily")]
     pub(crate) ui_font_family: String,
+    #[serde(default = "default_ui_font_size", rename = "uiFontSize")]
+    pub(crate) ui_font_size: u8,
     #[serde(default = "default_code_font_family", rename = "codeFontFamily")]
     pub(crate) code_font_family: String,
     #[serde(default = "default_code_font_size", rename = "codeFontSize")]
@@ -587,14 +589,6 @@ pub(crate) struct AppSettings {
     pub(crate) experimental_apps_enabled: bool,
     #[serde(default = "default_personality", rename = "personality")]
     pub(crate) personality: String,
-    #[serde(default = "default_dictation_enabled", rename = "dictationEnabled")]
-    pub(crate) dictation_enabled: bool,
-    #[serde(default = "default_dictation_model_id", rename = "dictationModelId")]
-    pub(crate) dictation_model_id: String,
-    #[serde(default, rename = "dictationPreferredLanguage")]
-    pub(crate) dictation_preferred_language: Option<String>,
-    #[serde(default = "default_dictation_hold_key", rename = "dictationHoldKey")]
-    pub(crate) dictation_hold_key: String,
     #[serde(
         default = "default_composer_editor_preset",
         rename = "composerEditorPreset"
@@ -724,11 +718,15 @@ fn default_automatic_app_update_checks_enabled() -> bool {
 }
 
 fn default_ui_font_family() -> String {
-    "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif".to_string()
+    "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", Roboto, \"Helvetica Neue\", Arial, sans-serif".to_string()
+}
+
+fn default_ui_font_size() -> u8 {
+    13
 }
 
 fn default_code_font_family() -> String {
-    "ui-monospace, \"Cascadia Mono\", \"Segoe UI Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace".to_string()
+    "ui-monospace, \"Cascadia Mono\", \"Segoe UI Mono\", \"Sarasa Mono SC\", \"Noto Sans Mono CJK SC\", \"Source Han Mono SC\", Menlo, Monaco, Consolas, \"PingFang SC\", \"Microsoft YaHei\", \"Liberation Mono\", \"Courier New\", monospace".to_string()
 }
 
 fn default_code_font_size() -> u8 {
@@ -948,18 +946,6 @@ fn default_personality() -> String {
     "friendly".to_string()
 }
 
-fn default_dictation_enabled() -> bool {
-    false
-}
-
-fn default_dictation_model_id() -> String {
-    "base".to_string()
-}
-
-fn default_dictation_hold_key() -> String {
-    "alt".to_string()
-}
-
 fn default_composer_editor_preset() -> String {
     "default".to_string()
 }
@@ -1161,6 +1147,7 @@ impl Default for AppSettings {
             thread_title_autogeneration_enabled: false,
             automatic_app_update_checks_enabled: true,
             ui_font_family: default_ui_font_family(),
+            ui_font_size: default_ui_font_size(),
             code_font_family: default_code_font_family(),
             code_font_size: default_code_font_size(),
             notification_sounds_enabled: true,
@@ -1180,10 +1167,6 @@ impl Default for AppSettings {
             unified_exec_enabled: true,
             experimental_apps_enabled: false,
             personality: default_personality(),
-            dictation_enabled: false,
-            dictation_model_id: default_dictation_model_id(),
-            dictation_preferred_language: None,
-            dictation_hold_key: default_dictation_hold_key(),
             composer_editor_preset: default_composer_editor_preset(),
             composer_fence_expand_on_space: default_composer_fence_expand_on_space(),
             composer_fence_expand_on_enter: default_composer_fence_expand_on_enter(),
@@ -1327,6 +1310,7 @@ mod tests {
         assert!(!settings.thread_title_autogeneration_enabled);
         assert!(settings.automatic_app_update_checks_enabled);
         assert!(settings.ui_font_family.contains("system-ui"));
+        assert_eq!(settings.ui_font_size, 13);
         assert!(settings.code_font_family.contains("ui-monospace"));
         assert_eq!(settings.code_font_size, 11);
         assert!(settings.notification_sounds_enabled);
@@ -1344,10 +1328,6 @@ mod tests {
         assert!(settings.unified_exec_enabled);
         assert!(!settings.experimental_apps_enabled);
         assert_eq!(settings.personality, "friendly");
-        assert!(!settings.dictation_enabled);
-        assert_eq!(settings.dictation_model_id, "base");
-        assert!(settings.dictation_preferred_language.is_none());
-        assert_eq!(settings.dictation_hold_key, "alt");
         assert_eq!(settings.composer_editor_preset, "default");
         assert!(!settings.composer_fence_expand_on_space);
         assert!(!settings.composer_fence_expand_on_enter);

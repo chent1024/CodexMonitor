@@ -27,7 +27,6 @@ type UseMainAppLayoutSurfacesArgs = {
     | "experimentalAppsEnabled"
     | "followUpMessageBehavior"
     | "composerFollowUpHintEnabled"
-    | "dictationEnabled"
     | "splitChatDiffView"
     | "gitDiffIgnoreWhitespaceChanges"
   >;
@@ -112,12 +111,6 @@ type UseMainAppLayoutSurfacesArgs = {
     composerSendLabel: string | null | undefined;
     handleSelectPullRequest: NonNullable<GitDiffPanelProps["onSelectPullRequest"]>;
   };
-  dictationUi: {
-    onOpenDictationSettings: ComposerProps["onOpenDictationSettings"];
-    dictationTranscript: ComposerProps["dictationTranscript"];
-    dictationError: ComposerProps["dictationError"];
-    dictationHint: ComposerProps["dictationHint"];
-  };
   openAppIconById: MainHeaderProps["openAppIconById"];
   openInitGitRepoPrompt: GitDiffPanelProps["onInitGitRepo"];
   startUncommittedReview: (workspaceId: string | null) => void;
@@ -166,14 +159,6 @@ type UseMainAppLayoutSurfacesArgs = {
   composerEditorSettings: ComposerEditorSettings;
   composerEditorExpanded: boolean;
   onToggleComposerEditorExpanded: () => void;
-  dictationReady: boolean;
-  dictationState: ComposerProps["dictationState"];
-  dictationLevel: number;
-  onToggleDictation: () => void;
-  onCancelDictation: (() => void) | undefined;
-  clearDictationTranscript: NonNullable<ComposerProps["onDictationTranscriptHandled"]>;
-  clearDictationError: () => void;
-  clearDictationHint: () => void;
   composerContextActions: ComposerProps["contextActions"];
   reviewPrompt: ComposerProps["reviewPrompt"];
   closeReviewPrompt: () => void;
@@ -292,7 +277,6 @@ function buildPrimarySurface({
   workspaceDrop,
   threadNavigation,
   pullRequestComposer,
-  dictationUi,
   openAppIconById,
   handleAddWorkspace,
   openWorkspaceFromUrlPrompt,
@@ -328,14 +312,6 @@ function buildPrimarySurface({
   composerEditorSettings,
   composerEditorExpanded,
   onToggleComposerEditorExpanded,
-  dictationReady,
-  dictationState,
-  dictationLevel,
-  onToggleDictation,
-  onCancelDictation,
-  clearDictationTranscript,
-  clearDictationError,
-  clearDictationHint,
   composerContextActions,
   reviewPrompt,
   closeReviewPrompt,
@@ -527,20 +503,6 @@ function buildPrimarySurface({
           editorSettings: composerEditorSettings,
           editorExpanded: composerEditorExpanded,
           onToggleEditorExpanded: onToggleComposerEditorExpanded,
-          dictationEnabled: appSettings.dictationEnabled && dictationReady,
-          dictationState,
-          dictationLevel,
-          onToggleDictation,
-          onCancelDictation,
-          onOpenDictationSettings: dictationUi.onOpenDictationSettings,
-          dictationTranscript: dictationUi.dictationTranscript,
-          onDictationTranscriptHandled: (id) => {
-            clearDictationTranscript?.(id);
-          },
-          dictationError: dictationUi.dictationError,
-          onDismissDictationError: clearDictationError,
-          dictationHint: dictationUi.dictationHint,
-          onDismissDictationHint: clearDictationHint,
           contextActions: composerContextActions,
           reviewPrompt,
           onReviewPromptClose: closeReviewPrompt,
@@ -1001,7 +963,6 @@ export function useMainAppLayoutSurfaces({
   workspaceDrop,
   threadNavigation,
   pullRequestComposer,
-  dictationUi,
   openAppIconById,
   openInitGitRepoPrompt,
   startUncommittedReview,
@@ -1039,14 +1000,6 @@ export function useMainAppLayoutSurfaces({
   composerEditorSettings,
   composerEditorExpanded,
   onToggleComposerEditorExpanded,
-  dictationReady,
-  dictationState,
-  dictationLevel,
-  onToggleDictation,
-  onCancelDictation,
-  clearDictationTranscript,
-  clearDictationError,
-  clearDictationHint,
   composerContextActions,
   reviewPrompt,
   closeReviewPrompt,
@@ -1163,7 +1116,6 @@ export function useMainAppLayoutSurfaces({
     workspaceDrop,
     threadNavigation,
     pullRequestComposer,
-    dictationUi,
     openAppIconById,
     openInitGitRepoPrompt,
     startUncommittedReview,
@@ -1201,14 +1153,6 @@ export function useMainAppLayoutSurfaces({
     composerEditorSettings,
     composerEditorExpanded,
     onToggleComposerEditorExpanded,
-    dictationReady,
-    dictationState,
-    dictationLevel,
-    onToggleDictation,
-    onCancelDictation,
-    clearDictationTranscript,
-    clearDictationError,
-    clearDictationHint,
     composerContextActions,
     reviewPrompt,
     closeReviewPrompt,

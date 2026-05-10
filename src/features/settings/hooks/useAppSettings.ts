@@ -6,8 +6,13 @@ import { CHAT_SCROLLBACK_DEFAULT, normalizeChatHistoryScrollbackItems } from "@u
 import {
   DEFAULT_CODE_FONT_FAMILY,
   DEFAULT_UI_FONT_FAMILY,
+  LEGACY_DEFAULT_CODE_FONT_FAMILY,
+  LEGACY_DEFAULT_UI_FONT_FAMILY,
   CODE_FONT_SIZE_DEFAULT,
+  UI_FONT_SIZE_DEFAULT,
   clampCodeFontSize,
+  clampUiFontSize,
+  migrateLegacyFontFamily,
   normalizeFontFamily,
 } from "@utils/fonts";
 import {
@@ -173,6 +178,7 @@ function buildDefaultSettings(): AppSettings {
     threadTitleAutogenerationEnabled: false,
     automaticAppUpdateChecksEnabled: true,
     uiFontFamily: DEFAULT_UI_FONT_FAMILY,
+    uiFontSize: UI_FONT_SIZE_DEFAULT,
     codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
     codeFontSize: CODE_FONT_SIZE_DEFAULT,
     notificationSoundsEnabled: true,
@@ -191,10 +197,6 @@ function buildDefaultSettings(): AppSettings {
     unifiedExecEnabled: true,
     experimentalAppsEnabled: false,
     personality: "friendly",
-    dictationEnabled: false,
-    dictationModelId: "base",
-    dictationPreferredLanguage: null,
-    dictationHoldKey: "alt",
     composerEditorPreset: "default",
     composerFenceExpandOnSpace: false,
     composerFenceExpandOnEnter: false,
@@ -240,6 +242,16 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
   const chatHistoryScrollbackItems = normalizeChatHistoryScrollbackItems(
     settings.chatHistoryScrollbackItems,
   );
+  const normalizedUiFontFamily = migrateLegacyFontFamily(
+    normalizeFontFamily(settings.uiFontFamily, DEFAULT_UI_FONT_FAMILY),
+    LEGACY_DEFAULT_UI_FONT_FAMILY,
+    DEFAULT_UI_FONT_FAMILY,
+  );
+  const normalizedCodeFontFamily = migrateLegacyFontFamily(
+    normalizeFontFamily(settings.codeFontFamily, DEFAULT_CODE_FONT_FAMILY),
+    LEGACY_DEFAULT_CODE_FONT_FAMILY,
+    DEFAULT_CODE_FONT_FAMILY,
+  );
   return {
     ...settings,
     ...remoteBackendSettings,
@@ -247,14 +259,9 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     codexArgs: settings.codexArgs?.trim() ? settings.codexArgs.trim() : null,
     uiScale: clampUiScale(settings.uiScale),
     theme: allowedThemes.has(settings.theme) ? settings.theme : "system",
-    uiFontFamily: normalizeFontFamily(
-      settings.uiFontFamily,
-      DEFAULT_UI_FONT_FAMILY,
-    ),
-    codeFontFamily: normalizeFontFamily(
-      settings.codeFontFamily,
-      DEFAULT_CODE_FONT_FAMILY,
-    ),
+    uiFontFamily: normalizedUiFontFamily,
+    uiFontSize: clampUiFontSize(settings.uiFontSize),
+    codeFontFamily: normalizedCodeFontFamily,
     codeFontSize: clampCodeFontSize(settings.codeFontSize),
     personality: allowedPersonality.has(settings.personality)
       ? settings.personality

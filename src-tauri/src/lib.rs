@@ -9,7 +9,6 @@ use tauri::WindowEvent;
 mod backend;
 mod codex;
 mod daemon_binary;
-mod dictation;
 mod event_sink;
 mod files;
 mod git;
@@ -287,14 +286,6 @@ pub fn run() {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_close,
-            dictation::dictation_model_status,
-            dictation::dictation_download_model,
-            dictation::dictation_cancel_download,
-            dictation::dictation_remove_model,
-            dictation::dictation_start,
-            dictation::dictation_request_permission,
-            dictation::dictation_stop,
-            dictation::dictation_cancel,
             local_usage::local_usage_snapshot,
             notifications::is_macos_debug_build,
             notifications::app_build_type,

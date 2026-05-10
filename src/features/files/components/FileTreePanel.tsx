@@ -12,16 +12,11 @@ import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 import File from "lucide-react/dist/esm/icons/file";
 import Folder from "lucide-react/dist/esm/icons/folder";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
-import Search from "lucide-react/dist/esm/icons/search";
 import type { PanelTabId } from "../../layout/components/PanelTabs";
 import { PanelShell } from "../../layout/components/PanelShell";
-import {
-  PanelMeta,
-  PanelSearchField,
-} from "../../design-system/components/panel/PanelPrimitives";
+import { PanelMeta } from "../../design-system/components/panel/PanelPrimitives";
 import { readWorkspaceFile } from "../../../services/tauri";
 import type { OpenAppTarget } from "../../../types";
-import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
 import { languageFromPath } from "../../../utils/syntax";
 import { joinWorkspacePath, revealInFileManagerLabel } from "../../../utils/platformPaths";
 import { getFileTypeIconUrl } from "../../../utils/fileTypeIcons";
@@ -59,7 +54,6 @@ type FileTreeBuildNode = {
 
 type FileEntry = {
   path: string;
-  lower: string;
   segments: string[];
 };
 
@@ -70,7 +64,51 @@ type FileTreeRowEntry = {
   isExpanded: boolean;
 };
 
-const FILE_TREE_ROW_HEIGHT = 28;
+const FILE_TREE_ROW_HEIGHT = 22;
+const FILE_TREE_EXPANDED_STORAGE_PREFIX = "codex:file-tree-expanded";
+
+function getExpandedFoldersStorageKey(
+  workspaceId: string,
+  filterMode: "all" | "modified",
+) {
+  return `${FILE_TREE_EXPANDED_STORAGE_PREFIX}:${workspaceId}:${filterMode}`;
+}
+
+function readExpandedFoldersFromStorage(
+  workspaceId: string,
+  filterMode: "all" | "modified",
+) {
+  try {
+    const raw = window.localStorage.getItem(
+      getExpandedFoldersStorageKey(workspaceId, filterMode),
+    );
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+    return new Set(parsed.filter((path): path is string => typeof path === "string"));
+  } catch {
+    return null;
+  }
+}
+
+function writeExpandedFoldersToStorage(
+  workspaceId: string,
+  filterMode: "all" | "modified",
+  expandedFolders: Set<string>,
+) {
+  try {
+    window.localStorage.setItem(
+      getExpandedFoldersStorageKey(workspaceId, filterMode),
+      JSON.stringify(Array.from(expandedFolders).sort()),
+    );
+  } catch {
+    // Ignore storage failures; the in-memory state still reflects the click.
+  }
+}
 
 function buildTree(entries: FileEntry[]): { nodes: FileTreeNode[]; folderPaths: Set<string> } {
   const root = new Map<string, FileTreeBuildNode>();
@@ -176,8 +214,9 @@ export function FileTreePanel({
   onSelectOpenAppId,
 }: FileTreePanelProps) {
   const [filterMode, setFilterMode] = useState<"all" | "modified">("all");
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState("");
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    () => readExpandedFoldersFromStorage(workspaceId, "all") ?? new Set(),
+  );
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewAnchor, setPreviewAnchor] = useState<{
     top: number;
@@ -197,16 +236,14 @@ export function FileTreePanel({
   const dragAnchorLineRef = useRef<number | null>(null);
   const dragMovedRef = useRef(false);
   const hasManualToggle = useRef(false);
+  const lastAutoExpandKeyRef = useRef<string | null>(null);
   const showLoading = isLoading && files.length === 0;
   const listRef = useRef<HTMLDivElement | null>(null);
-  const debouncedQuery = useDebouncedValue(query, 150);
-  const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const modifiedPathSet = useMemo(() => new Set(modifiedFiles), [modifiedFiles]);
   const fileEntries = useMemo(
     () =>
       files.map((path) => ({
         path,
-        lower: path.toLowerCase(),
         segments: path.split("/").filter(Boolean),
       })),
     [files],
@@ -223,17 +260,20 @@ export function FileTreePanel({
     [previewPath],
   );
 
-  const visibleEntries = useMemo(() => {
-    if (!normalizedQuery) {
-      return sourceEntries;
-    }
-    return sourceEntries.filter((entry) => entry.lower.includes(normalizedQuery));
-  }, [sourceEntries, normalizedQuery]);
+  const visibleEntries = sourceEntries;
 
   const { nodes, folderPaths } = useMemo(
     () => buildTree(visibleEntries),
     [visibleEntries],
   );
+  const autoExpandKey = `${workspaceId}:${filterMode}`;
+
+  useEffect(() => {
+    const stored = readExpandedFoldersFromStorage(workspaceId, filterMode);
+    hasManualToggle.current = stored !== null;
+    lastAutoExpandKeyRef.current = stored ? autoExpandKey : null;
+    setExpandedFolders(stored ?? new Set());
+  }, [filterMode, workspaceId]);
 
   const visibleFolderPaths = folderPaths;
   const hasFolders = visibleFolderPaths.size > 0;
@@ -242,8 +282,22 @@ export function FileTreePanel({
 
   useEffect(() => {
     setExpandedFolders((prev) => {
-      if (normalizedQuery || filterMode === "modified") {
+      const shouldAutoExpand =
+        filterMode === "modified" &&
+        lastAutoExpandKeyRef.current !== autoExpandKey;
+      lastAutoExpandKeyRef.current = autoExpandKey;
+      if (shouldAutoExpand) {
+        hasManualToggle.current = false;
         return new Set(folderPaths);
+      }
+      if (filterMode === "modified") {
+        const next = new Set<string>();
+        prev.forEach((path) => {
+          if (folderPaths.has(path)) {
+            next.add(path);
+          }
+        });
+        return next;
       }
       const next = new Set<string>();
       prev.forEach((path) => {
@@ -260,7 +314,7 @@ export function FileTreePanel({
       }
       return next;
     });
-  }, [filterMode, folderPaths, nodes, normalizedQuery]);
+  }, [autoExpandKey, filterMode, folderPaths, nodes]);
 
   useEffect(() => {
     setPreviewPath(null);
@@ -313,6 +367,7 @@ export function FileTreePanel({
       } else {
         visibleFolderPaths.forEach((path) => next.add(path));
       }
+      writeExpandedFoldersToStorage(workspaceId, filterMode, next);
       return next;
     });
     hasManualToggle.current = true;
@@ -326,8 +381,10 @@ export function FileTreePanel({
       } else {
         next.add(path);
       }
+      writeExpandedFoldersToStorage(workspaceId, filterMode, next);
       return next;
     });
+    hasManualToggle.current = true;
   };
 
   const resolvePath = useCallback(
@@ -588,7 +645,7 @@ export function FileTreePanel({
         <button
           type="button"
           className={`file-tree-row${isFolder ? " is-folder" : " is-file"}`}
-          style={{ paddingLeft: `${depth * 10}px` }}
+          style={{ paddingLeft: `${depth * 7}px` }}
           onClick={(event) => {
             if (isFolder) {
               toggleFolder(node.path);
@@ -656,11 +713,9 @@ export function FileTreePanel({
         <PanelMeta className="file-tree-meta">
           <div className="file-tree-count">
             {visibleEntries.length
-              ? normalizedQuery
-                ? `${visibleEntries.length} match${visibleEntries.length === 1 ? "" : "es"}`
-                : filterMode === "modified"
-                  ? `${visibleEntries.length} modified`
-                  : `${visibleEntries.length} file${visibleEntries.length === 1 ? "" : "s"}`
+              ? filterMode === "modified"
+                ? `${visibleEntries.length} modified`
+                : `${visibleEntries.length} file${visibleEntries.length === 1 ? "" : "s"}`
               : showLoading
                 ? "Loading files"
                 : filterMode === "modified"
@@ -678,34 +733,19 @@ export function FileTreePanel({
               <ChevronsUpDown aria-hidden />
             </button>
           ) : null}
+          <button
+            type="button"
+            className={`ghost icon-button file-tree-filter-toggle${filterMode === "modified" ? " is-active" : ""}`}
+            onClick={() => {
+              setFilterMode((prev) => (prev === "all" ? "modified" : "all"));
+            }}
+            aria-pressed={filterMode === "modified"}
+            aria-label={filterMode === "modified" ? "Show all files" : "Show modified files only"}
+            title={filterMode === "modified" ? "Show all files" : "Show modified files only"}
+          >
+            <GitBranch size={14} aria-hidden />
+          </button>
         </PanelMeta>
-      }
-      search={
-        <PanelSearchField
-          className="file-tree-search"
-          inputClassName="file-tree-search-input"
-          placeholder="Filter files and folders"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          aria-label="Filter files and folders"
-          icon={<Search aria-hidden />}
-          trailing={
-            <button
-              type="button"
-              className={`ghost icon-button file-tree-search-filter${filterMode === "modified" ? " is-active" : ""}`}
-              onClick={() => {
-                setFilterMode((prev) => (prev === "all" ? "modified" : "all"));
-              }}
-              aria-pressed={filterMode === "modified"}
-              aria-label={
-                filterMode === "modified" ? "Show all files" : "Show modified files only"
-              }
-              title={filterMode === "modified" ? "Show all files" : "Show modified files only"}
-            >
-              <GitBranch size={14} aria-hidden />
-            </button>
-          }
-        />
       }
     >
       <div
@@ -725,13 +765,7 @@ export function FileTreePanel({
           </div>
         ) : nodes.length === 0 ? (
           <div className="file-tree-empty">
-            {normalizedQuery
-              ? filterMode === "modified"
-                ? "No modified files match your filter."
-                : "No matches found."
-              : filterMode === "modified"
-                ? "No modified files."
-                : "No files available."}
+            {filterMode === "modified" ? "No modified files." : "No files available."}
           </div>
         ) : (
           <div

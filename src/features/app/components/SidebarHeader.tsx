@@ -129,8 +129,8 @@ export function SidebarHeader({
             className="sidebar-title-add ds-tooltip-trigger"
             onClick={onAddWorkspace}
             data-tauri-drag-region="false"
-            aria-label="Add workspaces"
-            data-tooltip="Add workspaces"
+            aria-label="添加项目"
+            data-tooltip="添加项目"
             data-tooltip-align="start"
             data-tooltip-placement="bottom"
             type="button"
@@ -141,9 +141,9 @@ export function SidebarHeader({
             className="subtitle subtitle-button sidebar-title-button"
             onClick={onSelectHome}
             data-tauri-drag-region="false"
-            aria-label="Open home"
+            aria-label="打开首页"
           >
-            Projects
+            项目
           </button>
         </div>
       </div>
@@ -155,9 +155,9 @@ export function SidebarHeader({
             className="ghost sidebar-sort-toggle ds-tooltip-trigger"
             onClick={sortMenu.toggle}
             data-tauri-drag-region="false"
-            aria-label="Organize and sort threads"
-            title="Organize and sort threads"
-            data-tooltip="Organize and sort threads"
+            aria-label="整理和排序会话"
+            title="整理和排序会话"
+            data-tooltip="整理和排序会话"
             data-tooltip-align="end"
             data-tooltip-placement="bottom"
           >
@@ -174,7 +174,7 @@ export function SidebarHeader({
                   : undefined
               }
             >
-              <div className="sidebar-sort-section-label">Organize</div>
+              <div className="sidebar-sort-section-label">整理方式</div>
               <PopoverMenuItem
                 className="sidebar-sort-option"
                 role="menuitemradio"
@@ -184,7 +184,7 @@ export function SidebarHeader({
                 icon={<FolderTree aria-hidden />}
                 active={threadListOrganizeMode === "by_project"}
               >
-                By project
+                按项目
               </PopoverMenuItem>
               <PopoverMenuItem
                 className="sidebar-sort-option"
@@ -195,7 +195,7 @@ export function SidebarHeader({
                 icon={<BetweenHorizontalStart aria-hidden />}
                 active={threadListOrganizeMode === "by_project_activity"}
               >
-                By project activity
+                按项目活跃度
               </PopoverMenuItem>
               <PopoverMenuItem
                 className="sidebar-sort-option"
@@ -206,10 +206,10 @@ export function SidebarHeader({
                 icon={<ListTree aria-hidden />}
                 active={threadListOrganizeMode === "threads_only"}
               >
-                Thread list
+                仅会话列表
               </PopoverMenuItem>
               <div className="sidebar-sort-divider" aria-hidden />
-              <div className="sidebar-sort-section-label">Sort by</div>
+              <div className="sidebar-sort-section-label">排序依据</div>
               <PopoverMenuItem
                 className="sidebar-sort-option"
                 role="menuitemradio"
@@ -219,7 +219,7 @@ export function SidebarHeader({
                 icon={<ArrowDownUp aria-hidden />}
                 active={threadListSortKey === "updated_at"}
               >
-                Updated
+                最近更新
               </PopoverMenuItem>
               <PopoverMenuItem
                 className="sidebar-sort-option"
@@ -230,7 +230,7 @@ export function SidebarHeader({
                 icon={<Calendar aria-hidden />}
                 active={threadListSortKey === "created_at"}
               >
-                Created
+                创建时间
               </PopoverMenuItem>
             </PopoverSurface>
           )}
@@ -239,10 +239,10 @@ export function SidebarHeader({
           className="ghost sidebar-refresh-toggle ds-tooltip-trigger"
           onClick={onRefreshAllThreads}
           data-tauri-drag-region="false"
-          aria-label="Refresh all workspace threads"
+          aria-label="刷新全部项目会话"
           type="button"
-          title="Refresh all workspace threads"
-          data-tooltip="Refresh all workspace threads"
+          title="刷新全部项目会话"
+          data-tooltip="刷新全部项目会话"
           data-tooltip-align="end"
           data-tooltip-placement="bottom"
           disabled={refreshDisabled}
@@ -257,8 +257,8 @@ export function SidebarHeader({
           className={`ghost sidebar-search-toggle ds-tooltip-trigger${isSearchOpen ? " is-active" : ""}`}
           onClick={onToggleSearch}
           data-tauri-drag-region="false"
-          aria-label="Toggle search"
-          data-tooltip={isSearchOpen ? "Close search" : "Search threads"}
+          aria-label="切换搜索"
+          data-tooltip={isSearchOpen ? "关闭搜索" : "搜索会话"}
           data-tooltip-align="end"
           data-tooltip-placement="bottom"
           aria-pressed={isSearchOpen}

@@ -8,8 +8,9 @@
   -webkit-app-region: no-drag;
   min-height: 0;
   min-width: 0;
-  --main-panel-padding: 24px;
-  --conversation-column-width: 900px;
+  --main-panel-padding: clamp(14px, 1.5vw, 22px);
+  --main-topbar-side-padding: calc(var(--main-panel-padding) / 2);
+  --conversation-column-width: 100%;
   transition: grid-template-columns 220ms ease;
 }
 
@@ -57,7 +58,7 @@
 .main-header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   -webkit-app-region: no-drag;
   flex-shrink: 0;
 }
@@ -103,15 +104,21 @@
 
 .open-app-button {
   display: inline-flex;
-  align-items: stretch;
+  align-items: center;
   gap: 0;
+  width: fit-content;
+  flex: 0 0 auto;
+  height: 22px;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 5px;
   overflow: hidden;
 }
 
 .open-app-action {
-  padding: 7px 10px;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 4px;
   border-radius: 0;
   border: none;
 }
@@ -121,9 +128,23 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  height: 100%;
+  min-height: 0;
   border: none;
   background: transparent;
   box-shadow: none;
+}
+
+.open-app-button .open-app-action {
+  width: auto;
+  min-width: 0;
+  padding: 0 4px;
+}
+
+.open-app-button .open-app-toggle {
+  width: 16px;
+  min-width: 16px;
+  padding: 0;
 }
 
 .open-app-button .open-app-action:hover,
@@ -135,19 +156,21 @@
 .open-app-label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .open-app-icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 3px;
   flex-shrink: 0;
 }
 
 .open-app-toggle {
-  padding: 7px 8px;
+  height: 100%;
+  min-height: 0;
   border-radius: 0;
   border-left: 1px solid var(--border-subtle);
 }
@@ -356,7 +379,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px var(--main-panel-padding) 12px;
+  padding: 4px var(--main-topbar-side-padding);
   border-bottom: 1px solid var(--cm-border-default);
   background: var(--cm-surface-topbar);
   -webkit-app-region: drag;
@@ -372,7 +395,7 @@
 
 .app.sidebar-collapsed .main-topbar {
   padding-left: calc(
-    var(--main-panel-padding)
+    var(--main-topbar-side-padding)
     + var(--titlebar-inset-left, 0px)
     + var(--titlebar-collapsed-left-extra, 0px)
     + var(--titlebar-toggle-size, 28px)
@@ -400,7 +423,7 @@
 
 .app.right-panel-collapsed .main-topbar {
   padding-right: calc(
-    var(--main-panel-padding)
+    var(--main-topbar-side-padding)
     + var(--window-caption-width, 0px)
     + var(--window-caption-gap, 0px)
   );
@@ -414,7 +437,7 @@
 .main-topbar-left {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
   min-width: 0;
   flex: 1;
   -webkit-app-region: no-drag;
@@ -423,19 +446,19 @@
 .topbar-leading {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   flex: 1;
 }
 
 .main-topbar-left .icon-button {
-  padding: 6px 10px;
+  padding: 4px 8px;
   -webkit-app-region: no-drag;
 }
 
 .main-topbar-left .back-button {
   margin-left: -16px;
-  padding: 6px;
+  padding: 4px;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -445,18 +468,40 @@
   margin-left: 0;
 }
 
+.main-topbar .main-header-action:not(.open-app-action):not(.open-app-toggle) {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 4px;
+  border-color: transparent;
+  background: transparent;
+  border-radius: 0;
+}
+
+.main-topbar .main-header-action:not(.open-app-action):not(.open-app-toggle):hover:not(:disabled),
+.main-topbar .main-header-action:not(.open-app-action):not(.open-app-toggle):focus-visible {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--surface-control-hover) 58%, transparent);
+  color: var(--text-strong);
+}
+
+.main-topbar .main-header-action:not(.open-app-action):not(.open-app-toggle).is-active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--surface-control-hover) 72%, transparent);
+  color: var(--text-stronger);
+}
+
 
 .workspace-title-line {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   white-space: nowrap;
   flex: 1;
 }
 
 .workspace-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.01em;
   max-width: min(32vw, 420px);
@@ -501,11 +546,11 @@
 }
 
 .workspace-branch-static-button {
-  border: 1px solid var(--cm-border-elevated);
-  background: var(--cm-surface-panel-elevated);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-muted);
-  border-radius: 999px;
-  padding: 4px 10px;
+  border-radius: 6px;
+  padding: 2px 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -520,8 +565,8 @@
 
 .workspace-branch-static-button:hover {
   color: var(--text-stronger);
-  border-color: var(--cm-border-contrast);
-  background: var(--cm-surface-panel-solid);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--surface-hover) 42%, transparent);
 }
 
 .worktree-info-popover {
@@ -685,11 +730,11 @@
 .workspace-branch-button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid var(--cm-border-elevated);
-  background: var(--cm-surface-panel-elevated);
-  padding: 4px 10px;
-  border-radius: 999px;
+  gap: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 2px 4px;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text-muted);
   max-width: min(30vw, 320px);
@@ -697,8 +742,8 @@
 }
 
 .workspace-branch-button:hover {
-  background: var(--cm-surface-panel-solid);
-  border-color: var(--cm-border-contrast);
+  background: color-mix(in srgb, var(--surface-hover) 42%, transparent);
+  border-color: transparent;
   color: var(--text-stronger);
 }
 
@@ -1029,12 +1074,26 @@
 }
 
 .right-panel {
+  --text-primary: #cccccc;
+  --text-strong: #e7e7e7;
+  --text-emphasis: #d4d4d4;
+  --text-stronger: #cccccc;
+  --text-quiet: #c5c5c5;
+  --text-muted: #969696;
+  --text-subtle: #858585;
+  --text-faint: #6f6f6f;
+  --text-fainter: #606060;
+  --text-dim: #505050;
+  --surface-control: rgba(60, 60, 60, 0.78);
+  --surface-control-hover: rgba(70, 70, 70, 0.86);
+  --surface-hover: rgba(55, 55, 61, 0.78);
   display: flex;
   flex-direction: column;
   gap: 0;
   position: relative;
   padding-left: 0;
-  border-left: 1px solid var(--border-subtle);
+  border-left: 0;
+  border-radius: 0;
   background: var(--surface-right-panel);
   height: 100%;
   padding-top: 0;
@@ -1044,6 +1103,40 @@
   min-height: 0;
   overflow: hidden;
   transition: opacity 200ms ease, transform 200ms ease;
+}
+
+:root[data-theme="light"] .right-panel {
+  --text-primary: #1a1d24;
+  --text-strong: #0e1118;
+  --text-emphasis: rgba(17, 20, 28, 0.9);
+  --text-stronger: rgba(17, 20, 28, 0.85);
+  --text-quiet: rgba(17, 20, 28, 0.75);
+  --text-muted: rgba(17, 20, 28, 0.7);
+  --text-subtle: rgba(17, 20, 28, 0.6);
+  --text-faint: rgba(17, 20, 28, 0.5);
+  --text-fainter: rgba(17, 20, 28, 0.45);
+  --text-dim: rgba(17, 20, 28, 0.35);
+  --surface-control: rgba(15, 23, 36, 0.08);
+  --surface-control-hover: rgba(15, 23, 36, 0.12);
+  --surface-hover: rgba(15, 23, 36, 0.06);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .right-panel {
+    --text-primary: #1a1d24;
+    --text-strong: #0e1118;
+    --text-emphasis: rgba(17, 20, 28, 0.9);
+    --text-stronger: rgba(17, 20, 28, 0.85);
+    --text-quiet: rgba(17, 20, 28, 0.75);
+    --text-muted: rgba(17, 20, 28, 0.7);
+    --text-subtle: rgba(17, 20, 28, 0.6);
+    --text-faint: rgba(17, 20, 28, 0.5);
+    --text-fainter: rgba(17, 20, 28, 0.45);
+    --text-dim: rgba(17, 20, 28, 0.35);
+    --surface-control: rgba(15, 23, 36, 0.08);
+    --surface-control-hover: rgba(15, 23, 36, 0.12);
+    --surface-hover: rgba(15, 23, 36, 0.06);
+  }
 }
 
 .right-panel-drag-strip {
@@ -1067,7 +1160,12 @@
 
 .right-panel-top .ds-panel {
   padding-top: var(--right-panel-top-padding, 12px);
+  border-radius: 0;
   transition: padding-top 180ms ease;
+}
+
+.app.reduced-transparency .right-panel-top .ds-panel {
+  border-radius: 0;
 }
 
 .right-panel-divider {

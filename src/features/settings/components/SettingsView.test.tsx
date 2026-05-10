@@ -116,6 +116,7 @@ const baseSettings: AppSettings = {
   automaticAppUpdateChecksEnabled: true,
   uiFontFamily:
     'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  uiFontSize: 13,
   codeFontFamily:
     'ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
   codeFontSize: 11,
@@ -135,10 +136,6 @@ const baseSettings: AppSettings = {
   unifiedExecEnabled: true,
   experimentalAppsEnabled: false,
   personality: "friendly",
-  dictationEnabled: false,
-  dictationModelId: "base",
-  dictationPreferredLanguage: null,
-  dictationHoldKey: null,
   composerEditorPreset: "default",
   composerFenceExpandOnSpace: false,
   composerFenceExpandOnEnter: false,
@@ -206,7 +203,7 @@ const renderDisplaySection = (
     onUpdateAppSettings,
     workspaceGroups: [],
     groupedWorkspaces: [],
-    ungroupedLabel: "Ungrouped",
+    ungroupedLabel: "未分组",
     onClose: vi.fn(),
     onMoveWorkspace: vi.fn(),
     onDeleteWorkspace: vi.fn(),
@@ -221,14 +218,10 @@ const renderDisplaySection = (
     scaleShortcutText: "Use Command +/-",
     onTestNotificationSound: vi.fn(),
     onTestSystemNotification: vi.fn(),
-    dictationModelStatus: null,
-    onDownloadDictationModel: vi.fn(),
-    onCancelDictationDownload: vi.fn(),
-    onRemoveDictationModel: vi.fn(),
   };
 
   render(<SettingsView {...props} />);
-  fireEvent.click(screen.getByRole("button", { name: "Display & Sound" }));
+  fireEvent.click(screen.getByRole("button", { name: "显示与声音" }));
 
   return { onUpdateAppSettings, onToggleTransparency };
 };
@@ -250,7 +243,7 @@ const renderComposerSection = (
     onUpdateAppSettings,
     workspaceGroups: [],
     groupedWorkspaces: [],
-    ungroupedLabel: "Ungrouped",
+    ungroupedLabel: "未分组",
     onClose: vi.fn(),
     onMoveWorkspace: vi.fn(),
     onDeleteWorkspace: vi.fn(),
@@ -265,10 +258,6 @@ const renderComposerSection = (
     scaleShortcutText: "Use Command +/-",
     onTestNotificationSound: vi.fn(),
     onTestSystemNotification: vi.fn(),
-    dictationModelStatus: null,
-    onDownloadDictationModel: vi.fn(),
-    onCancelDictationDownload: vi.fn(),
-    onRemoveDictationModel: vi.fn(),
     initialSection: "composer",
   };
 
@@ -299,7 +288,7 @@ const renderAboutSection = (
     onToggleAutomaticAppUpdateChecks,
     workspaceGroups: [],
     groupedWorkspaces: [],
-    ungroupedLabel: "Ungrouped",
+    ungroupedLabel: "未分组",
     onClose: vi.fn(),
     onMoveWorkspace: vi.fn(),
     onDeleteWorkspace: vi.fn(),
@@ -314,14 +303,10 @@ const renderAboutSection = (
     scaleShortcutText: "Use Command +/-",
     onTestNotificationSound: vi.fn(),
     onTestSystemNotification: vi.fn(),
-    dictationModelStatus: null,
-    onDownloadDictationModel: vi.fn(),
-    onCancelDictationDownload: vi.fn(),
-    onRemoveDictationModel: vi.fn(),
   };
 
   render(<SettingsView {...props} />);
-  fireEvent.click(screen.getByRole("button", { name: "About" }));
+  fireEvent.click(screen.getByRole("button", { name: "关于" }));
 
   return { onUpdateAppSettings, onToggleAutomaticAppUpdateChecks };
 };
@@ -372,11 +357,11 @@ const renderFeaturesSection = (
     groupedWorkspaces: [
       {
         id: null,
-        name: "Ungrouped",
+        name: "未分组",
         workspaces: [workspace({ id: "w-features", name: "Features Workspace", connected: true })],
       },
     ],
-    ungroupedLabel: "Ungrouped",
+    ungroupedLabel: "未分组",
     onClose: vi.fn(),
     onMoveWorkspace: vi.fn(),
     onDeleteWorkspace: vi.fn(),
@@ -391,10 +376,6 @@ const renderFeaturesSection = (
     scaleShortcutText: "Use Command +/-",
     onTestNotificationSound: vi.fn(),
     onTestSystemNotification: vi.fn(),
-    dictationModelStatus: null,
-    onDownloadDictationModel: vi.fn(),
-    onCancelDictationDownload: vi.fn(),
-    onRemoveDictationModel: vi.fn(),
     initialSection: "features",
   };
 
@@ -445,7 +426,7 @@ const renderEnvironmentsSection = (
     [
       {
         id: null,
-        name: "Ungrouped",
+        name: "未分组",
         workspaces: [
           workspace({
             id: "w1",
@@ -472,7 +453,7 @@ const renderEnvironmentsSection = (
     onUpdateAppSettings,
     workspaceGroups: [],
     groupedWorkspaces: nextOptions.groupedWorkspaces ?? defaultGroupedWorkspaces,
-    ungroupedLabel: "Ungrouped",
+    ungroupedLabel: "未分组",
     onClose: vi.fn(),
     onMoveWorkspace: vi.fn(),
     onDeleteWorkspace: vi.fn(),
@@ -487,10 +468,6 @@ const renderEnvironmentsSection = (
     scaleShortcutText: "Use Command +/-",
     onTestNotificationSound: vi.fn(),
     onTestSystemNotification: vi.fn(),
-    dictationModelStatus: null,
-    onDownloadDictationModel: vi.fn(),
-    onCancelDictationDownload: vi.fn(),
-    onRemoveDictationModel: vi.fn(),
     initialSection: "environments",
   });
 
@@ -512,7 +489,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const select = screen.getByLabelText("Theme");
+    const select = screen.getByLabelText("主题");
     fireEvent.change(select, { target: { value: "dark" } });
 
     await waitFor(() => {
@@ -527,7 +504,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     const row = screen
-      .getByText("Show remaining Codex limits")
+      .getByText("显示剩余额度")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected remaining limits row");
@@ -552,7 +529,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     const row = screen
-      .getByText("Show file path in messages")
+      .getByText("在消息中显示文件路径")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected file path visibility row");
@@ -577,7 +554,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     const row = screen
-      .getByText("Split chat and diff center panes")
+      .getByText("拆分聊天与 diff 中央面板")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected split center panes row");
@@ -600,7 +577,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onToggleTransparency, reduceTransparency: false });
 
     const row = screen
-      .getByText("Reduce transparency")
+      .getByText("降低透明效果")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected reduce transparency row");
@@ -622,7 +599,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const scaleInput = screen.getByLabelText("Interface scale");
+    const scaleInput = screen.getByLabelText("界面缩放");
 
     fireEvent.change(scaleInput, { target: { value: "500%" } });
     fireEvent.blur(scaleInput);
@@ -647,7 +624,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const uiFontInput = screen.getByLabelText("UI font family");
+    const uiFontInput = screen.getByLabelText("界面字体");
     fireEvent.change(uiFontInput, { target: { value: "Avenir, sans-serif" } });
     fireEvent.blur(uiFontInput);
 
@@ -657,7 +634,7 @@ describe("SettingsView Display", () => {
       );
     });
 
-    const codeFontInput = screen.getByLabelText("Code font family");
+    const codeFontInput = screen.getByLabelText("代码字体");
     fireEvent.change(codeFontInput, {
       target: { value: "JetBrains Mono, monospace" },
     });
@@ -674,7 +651,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const resetButtons = screen.getAllByRole("button", { name: "Reset" });
+    const resetButtons = screen.getAllByRole("button", { name: "重置" });
     fireEvent.click(resetButtons[1]);
     fireEvent.click(resetButtons[2]);
 
@@ -696,12 +673,26 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const slider = screen.getByLabelText("Code font size");
+    const slider = screen.getByLabelText("代码字号");
     fireEvent.change(slider, { target: { value: "14" } });
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({ codeFontSize: 14 }),
+      );
+    });
+  });
+
+  it("updates UI font size from the slider", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderDisplaySection({ onUpdateAppSettings });
+
+    const slider = screen.getByLabelText("界面字号");
+    fireEvent.change(slider, { target: { value: "15" } });
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ uiFontSize: 15 }),
       );
     });
   });
@@ -714,7 +705,7 @@ describe("SettingsView Display", () => {
     });
 
     const row = screen
-      .getByText("Notification sounds")
+      .getByText("通知提示音")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected notification sounds row");
@@ -736,7 +727,7 @@ describe("SettingsView Display", () => {
     });
 
     const row = screen
-      .getByText("Sub-agent notifications")
+      .getByText("子智能体通知")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected sub-agent notifications row");
@@ -760,7 +751,7 @@ describe("SettingsView About", () => {
     });
 
     const row = screen
-      .getByText("Automatically check for app updates")
+      .getByText("自动检查应用更新")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected automatic app update checks row");
@@ -779,7 +770,7 @@ describe("SettingsView Environments", () => {
       appSettings: { globalWorktreesFolder: "I:/existing-worktrees" },
     });
 
-    const input = screen.getByLabelText("Global worktrees root");
+    const input = screen.getByLabelText("全局 worktrees 根目录");
     expect(input).toBeTruthy();
     expect((input as HTMLInputElement).value).toBe("I:/existing-worktrees");
     expect((input as HTMLInputElement).placeholder).toBe("/path/to/worktrees-root");
@@ -793,9 +784,9 @@ describe("SettingsView Environments", () => {
       onUpdateWorkspaceSettings,
     });
 
-    const input = screen.getByLabelText("Global worktrees root");
+    const input = screen.getByLabelText("全局 worktrees 根目录");
     fireEvent.change(input, { target: { value: "I:/cm-worktrees" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -818,7 +809,7 @@ describe("SettingsView Environments", () => {
 
     const textarea = screen.getByPlaceholderText("pnpm install");
     fireEvent.change(textarea, { target: { value: "echo updated" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateWorkspaceSettings).toHaveBeenCalledWith("w1", {
@@ -841,13 +832,13 @@ describe("SettingsView Environments", () => {
       onUpdateWorkspaceSettings,
     });
 
-    fireEvent.change(screen.getByLabelText("Global worktrees root"), {
+    fireEvent.change(screen.getByLabelText("全局 worktrees 根目录"), {
       target: { value: "I:/cm-worktrees" },
     });
     fireEvent.change(screen.getByPlaceholderText("pnpm install"), {
       target: { value: "echo updated" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     expect(
       await screen.findByText("Failed to save workspace settings"),
@@ -855,7 +846,7 @@ describe("SettingsView Environments", () => {
     expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
     expect(onUpdateWorkspaceSettings).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateWorkspaceSettings).toHaveBeenCalledTimes(2);
@@ -870,10 +861,10 @@ describe("SettingsView Environments", () => {
       onUpdateAppSettings,
     });
 
-    expect(screen.getByText("No projects yet.")).toBeTruthy();
-    const input = screen.getByLabelText("Global worktrees root");
+    expect(screen.getByText("还没有项目。")).toBeTruthy();
+    const input = screen.getByLabelText("全局 worktrees 根目录");
     fireEvent.change(input, { target: { value: "I:/cm-worktrees" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -895,22 +886,22 @@ describe("SettingsView Environments", () => {
       onUpdateAppSettings,
     });
 
-    fireEvent.change(screen.getByLabelText("Global worktrees root"), {
+    fireEvent.change(screen.getByLabelText("全局 worktrees 根目录"), {
       target: { value: "I:/cm-worktrees" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(
-        (screen.getByRole("button", { name: "Saving..." }) as HTMLButtonElement).disabled,
+        (screen.getByRole("button", { name: "保存中..." }) as HTMLButtonElement).disabled,
       ).toBe(true);
     });
-    expect((screen.getByLabelText("Global worktrees root") as HTMLInputElement).disabled).toBe(
+    expect((screen.getByLabelText("全局 worktrees 根目录") as HTMLInputElement).disabled).toBe(
       true,
     );
     expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Saving..." }));
+    fireEvent.click(screen.getByRole("button", { name: "保存中..." }));
     expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -919,7 +910,7 @@ describe("SettingsView Environments", () => {
     });
 
     await waitFor(() => {
-      expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(
+      expect((screen.getByRole("button", { name: "保存" }) as HTMLButtonElement).disabled).toBe(
         true,
       );
     });
@@ -931,7 +922,7 @@ describe("SettingsView Environments", () => {
       appSettings: { globalWorktreesFolder: null },
     });
 
-    const input = screen.getByLabelText("Global worktrees root");
+    const input = screen.getByLabelText("全局 worktrees 根目录");
     fireEvent.change(input, { target: { value: "I:/typing" } });
 
     rerender({
@@ -939,14 +930,14 @@ describe("SettingsView Environments", () => {
       appSettings: { globalWorktreesFolder: "I:/loaded-from-settings" },
     });
 
-    expect((screen.getByLabelText("Global worktrees root") as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText("全局 worktrees 根目录") as HTMLInputElement).value).toBe(
       "I:/typing",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    fireEvent.click(screen.getByRole("button", { name: "重置" }));
 
     await waitFor(() => {
-      expect((screen.getByLabelText("Global worktrees root") as HTMLInputElement).value).toBe(
+      expect((screen.getByLabelText("全局 worktrees 根目录") as HTMLInputElement).value).toBe(
         "I:/loaded-from-settings",
       );
     });
@@ -961,9 +952,9 @@ describe("SettingsView Environments", () => {
       onUpdateAppSettings,
     });
 
-    const input = screen.getByLabelText("Global worktrees root");
+    const input = screen.getByLabelText("全局 worktrees 根目录");
     fireEvent.change(input, { target: { value: "I:/cm-worktrees" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     expect(
       await screen.findByText("Failed to save global worktrees root"),
@@ -981,11 +972,11 @@ describe("SettingsView Environments", () => {
       onUpdateWorkspaceSettings,
     });
 
-    const input = screen.getByLabelText("Global worktrees root");
+    const input = screen.getByLabelText("全局 worktrees 根目录");
     const textarea = screen.getByPlaceholderText("pnpm install");
     fireEvent.change(input, { target: { value: "I:/cm-worktrees" } });
     fireEvent.change(textarea, { target: { value: "echo updated" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     expect(
       await screen.findByText("Failed to save workspace settings"),
@@ -1006,7 +997,7 @@ describe("SettingsView Environments", () => {
     expect((input as HTMLInputElement).value).toBe("I:/cm-worktrees");
 
     onUpdateWorkspaceSettings.mockResolvedValueOnce(undefined);
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateWorkspaceSettings).toHaveBeenCalledTimes(2);
@@ -1019,13 +1010,13 @@ describe("SettingsView Environments", () => {
     renderEnvironmentsSection({ onUpdateWorkspaceSettings });
 
     expect(
-      screen.getByText("Environments", { selector: ".settings-section-title" }),
+      screen.getByText("环境", { selector: ".settings-section-title" }),
     ).toBeTruthy();
     const textarea = screen.getByPlaceholderText("pnpm install");
     expect((textarea as HTMLTextAreaElement).value).toBe("echo one");
 
     fireEvent.change(textarea, { target: { value: "echo updated" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateWorkspaceSettings).toHaveBeenCalledWith("w1", {
@@ -1041,7 +1032,7 @@ describe("SettingsView Environments", () => {
 
     const textarea = screen.getByPlaceholderText("pnpm install");
     fireEvent.change(textarea, { target: { value: "   \n\t" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateWorkspaceSettings).toHaveBeenCalledWith("w1", {
@@ -1062,7 +1053,7 @@ describe("SettingsView Environments", () => {
     try {
       renderEnvironmentsSection();
 
-      fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+      fireEvent.click(screen.getByRole("button", { name: "复制" }));
 
       await waitFor(() => {
         expect(writeText).toHaveBeenCalledWith("echo one");
@@ -1086,7 +1077,7 @@ describe("SettingsView Codex section", () => {
       <SettingsView
         workspaceGroups={[]}
         groupedWorkspaces={[]}
-        ungroupedLabel="Ungrouped"
+        ungroupedLabel="未分组"
         onClose={vi.fn()}
         onMoveWorkspace={vi.fn()}
         onDeleteWorkspace={vi.fn()}
@@ -1107,15 +1098,11 @@ describe("SettingsView Codex section", () => {
         scaleShortcutText="Use Command +/-"
         onTestNotificationSound={vi.fn()}
         onTestSystemNotification={vi.fn()}
-        dictationModelStatus={null}
-        onDownloadDictationModel={vi.fn()}
-        onCancelDictationDownload={vi.fn()}
-        onRemoveDictationModel={vi.fn()}
         initialSection="codex"
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Review mode"), {
+    fireEvent.change(screen.getByLabelText("Review 模式"), {
       target: { value: "detached" },
     });
 
@@ -1132,7 +1119,7 @@ describe("SettingsView Codex section", () => {
       <SettingsView
         workspaceGroups={[]}
         groupedWorkspaces={[]}
-        ungroupedLabel="Ungrouped"
+        ungroupedLabel="未分组"
         onClose={vi.fn()}
         onMoveWorkspace={vi.fn()}
         onDeleteWorkspace={vi.fn()}
@@ -1156,20 +1143,16 @@ describe("SettingsView Codex section", () => {
         scaleShortcutText="Use Command +/-"
         onTestNotificationSound={vi.fn()}
         onTestSystemNotification={vi.fn()}
-        dictationModelStatus={null}
-        onDownloadDictationModel={vi.fn()}
-        onCancelDictationDownload={vi.fn()}
-        onRemoveDictationModel={vi.fn()}
         initialSection="server"
       />,
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Start daemon" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Stop daemon" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Refresh status" })).toBeTruthy();
-      expect(screen.getByLabelText("Remote backend host")).toBeTruthy();
-      expect(screen.getByLabelText("Remote backend token")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "启动 daemon" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "停止 daemon" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "刷新状态" })).toBeTruthy();
+      expect(screen.getByLabelText("远端后端 host")).toBeTruthy();
+      expect(screen.getByLabelText("远端后端 token")).toBeTruthy();
     });
   });
 
@@ -1207,7 +1190,7 @@ describe("SettingsView Codex section", () => {
         <SettingsView
           workspaceGroups={[]}
           groupedWorkspaces={[]}
-          ungroupedLabel="Ungrouped"
+          ungroupedLabel="未分组"
           onClose={vi.fn()}
           onMoveWorkspace={vi.fn()}
           onDeleteWorkspace={vi.fn()}
@@ -1231,26 +1214,22 @@ describe("SettingsView Codex section", () => {
           scaleShortcutText="Use Command +/-"
           onTestNotificationSound={vi.fn()}
           onTestSystemNotification={vi.fn()}
-          dictationModelStatus={null}
-          onDownloadDictationModel={vi.fn()}
-          onCancelDictationDownload={vi.fn()}
-          onRemoveDictationModel={vi.fn()}
           initialSection="server"
         />,
       );
 
       await waitFor(() => {
-        expect(screen.getByLabelText("Remote backend host")).toBeTruthy();
-        expect(screen.getByLabelText("Remote backend token")).toBeTruthy();
-        expect(screen.getByRole("button", { name: "Connect & test" })).toBeTruthy();
+        expect(screen.getByLabelText("远端后端 host")).toBeTruthy();
+        expect(screen.getByLabelText("远端后端 token")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "连接并测试" })).toBeTruthy();
       });
 
-      expect(screen.queryByLabelText("Backend mode")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Start daemon" })).toBeNull();
-      expect(screen.queryByRole("button", { name: "Detect Tailscale" })).toBeNull();
+      expect(screen.queryByLabelText("后端模式")).toBeNull();
+      expect(screen.queryByRole("button", { name: "启动 daemon" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "检测 Tailscale" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Start Runner" })).toBeNull();
       expect(
-        screen.getByText(/get the tailscale hostname and token from your desktop/i),
+        screen.getByText(/从桌面端 CodexMonitor 设置中获取 Tailscale 主机名和 token/),
       ).toBeTruthy();
     } finally {
       if (originalPlatformDescriptor) {
@@ -1310,7 +1289,7 @@ describe("SettingsView Codex section", () => {
         <SettingsView
           workspaceGroups={[]}
           groupedWorkspaces={[]}
-          ungroupedLabel="Ungrouped"
+          ungroupedLabel="未分组"
           onClose={vi.fn()}
           onMoveWorkspace={vi.fn()}
           onDeleteWorkspace={vi.fn()}
@@ -1352,21 +1331,17 @@ describe("SettingsView Codex section", () => {
           scaleShortcutText="Use Command +/-"
           onTestNotificationSound={vi.fn()}
           onTestSystemNotification={vi.fn()}
-          dictationModelStatus={null}
-          onDownloadDictationModel={vi.fn()}
-          onCancelDictationDownload={vi.fn()}
-          onRemoveDictationModel={vi.fn()}
           initialSection="server"
         />,
       );
 
       await waitFor(() => {
-        expect(screen.getByRole("list", { name: "Saved remotes" })).toBeTruthy();
-        expect(screen.getByLabelText("Remote name")).toBeTruthy();
+        expect(screen.getByRole("list", { name: "已保存远端" })).toBeTruthy();
+        expect(screen.getByLabelText("远端名称")).toBeTruthy();
       });
-      expect(screen.getAllByText(/Last connected: Never/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/上次连接：\s*从未连接/i).length).toBeGreaterThan(0);
 
-      fireEvent.click(screen.getByRole("button", { name: "Use Office Mac remote" }));
+      fireEvent.click(screen.getByRole("button", { name: "使用 Office Mac 远端" }));
 
       await waitFor(() => {
         expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -1380,10 +1355,10 @@ describe("SettingsView Codex section", () => {
       });
 
       onUpdateAppSettings.mockClear();
-      fireEvent.change(screen.getByLabelText("Remote name"), {
+      fireEvent.change(screen.getByLabelText("远端名称"), {
         target: { value: "Home Mac" },
       });
-      fireEvent.blur(screen.getByLabelText("Remote name"));
+      fireEvent.blur(screen.getByLabelText("远端名称"));
 
       await waitFor(() => {
         expect(
@@ -1392,24 +1367,24 @@ describe("SettingsView Codex section", () => {
       });
 
       onUpdateAppSettings.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Add remote" }));
-      expect(screen.getByRole("dialog", { name: "Add remote" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "添加远端" }));
+      expect(screen.getByRole("dialog", { name: "添加远端" })).toBeTruthy();
       expect(onUpdateAppSettings).toHaveBeenCalledTimes(0);
 
-      fireEvent.click(screen.getByRole("button", { name: "Close add remote modal" }));
-      expect(screen.queryByRole("dialog", { name: "Add remote" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "关闭添加远端窗口" }));
+      expect(screen.queryByRole("dialog", { name: "添加远端" })).toBeNull();
 
-      fireEvent.click(screen.getByRole("button", { name: "Add remote" }));
-      fireEvent.change(screen.getByLabelText("New remote name"), {
+      fireEvent.click(screen.getByRole("button", { name: "添加远端" }));
+      fireEvent.change(screen.getByLabelText("新远端名称"), {
         target: { value: "Travel Mac" },
       });
-      fireEvent.change(screen.getByLabelText("New remote host"), {
+      fireEvent.change(screen.getByLabelText("新远端 host"), {
         target: { value: "travel-mac.tailnet.ts.net:4732" },
       });
-      fireEvent.change(screen.getByLabelText("New remote token"), {
+      fireEvent.change(screen.getByLabelText("新远端 token"), {
         target: { value: "token-travel" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Connect & add" }));
+      fireEvent.click(screen.getByRole("button", { name: "连接并添加" }));
 
       await waitFor(() => {
         expect(onUpdateAppSettings).toHaveBeenCalledTimes(2);
@@ -1425,22 +1400,22 @@ describe("SettingsView Codex section", () => {
         (entry) => entry.id === connectedSettings.activeRemoteBackendId,
       );
       expect(connectedEntry?.lastConnectedAtMs).toEqual(expect.any(Number));
-      expect(screen.queryByRole("dialog", { name: "Add remote" })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: "添加远端" })).toBeNull();
       expect(listWorkspacesMock).toHaveBeenCalled();
 
       onUpdateAppSettings.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Add remote" }));
-      fireEvent.change(screen.getByLabelText("New remote token"), {
+      fireEvent.click(screen.getByRole("button", { name: "添加远端" }));
+      fireEvent.change(screen.getByLabelText("新远端 token"), {
         target: { value: "" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Connect & add" }));
+      fireEvent.click(screen.getByRole("button", { name: "连接并添加" }));
 
       await waitFor(() => {
         expect(screen.getByText("Remote backend token is required.")).toBeTruthy();
       });
 
       onUpdateAppSettings.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Move Home Mac down" }));
+      fireEvent.click(screen.getByRole("button", { name: "下移 Home Mac" }));
 
       await waitFor(() => {
         expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
@@ -1449,8 +1424,8 @@ describe("SettingsView Codex section", () => {
       });
 
       onUpdateAppSettings.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Delete Office Mac" }));
-      fireEvent.click(screen.getByRole("button", { name: "Delete remote" }));
+      fireEvent.click(screen.getByRole("button", { name: "删除 Office Mac" }));
+      fireEvent.click(screen.getByRole("button", { name: "删除远端" }));
 
       await waitFor(() => {
         expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
@@ -1527,11 +1502,11 @@ describe("SettingsView Codex defaults", () => {
         groupedWorkspaces={[
           {
             id: null,
-            name: "Ungrouped",
+            name: "未分组",
             workspaces: [workspace({ id: "w1", name: "Workspace", connected: true })],
           },
         ]}
-        ungroupedLabel="Ungrouped"
+        ungroupedLabel="未分组"
         onClose={vi.fn()}
         onMoveWorkspace={vi.fn()}
         onDeleteWorkspace={vi.fn()}
@@ -1552,17 +1527,13 @@ describe("SettingsView Codex defaults", () => {
         scaleShortcutText="Use Command +/-"
         onTestNotificationSound={vi.fn()}
         onTestSystemNotification={vi.fn()}
-        dictationModelStatus={null}
-        onDownloadDictationModel={vi.fn()}
-        onCancelDictationDownload={vi.fn()}
-        onRemoveDictationModel={vi.fn()}
         initialSection="codex"
       />,
     );
 
-    const modelSelect = screen.getByLabelText("Model") as HTMLSelectElement;
+    const modelSelect = screen.getByLabelText("模型") as HTMLSelectElement;
     const effortSelect = screen.getByLabelText(
-      "Reasoning effort",
+      "推理强度",
     ) as HTMLSelectElement;
 
     await waitFor(() => {
@@ -1624,11 +1595,11 @@ describe("SettingsView Codex defaults", () => {
         groupedWorkspaces={[
           {
             id: null,
-            name: "Ungrouped",
+            name: "未分组",
             workspaces: [workspace({ id: "w1", name: "Workspace", connected: true })],
           },
         ]}
-        ungroupedLabel="Ungrouped"
+        ungroupedLabel="未分组"
         onClose={vi.fn()}
         onMoveWorkspace={vi.fn()}
         onDeleteWorkspace={vi.fn()}
@@ -1649,17 +1620,13 @@ describe("SettingsView Codex defaults", () => {
         scaleShortcutText="Use Command +/-"
         onTestNotificationSound={vi.fn()}
         onTestSystemNotification={vi.fn()}
-        dictationModelStatus={null}
-        onDownloadDictationModel={vi.fn()}
-        onCancelDictationDownload={vi.fn()}
-        onRemoveDictationModel={vi.fn()}
         initialSection="codex"
       />,
     );
 
-    const modelSelect = screen.getByLabelText("Model") as HTMLSelectElement;
+    const modelSelect = screen.getByLabelText("模型") as HTMLSelectElement;
     const effortSelect = screen.getByLabelText(
-      "Reasoning effort",
+      "推理强度",
     ) as HTMLSelectElement;
 
     await waitFor(() => {
@@ -1695,7 +1662,7 @@ describe("SettingsView Features", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderFeaturesSection({ onUpdateAppSettings });
 
-    fireEvent.change(screen.getByLabelText("Personality"), {
+    fireEvent.change(screen.getByLabelText("人格"), {
       target: { value: "pragmatic" },
     });
 
@@ -1744,7 +1711,7 @@ describe("SettingsView Features", () => {
     });
 
     await screen.findByText(
-      "Use Responses API WebSocket transport for OpenAI by default.",
+      "默认对 OpenAI 使用 Responses API WebSocket 传输。",
     );
     expect(screen.queryByText("Steer mode")).toBeNull();
   });
@@ -1789,7 +1756,7 @@ describe("SettingsView Features", () => {
     });
 
     await screen.findByText(
-      "Use Responses API WebSocket transport for OpenAI by default.",
+      "默认对 OpenAI 使用 Responses API WebSocket 传输。",
     );
   });
 });
@@ -1804,7 +1771,7 @@ describe("SettingsView Composer", () => {
       },
     });
 
-    const hintTitle = await screen.findByText("Show follow-up hint while processing");
+    const hintTitle = await screen.findByText("处理中显示追问提示");
     const hintRow = hintTitle.closest(".settings-toggle-row");
     expect(hintRow).not.toBeNull();
     fireEvent.click(within(hintRow as HTMLElement).getByRole("button"));
@@ -1849,7 +1816,7 @@ describe("SettingsView Composer", () => {
     expect(steerOption.hasAttribute("disabled")).toBe(true);
     expect(
       screen.getByText(
-        "Steer is unavailable in the current Codex config. Follow-ups will queue.",
+        "当前 Codex 配置不支持 Steer。追问将按排队方式发送。",
       ),
     ).not.toBeNull();
 
@@ -1910,7 +1877,7 @@ describe("SettingsView mobile layout", () => {
         <SettingsView
           workspaceGroups={[]}
           groupedWorkspaces={[]}
-          ungroupedLabel="Ungrouped"
+          ungroupedLabel="未分组"
           onClose={vi.fn()}
           onMoveWorkspace={vi.fn()}
           onDeleteWorkspace={vi.fn()}
@@ -1930,15 +1897,11 @@ describe("SettingsView mobile layout", () => {
           scaleShortcutText="Use Command +/-"
           onTestNotificationSound={vi.fn()}
           onTestSystemNotification={vi.fn()}
-          dictationModelStatus={null}
-          onDownloadDictationModel={vi.fn()}
-          onCancelDictationDownload={vi.fn()}
-          onRemoveDictationModel={vi.fn()}
         />,
       );
 
       expect(
-        within(rendered.container).queryByText("Sections"),
+        within(rendered.container).queryByText("分区"),
       ).toBeNull();
       expect(
         rendered.container.querySelectorAll(".ds-panel-nav-item-disclosure")
@@ -1947,18 +1910,18 @@ describe("SettingsView mobile layout", () => {
 
       fireEvent.click(
         within(rendered.container).getByRole("button", {
-          name: "Display & Sound",
+          name: "显示与声音",
         }),
       );
 
       await waitFor(() => {
         expect(
           within(rendered.container).getByRole("button", {
-            name: "Back to settings sections",
+            name: "返回设置分区",
           }),
         ).toBeTruthy();
         expect(
-          within(rendered.container).getByText("Display & Sound", {
+          within(rendered.container).getByText("显示与声音", {
             selector: ".settings-mobile-detail-title",
           }),
         ).toBeTruthy();
@@ -1966,12 +1929,12 @@ describe("SettingsView mobile layout", () => {
 
       fireEvent.click(
         within(rendered.container).getByRole("button", {
-          name: "Back to settings sections",
+          name: "返回设置分区",
         }),
       );
 
       await waitFor(() => {
-        expect(within(rendered.container).queryByText("Sections")).toBeNull();
+        expect(within(rendered.container).queryByText("分区")).toBeNull();
       });
     } finally {
       if (originalMatchMedia) {
@@ -2013,7 +1976,7 @@ describe("SettingsView Shortcuts", () => {
       <SettingsView
         workspaceGroups={[]}
         groupedWorkspaces={[]}
-        ungroupedLabel="Ungrouped"
+        ungroupedLabel="未分组"
         onClose={onClose}
         onMoveWorkspace={vi.fn()}
         onDeleteWorkspace={vi.fn()}
@@ -2033,10 +1996,6 @@ describe("SettingsView Shortcuts", () => {
         scaleShortcutText="Use Command +/-"
         onTestNotificationSound={vi.fn()}
         onTestSystemNotification={vi.fn()}
-        dictationModelStatus={null}
-        onDownloadDictationModel={vi.fn()}
-        onCancelDictationDownload={vi.fn()}
-        onRemoveDictationModel={vi.fn()}
       />,
     );
 
@@ -2057,7 +2016,7 @@ describe("SettingsView Shortcuts", () => {
       <SettingsView
         workspaceGroups={[]}
         groupedWorkspaces={[]}
-        ungroupedLabel="Ungrouped"
+        ungroupedLabel="未分组"
         onClose={onClose}
         onMoveWorkspace={vi.fn()}
         onDeleteWorkspace={vi.fn()}
@@ -2077,10 +2036,6 @@ describe("SettingsView Shortcuts", () => {
         scaleShortcutText="Use Command +/-"
         onTestNotificationSound={vi.fn()}
         onTestSystemNotification={vi.fn()}
-        dictationModelStatus={null}
-        onDownloadDictationModel={vi.fn()}
-        onCancelDictationDownload={vi.fn()}
-        onRemoveDictationModel={vi.fn()}
       />,
     );
 
@@ -2099,7 +2054,7 @@ describe("SettingsView Shortcuts", () => {
       <SettingsView
         workspaceGroups={[]}
         groupedWorkspaces={[]}
-        ungroupedLabel="Ungrouped"
+        ungroupedLabel="未分组"
         onClose={onClose}
         onMoveWorkspace={vi.fn()}
         onDeleteWorkspace={vi.fn()}
@@ -2119,10 +2074,6 @@ describe("SettingsView Shortcuts", () => {
         scaleShortcutText="Use Command +/-"
         onTestNotificationSound={vi.fn()}
         onTestSystemNotification={vi.fn()}
-        dictationModelStatus={null}
-        onDownloadDictationModel={vi.fn()}
-        onCancelDictationDownload={vi.fn()}
-        onRemoveDictationModel={vi.fn()}
       />,
     );
 
@@ -2145,7 +2096,7 @@ describe("SettingsView Shortcuts", () => {
       <SettingsView
         workspaceGroups={[]}
         groupedWorkspaces={[]}
-        ungroupedLabel="Ungrouped"
+        ungroupedLabel="未分组"
         onClose={vi.fn()}
         onMoveWorkspace={vi.fn()}
         onDeleteWorkspace={vi.fn()}
@@ -2165,55 +2116,51 @@ describe("SettingsView Shortcuts", () => {
         scaleShortcutText="Use Command +/-"
         onTestNotificationSound={vi.fn()}
         onTestSystemNotification={vi.fn()}
-        dictationModelStatus={null}
-        onDownloadDictationModel={vi.fn()}
-        onCancelDictationDownload={vi.fn()}
-        onRemoveDictationModel={vi.fn()}
         initialSection="shortcuts"
       />,
     );
 
-    const searchInput = screen.getByLabelText("Search shortcuts");
-    expect(screen.getByText("Toggle terminal panel")).toBeTruthy();
-    expect(screen.getByText("Cycle model")).toBeTruthy();
+    const searchInput = screen.getByLabelText("搜索快捷键");
+    expect(screen.getByText("切换终端面板")).toBeTruthy();
+    expect(screen.getByText("切换模型")).toBeTruthy();
 
     await act(async () => {
-      fireEvent.change(searchInput, { target: { value: "navigation" } });
+      fireEvent.change(searchInput, { target: { value: "导航" } });
     });
     await waitFor(() => {
-      expect(screen.getByText("Next workspace")).toBeTruthy();
-      expect(screen.queryByText("Toggle terminal panel")).toBeNull();
-    });
-
-    await act(async () => {
-      fireEvent.change(searchInput, { target: { value: "sidebars" } });
-    });
-    await waitFor(() => {
-      expect(screen.getByText("Toggle projects sidebar")).toBeTruthy();
-      expect(screen.queryByText("Next workspace")).toBeNull();
+      expect(screen.getByText("下一个项目")).toBeTruthy();
+      expect(screen.queryByText("切换终端面板")).toBeNull();
     });
 
     await act(async () => {
-      fireEvent.change(searchInput, { target: { value: "new shortcut while focused" } });
+      fireEvent.change(searchInput, { target: { value: "侧边栏" } });
     });
     await waitFor(() => {
-      expect(screen.getByText("Cycle model")).toBeTruthy();
-      expect(screen.queryByText("Toggle terminal panel")).toBeNull();
+      expect(screen.getByText("切换项目侧边栏")).toBeTruthy();
+      expect(screen.queryByText("下一个项目")).toBeNull();
+    });
+
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: "聚焦" } });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("切换模型")).toBeTruthy();
+      expect(screen.queryByText("切换终端面板")).toBeNull();
     });
 
     await act(async () => {
       fireEvent.change(searchInput, { target: { value: "no-such-shortcut" } });
     });
     await waitFor(() => {
-      expect(screen.getByText('No shortcuts match "no-such-shortcut".')).toBeTruthy();
+      expect(screen.getByText('没有匹配“no-such-shortcut”的快捷键。')).toBeTruthy();
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+      fireEvent.click(screen.getByRole("button", { name: "清除" }));
     });
     await waitFor(() => {
-      expect(screen.getByText("Toggle terminal panel")).toBeTruthy();
-      expect(screen.queryByText('No shortcuts match "no-such-shortcut".')).toBeNull();
+      expect(screen.getByText("切换终端面板")).toBeTruthy();
+      expect(screen.queryByText('没有匹配“no-such-shortcut”的快捷键。')).toBeNull();
     });
   });
 });

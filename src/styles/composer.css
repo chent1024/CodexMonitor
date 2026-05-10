@@ -1,9 +1,9 @@
 .composer {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   -webkit-app-region: no-drag;
-  padding: 10px var(--main-panel-padding) 20px;
+  padding: 8px var(--main-panel-padding) 14px;
   border-top: 1px solid var(--cm-border-default);
   background: var(--cm-surface-composer);
   backdrop-filter: blur(18px) saturate(1.1);
@@ -149,8 +149,8 @@
   min-width: 0;
   border: 1px solid var(--cm-border-heavy);
   background: var(--cm-surface-panel-elevated);
-  border-radius: 20px;
-  padding: 10px 12px 10px 10px;
+  border-radius: 8px;
+  padding: 8px 10px 8px 9px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
@@ -162,16 +162,16 @@
 .composer-input-row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
 }
 
 .composer-input-actions {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   align-self: center;
   flex-shrink: 0;
-  padding: 0 2px 0 8px;
+  padding: 0 2px 0 6px;
 }
 
 .composer-mobile-menu {
@@ -388,95 +388,6 @@
   }
 }
 
-.composer-action--mic.is-active {
-  border-color: rgba(120, 235, 190, 0.6);
-  background: rgba(120, 235, 190, 0.12);
-}
-
-.composer-action--mic.is-active:hover {
-  background: rgba(120, 235, 190, 0.18);
-}
-
-.composer-action--mic.is-processing {
-  border-color: rgba(160, 200, 255, 0.6);
-  background: rgba(160, 200, 255, 0.12);
-}
-
-.composer-waveform {
-  margin-top: 10px;
-  padding: 6px 8px;
-  border-radius: 10px;
-  border: 1px solid var(--border-muted);
-  background: var(--surface-card);
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 40px;
-  position: relative;
-}
-
-.composer-waveform.is-processing {
-  background: linear-gradient(
-    90deg,
-    rgba(100, 200, 255, 0.15),
-    rgba(120, 235, 190, 0.15)
-  );
-}
-
-.composer-waveform-bar {
-  flex: 1;
-  min-width: 2px;
-  border-radius: 999px;
-  background: rgba(180, 220, 255, 0.7);
-  transition: height 0.12s ease;
-}
-
-.composer-waveform-label {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--text-subtle);
-  pointer-events: none;
-}
-
-.composer-dictation-error {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 120, 120, 0.4);
-  background: rgba(255, 120, 120, 0.08);
-  color: var(--text-strong);
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.composer-dictation-error-dismiss {
-  font-size: 11px;
-  padding: 4px 8px;
-}
-
-.composer-dictation-hint {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(120, 190, 255, 0.4);
-  background: rgba(120, 190, 255, 0.12);
-  color: var(--text-strong);
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
 .composer-action.is-stop {
   border-color: rgba(255, 107, 107, 0.6);
   background: rgba(255, 107, 107, 0.12);
@@ -673,73 +584,59 @@
 .composer-bar {
   display: flex;
   align-items: center;
-  padding-top: 10px;
+  padding-top: 5px;
   border-top: 1px solid var(--cm-border-strong);
-  gap: 12px;
+  gap: 8px;
 }
 
 .composer-meta {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .composer-context {
   margin-left: auto;
-  display: grid;
-  grid-template-columns: auto;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  min-width: 0;
   font-size: 11px;
   color: var(--text-muted);
 }
 
-.composer-context-ring {
-  --context-free: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  position: relative;
-  background:
-    radial-gradient(circle, var(--surface-context-core) 54%, transparent 56%),
-    conic-gradient(
-      from 180deg,
-      hsl(calc(120deg * var(--context-free) / 100), 80%, 55%)
-        calc(var(--context-free) * 1%),
-      var(--border-strong) 0
-    );
-  transition: background 0.2s ease;
-}
-
-.composer-context-ring::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 6px);
-  transform: translateY(4px);
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: var(--surface-command);
-  color: var(--text-emphasis);
-  font-size: 10px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-  border: 1px solid var(--border-subtle);
-}
-
-.composer-context-ring:hover::after {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 .composer-context-value {
-  font-weight: 600;
-  font-size: 6px;
-  color: var(--text-quiet);
+  min-width: 44px;
+  min-height: 22px;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--cm-surface-panel-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  box-shadow: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.composer-context-percent-sign {
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+  transform: translateY(0.2px);
+}
+
+.composer-context-value:hover {
+  border-color: transparent;
+  background: var(--surface-hover);
+  color: var(--text-strong);
 }
 
 
@@ -747,8 +644,10 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  gap: 5px;
+  padding: 2px 6px;
+  min-height: 22px;
+  box-sizing: border-box;
   border-radius: 999px;
   background: var(--cm-surface-panel-strong);
   width: max-content;
@@ -757,15 +656,15 @@
 .composer-select-wrap:has(.composer-select)::after {
   content: "";
   position: absolute;
-  right: 10px;
+  right: 9px;
   top: 50%;
-  width: 7px;
-  height: 7px;
-  border-right: 1.5px solid var(--select-caret);
-  border-bottom: 1.5px solid var(--select-caret);
-  transform: translateY(-62%) rotate(45deg);
+  width: 6px;
+  height: 6px;
+  border-right: 1.25px solid var(--select-caret);
+  border-bottom: 1.25px solid var(--select-caret);
+  transform: translateY(-58%) rotate(45deg);
   pointer-events: none;
-  opacity: 0.9;
+  opacity: 0.72;
 }
 
 .composer-select-wrap--model:has(.composer-fast-indicator)::after {
@@ -778,7 +677,7 @@
 }
 
 .composer-plan-toggle-wrap {
-  padding: 2px 8px;
+  padding: 2px 6px;
 }
 
 .composer-plan-toggle {
@@ -799,18 +698,20 @@
 
 .composer-plan-toggle-icon {
   display: inline-flex;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   color: var(--text-muted);
+  opacity: 0.82;
 }
 
 .composer-plan-toggle-icon svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .composer-plan-toggle-label {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 500;
   color: var(--text-muted);
   line-height: 1;
 }
@@ -834,6 +735,8 @@
   width: 14px;
   height: 14px;
   color: var(--text-muted);
+  opacity: 0.82;
+  transform: translateY(0.5px);
 }
 
 .composer-icon svg {
@@ -842,18 +745,13 @@
 }
 
 .composer-icon--model {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .composer-icon--model svg {
-  width: 16px;
-  height: 16px;
-}
-
-.composer-icon--model,
-.composer-icon--effort {
-  transform: translateY(1px);
+  width: 14px;
+  height: 14px;
 }
 
 .composer-fast-indicator {
@@ -872,8 +770,11 @@
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 11px;
-  padding: 2px 18px 2px 0;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0 18px 0 0;
   cursor: pointer;
   width: auto;
   min-width: 0;
@@ -894,13 +795,13 @@
 }
 
 .composer-select--effort {
-  width: 80px;
-  max-width: 80px;
+  width: 68px;
+  max-width: 68px;
 }
 
 .composer-select--approval {
-  width: 90px;
-  max-width: 90px;
+  width: 78px;
+  max-width: 78px;
 }
 
 .composer-select:focus {
@@ -952,8 +853,7 @@
   }
 
   .app.layout-phone .composer-attach,
-  .app.layout-phone .composer-action--expand,
-  .app.layout-phone .composer-action--mic {
+  .app.layout-phone .composer-action--expand {
     display: none;
   }
 
@@ -1012,6 +912,6 @@
   }
 
   .app.layout-phone .composer-select {
-    font-size: 12px;
+    font-size: 10px;
   }
 }

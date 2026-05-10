@@ -73,21 +73,21 @@ describe("Sidebar", () => {
   it("toggles the search bar from the header icon", () => {
     render(<Sidebar {...baseProps} />);
 
-    const toggleButton = screen.getByRole("button", { name: "Toggle search" });
-    expect(screen.queryByLabelText("Search conversations")).toBeNull();
+    const toggleButton = screen.getByRole("button", { name: "切换搜索" });
+    expect(screen.queryByLabelText("搜索会话")).toBeNull();
 
     fireEvent.click(toggleButton);
-    const input = screen.getByLabelText("Search conversations") as HTMLInputElement;
+    const input = screen.getByLabelText("搜索会话") as HTMLInputElement;
     expect(input).toBeTruthy();
 
     fireEvent.change(input, { target: { value: "alpha" } });
     expect(input.value).toBe("alpha");
 
     fireEvent.click(toggleButton);
-    expect(screen.queryByLabelText("Search conversations")).toBeNull();
+    expect(screen.queryByLabelText("搜索会话")).toBeNull();
 
     fireEvent.click(toggleButton);
-    const reopened = screen.getByLabelText("Search conversations") as HTMLInputElement;
+    const reopened = screen.getByLabelText("搜索会话") as HTMLInputElement;
     expect(reopened.value).toBe("");
   });
 
@@ -101,11 +101,11 @@ describe("Sidebar", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: "Organize and sort threads" });
+    const button = screen.getByRole("button", { name: "整理和排序会话" });
     expect(screen.queryByRole("menu")).toBeNull();
 
     fireEvent.click(button);
-    const option = screen.getByRole("menuitemradio", { name: "Created" });
+    const option = screen.getByRole("menuitemradio", { name: "创建时间" });
     fireEvent.click(option);
 
     expect(onSetThreadListSortKey).toHaveBeenCalledWith("created_at");
@@ -122,8 +122,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Organize and sort threads" }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Thread list" }));
+    fireEvent.click(screen.getByRole("button", { name: "整理和排序会话" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "仅会话列表" }));
 
     expect(onSetThreadListOrganizeMode).toHaveBeenCalledWith("threads_only");
   });
@@ -132,6 +132,7 @@ describe("Sidebar", () => {
     render(
       <Sidebar
         {...baseProps}
+        activeWorkspaceId="ws-1"
         accountRateLimits={{
           primary: {
             usedPercent: 62,
@@ -153,6 +154,48 @@ describe("Sidebar", () => {
     expect(creditsLabel.textContent ?? "").toContain("120");
   });
 
+  it("shows weekly remaining usage in the footer", () => {
+    const { container } = render(
+      <Sidebar
+        {...baseProps}
+        activeWorkspaceId="ws-1"
+        accountRateLimits={{
+          primary: {
+            usedPercent: 12,
+            windowDurationMins: 300,
+            resetsAt: Math.round(Date.now() / 1000) + 3600,
+          },
+          secondary: {
+            usedPercent: 84,
+            windowDurationMins: 10080,
+            resetsAt: Math.round(Date.now() / 1000) + 86_400,
+          },
+          credits: null,
+          planType: "pro",
+        }}
+        usageShowRemaining={false}
+      />,
+    );
+
+    const rows = container.querySelectorAll(".sidebar-usage-row");
+    const usagePopover = container.querySelector(".sidebar-usage-popover");
+    const sessionRow = rows[0];
+    const weeklyRow = rows[1];
+    expect(usagePopover).toBeTruthy();
+    expect(sessionRow?.textContent ?? "").toContain("5小时");
+    expect(sessionRow?.textContent ?? "").not.toContain("限额");
+    expect(weeklyRow?.textContent ?? "").toContain("7天");
+    expect(weeklyRow?.textContent ?? "").not.toContain("限额");
+    expect(weeklyRow?.textContent ?? "").toContain("16%");
+    expect(weeklyRow?.textContent ?? "").not.toContain("\u5269\u4f59");
+    expect(weeklyRow?.textContent ?? "").not.toContain("重置");
+    expect(
+      weeklyRow
+        ?.querySelector<HTMLElement>(".sidebar-usage-bar-fill")
+        ?.style.width,
+    ).toBe("16%");
+  });
+
   it("opens the account menu from the bottom rail", () => {
     render(
       <Sidebar
@@ -167,10 +210,10 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Account" }));
+    fireEvent.click(screen.getByRole("button", { name: "账户" }));
 
     expect(screen.getByText("dimillian@example.com")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Switch account" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "切换账户" })).toBeTruthy();
   });
 
   it("renders threads-only mode as a global chronological list", () => {
@@ -284,8 +327,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle search" }));
-    fireEvent.change(screen.getByLabelText("Search conversations"), {
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
       target: { value: "restore" },
     });
 
@@ -336,8 +379,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle search" }));
-    fireEvent.change(screen.getByLabelText("Search conversations"), {
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
       target: { value: "delta" },
     });
 
@@ -384,8 +427,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle search" }));
-    fireEvent.change(screen.getByLabelText("Search conversations"), {
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
       target: { value: "historical" },
     });
 
@@ -441,8 +484,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle search" }));
-    fireEvent.change(screen.getByLabelText("Search conversations"), {
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
       target: { value: "routing fix" },
     });
 
@@ -510,8 +553,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle search" }));
-    fireEvent.change(screen.getByLabelText("Search conversations"), {
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
       target: { value: "clone search bug" },
     });
 
@@ -611,7 +654,7 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh all workspace threads" }));
+    fireEvent.click(screen.getByRole("button", { name: "刷新全部项目会话" }));
     expect(onRefreshAllThreads).toHaveBeenCalledTimes(1);
   });
 
@@ -647,7 +690,7 @@ describe("Sidebar", () => {
       />,
     );
 
-    const refreshButton = screen.getByRole("button", { name: "Refresh all workspace threads" });
+    const refreshButton = screen.getByRole("button", { name: "刷新全部项目会话" });
     expect(refreshButton.getAttribute("aria-busy")).toBe("true");
     const icon = refreshButton.querySelector("svg");
     expect(icon?.getAttribute("class") ?? "").toContain("spinning");

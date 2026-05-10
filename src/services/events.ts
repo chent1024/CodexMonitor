@@ -1,8 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import type {
   AppServerEvent,
-  DictationEvent,
-  DictationModelStatus,
   TrayOpenThreadPayload,
 } from "../types";
 
@@ -87,8 +85,6 @@ function createEventHub<T>(eventName: string) {
 }
 
 const appServerHub = createEventHub<AppServerEvent>("app-server-event");
-const dictationDownloadHub = createEventHub<DictationModelStatus>("dictation-download");
-const dictationEventHub = createEventHub<DictationEvent>("dictation-event");
 const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output");
 const terminalExitHub = createEventHub<TerminalExitEvent>("terminal-exit");
 const updaterCheckHub = createEventHub<void>("updater-check");
@@ -123,20 +119,6 @@ export function subscribeAppServerEvents(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return appServerHub.subscribe(onEvent, options);
-}
-
-export function subscribeDictationDownload(
-  onEvent: (event: DictationModelStatus) => void,
-  options?: SubscriptionOptions,
-): Unsubscribe {
-  return dictationDownloadHub.subscribe(onEvent, options);
-}
-
-export function subscribeDictationEvents(
-  onEvent: (event: DictationEvent) => void,
-  options?: SubscriptionOptions,
-): Unsubscribe {
-  return dictationEventHub.subscribe(onEvent, options);
 }
 
 export function subscribeTerminalOutput(

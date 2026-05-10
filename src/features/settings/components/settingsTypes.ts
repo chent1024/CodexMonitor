@@ -6,7 +6,6 @@ export const SETTINGS_SECTION_IDS = [
   "display",
   "about",
   "composer",
-  "dictation",
   "shortcuts",
   "open-apps",
   "git",

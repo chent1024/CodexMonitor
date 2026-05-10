@@ -5,11 +5,23 @@ import { describe, expect, it } from "vitest";
 import { PanelTabs, type PanelTabId } from "./PanelTabs";
 
 function PanelTabsHarness() {
-  const [active, setActive] = useState<PanelTabId>("git");
+  const [active, setActive] = useState<PanelTabId>("files");
   return <PanelTabs active={active} onSelect={setActive} />;
 }
 
 describe("PanelTabs", () => {
+  it("places files first by default", () => {
+    render(<PanelTabsHarness />);
+    const tabs = screen.getAllByRole("tab");
+
+    expect(tabs.map((tab) => tab.getAttribute("aria-label"))).toEqual([
+      "Files",
+      "Git",
+      "Prompts",
+    ]);
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+  });
+
   it("moves selection and focus with arrow keys", async () => {
     render(<PanelTabsHarness />);
     const tabs = screen.getAllByRole("tab");

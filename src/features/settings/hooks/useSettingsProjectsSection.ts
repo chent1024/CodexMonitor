@@ -151,13 +151,13 @@ export const useSettingsProjectsSection = ({
       groupedWorkspaces.find((entry) => entry.id === group.id)?.workspaces ?? [];
     const detail =
       groupProjects.length > 0
-        ? `\n\nProjects in this group will move to "${ungroupedLabel}".`
+        ? `\n\n该分组中的项目会移动到“${ungroupedLabel}”。`
         : "";
-    const confirmed = await ask(`Delete "${group.name}"?${detail}`, {
-      title: "Delete Group",
+    const confirmed = await ask(`删除“${group.name}”？${detail}`, {
+      title: "删除分组",
       kind: "warning",
-      okLabel: "Delete",
-      cancelLabel: "Cancel",
+      okLabel: "删除",
+      cancelLabel: "取消",
     });
     if (!confirmed) {
       return;

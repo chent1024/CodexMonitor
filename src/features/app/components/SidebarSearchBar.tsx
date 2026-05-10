@@ -20,8 +20,8 @@ export function SidebarSearchBar({
           className="sidebar-search-input"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
-          placeholder="Search conversations"
-          aria-label="Search conversations"
+          placeholder="搜索会话"
+          aria-label="搜索会话"
           data-tauri-drag-region="false"
           autoFocus
         />
@@ -31,7 +31,7 @@ export function SidebarSearchBar({
           type="button"
           className="sidebar-search-clear"
           onClick={onClearSearch}
-          aria-label="Clear search"
+          aria-label="清除搜索"
           data-tauri-drag-region="false"
         >
           <X size={12} aria-hidden />

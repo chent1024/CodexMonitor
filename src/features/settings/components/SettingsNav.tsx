@@ -1,6 +1,5 @@
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
-import Mic from "lucide-react/dist/esm/icons/mic";
 import Keyboard from "lucide-react/dist/esm/icons/keyboard";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
@@ -11,6 +10,7 @@ import Layers from "lucide-react/dist/esm/icons/layers";
 import ServerCog from "lucide-react/dist/esm/icons/server-cog";
 import Bot from "lucide-react/dist/esm/icons/bot";
 import Info from "lucide-react/dist/esm/icons/info";
+import type { ReactNode } from "react";
 import { PanelNavItem, PanelNavList } from "@/features/design-system/components/panel/PanelPrimitives";
 import type { CodexSection } from "./settingsTypes";
 
@@ -20,6 +20,25 @@ type SettingsNavProps = {
   showDisclosure?: boolean;
 };
 
+const NAV_ITEMS: Array<{
+  id: CodexSection;
+  label: string;
+  icon: ReactNode;
+}> = [
+  { id: "projects", label: "项目", icon: <LayoutGrid aria-hidden /> },
+  { id: "environments", label: "环境", icon: <Layers aria-hidden /> },
+  { id: "display", label: "显示与声音", icon: <SlidersHorizontal aria-hidden /> },
+  { id: "composer", label: "Composer", icon: <FileText aria-hidden /> },
+  { id: "shortcuts", label: "快捷键", icon: <Keyboard aria-hidden /> },
+  { id: "open-apps", label: "打开应用", icon: <ExternalLink aria-hidden /> },
+  { id: "git", label: "Git", icon: <GitBranch aria-hidden /> },
+  { id: "server", label: "服务器", icon: <ServerCog aria-hidden /> },
+  { id: "agents", label: "智能体", icon: <Bot aria-hidden /> },
+  { id: "codex", label: "Codex", icon: <TerminalSquare aria-hidden /> },
+  { id: "features", label: "功能", icon: <FlaskConical aria-hidden /> },
+  { id: "about", label: "关于", icon: <Info aria-hidden /> },
+];
+
 export function SettingsNav({
   activeSection,
   onSelectSection,
@@ -28,123 +47,18 @@ export function SettingsNav({
   return (
     <aside className="settings-sidebar">
       <PanelNavList className="settings-nav-list">
-        <PanelNavItem
-          className="settings-nav"
-          icon={<LayoutGrid aria-hidden />}
-          active={activeSection === "projects"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("projects")}
-        >
-          Projects
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<Layers aria-hidden />}
-          active={activeSection === "environments"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("environments")}
-        >
-          Environments
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<SlidersHorizontal aria-hidden />}
-          active={activeSection === "display"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("display")}
-        >
-          Display &amp; Sound
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<FileText aria-hidden />}
-          active={activeSection === "composer"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("composer")}
-        >
-          Composer
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<Mic aria-hidden />}
-          active={activeSection === "dictation"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("dictation")}
-        >
-          Dictation
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<Keyboard aria-hidden />}
-          active={activeSection === "shortcuts"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("shortcuts")}
-        >
-          Shortcuts
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<ExternalLink aria-hidden />}
-          active={activeSection === "open-apps"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("open-apps")}
-        >
-          Open in
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<GitBranch aria-hidden />}
-          active={activeSection === "git"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("git")}
-        >
-          Git
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<ServerCog aria-hidden />}
-          active={activeSection === "server"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("server")}
-        >
-          Server
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<Bot aria-hidden />}
-          active={activeSection === "agents"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("agents")}
-        >
-          Agents
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<TerminalSquare aria-hidden />}
-          active={activeSection === "codex"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("codex")}
-        >
-          Codex
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<FlaskConical aria-hidden />}
-          active={activeSection === "features"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("features")}
-        >
-          Features
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<Info aria-hidden />}
-          active={activeSection === "about"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("about")}
-        >
-          About
-        </PanelNavItem>
+        {NAV_ITEMS.map((item) => (
+          <PanelNavItem
+            key={item.id}
+            className="settings-nav"
+            icon={item.icon}
+            active={activeSection === item.id}
+            showDisclosure={showDisclosure}
+            onClick={() => onSelectSection(item.id)}
+          >
+            {item.label}
+          </PanelNavItem>
+        ))}
       </PanelNavList>
     </aside>
   );

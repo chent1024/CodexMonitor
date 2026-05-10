@@ -1,12 +1,8 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
-import {
-  MagicSparkleIcon,
-  MagicSparkleLoaderIcon,
-} from "@/features/shared/components/MagicSparkleIcon";
 import Download from "lucide-react/dist/esm/icons/download";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
 import Upload from "lucide-react/dist/esm/icons/upload";
-import { CommitButton, DiffSection, type DiffFile } from "./GitDiffPanelShared";
+import { DiffSection, type DiffFile } from "./GitDiffPanelShared";
 import {
   DEPTH_OPTIONS,
   isGitRootNotFound,
@@ -31,21 +27,13 @@ type GitDiffModeContentProps = {
   gitRootCandidates: string[];
   gitRoot: string | null;
   onSelectGitRoot?: (path: string) => void;
-  showGenerateCommitMessage: boolean;
   showApplyWorktree: boolean;
-  commitMessage: string;
-  onCommitMessageChange?: (value: string) => void;
-  commitMessageLoading: boolean;
-  canGenerateCommitMessage: boolean;
-  onGenerateCommitMessage?: () => void | Promise<void>;
   worktreeApplyTitle: string | null;
   worktreeApplyLoading: boolean;
   worktreeApplySuccess: boolean;
   onApplyWorktreeChanges?: () => void | Promise<void>;
   stagedFiles: DiffFile[];
   unstagedFiles: DiffFile[];
-  commitLoading: boolean;
-  onCommit?: () => void | Promise<void>;
   commitsAhead: number;
   commitsBehind: number;
   onPull?: () => void | Promise<void>;
@@ -93,21 +81,13 @@ export function GitDiffModeContent({
   gitRootCandidates,
   gitRoot,
   onSelectGitRoot,
-  showGenerateCommitMessage,
   showApplyWorktree,
-  commitMessage,
-  onCommitMessageChange,
-  commitMessageLoading,
-  canGenerateCommitMessage,
-  onGenerateCommitMessage,
   worktreeApplyTitle,
   worktreeApplyLoading,
   worktreeApplySuccess,
   onApplyWorktreeChanges,
   stagedFiles,
   unstagedFiles,
-  commitLoading,
-  onCommit,
   commitsAhead,
   commitsBehind,
   onPull,
@@ -138,7 +118,6 @@ export function GitDiffModeContent({
     : missingRepo
       ? "This workspace isn't a Git repository yet."
       : "Choose a repo for this workspace.";
-  const generateCommitMessageTooltip = "Generate commit message";
   const showWorktreeApplyInUnstaged = showApplyWorktree && unstagedFiles.length > 0;
   const showWorktreeApplyInStaged =
     showApplyWorktree && unstagedFiles.length === 0 && stagedFiles.length > 0;
@@ -242,49 +221,6 @@ export function GitDiffModeContent({
               })}
             </div>
           )}
-        </div>
-      )}
-      {showGenerateCommitMessage && (
-        <div className="commit-message-section">
-          <div className="commit-message-input-wrapper">
-            <textarea
-              className="commit-message-input"
-              placeholder="Commit message..."
-              value={commitMessage}
-              onChange={(event) => onCommitMessageChange?.(event.target.value)}
-              disabled={commitMessageLoading}
-              rows={2}
-            />
-            <button
-              type="button"
-              className="commit-message-generate-button diff-row-action ds-tooltip-trigger"
-              onClick={() => {
-                if (!canGenerateCommitMessage) {
-                  return;
-                }
-                void onGenerateCommitMessage?.();
-              }}
-              disabled={commitMessageLoading || !canGenerateCommitMessage}
-              title={generateCommitMessageTooltip}
-              data-tooltip={generateCommitMessageTooltip}
-              data-tooltip-placement="bottom"
-              data-tooltip-align="end"
-              aria-label="Generate commit message"
-            >
-              {commitMessageLoading ? (
-                <MagicSparkleLoaderIcon className="commit-message-loader" />
-              ) : (
-                <MagicSparkleIcon />
-              )}
-            </button>
-          </div>
-          <CommitButton
-            commitMessage={commitMessage}
-            hasStagedFiles={stagedFiles.length > 0}
-            hasUnstagedFiles={unstagedFiles.length > 0}
-            commitLoading={commitLoading}
-            onCommit={onCommit}
-          />
         </div>
       )}
       {(commitsAhead > 0 || commitsBehind > 0) && !stagedFiles.length && (

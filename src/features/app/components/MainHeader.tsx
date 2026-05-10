@@ -14,7 +14,6 @@ import {
   PopoverSurface,
 } from "../../design-system/components/popover/PopoverPrimitives";
 import { OpenAppMenu } from "./OpenAppMenu";
-import { LaunchScriptButton } from "./LaunchScriptButton";
 import { LaunchScriptEntryButton } from "./LaunchScriptEntryButton";
 import type { WorkspaceLaunchScriptsState } from "../hooks/useWorkspaceLaunchScripts";
 import { useMenuController } from "../hooks/useMenuController";
@@ -94,16 +93,6 @@ export function MainHeader({
   showTerminalButton = true,
   showWorkspaceTools = true,
   extraActionsNode,
-  launchScript = null,
-  launchScriptEditorOpen = false,
-  launchScriptDraft = "",
-  launchScriptSaving = false,
-  launchScriptError = null,
-  onRunLaunchScript,
-  onOpenLaunchScriptEditor,
-  onCloseLaunchScriptEditor,
-  onLaunchScriptDraftChange,
-  onSaveLaunchScript,
   launchScriptsState,
   worktreeRename,
 }: MainHeaderProps) {
@@ -477,37 +466,8 @@ export function MainHeader({
         </div>
       </div>
       <div className="main-header-actions">
-        {showWorkspaceTools &&
-          onRunLaunchScript &&
-          onOpenLaunchScriptEditor &&
-          onCloseLaunchScriptEditor &&
-          onLaunchScriptDraftChange &&
-          onSaveLaunchScript && (
+        {showWorkspaceTools && launchScriptsState?.launchScripts.length ? (
             <div className="launch-script-cluster">
-              <LaunchScriptButton
-                launchScript={launchScript}
-                editorOpen={launchScriptEditorOpen}
-                draftScript={launchScriptDraft}
-                isSaving={launchScriptSaving}
-                error={launchScriptError}
-                onRun={onRunLaunchScript}
-                onOpenEditor={onOpenLaunchScriptEditor}
-                onCloseEditor={onCloseLaunchScriptEditor}
-                onDraftChange={onLaunchScriptDraftChange}
-                onSave={onSaveLaunchScript}
-                showNew={Boolean(launchScriptsState)}
-                newEditorOpen={launchScriptsState?.newEditorOpen}
-                newDraftScript={launchScriptsState?.newDraftScript}
-                newDraftIcon={launchScriptsState?.newDraftIcon}
-                newDraftLabel={launchScriptsState?.newDraftLabel}
-                newError={launchScriptsState?.newError ?? null}
-                onOpenNew={launchScriptsState?.onOpenNew}
-                onCloseNew={launchScriptsState?.onCloseNew}
-                onNewDraftChange={launchScriptsState?.onNewDraftScriptChange}
-                onNewDraftIconChange={launchScriptsState?.onNewDraftIconChange}
-                onNewDraftLabelChange={launchScriptsState?.onNewDraftLabelChange}
-                onCreateNew={launchScriptsState?.onCreateNew}
-              />
               {launchScriptsState?.launchScripts.map((entry) => (
                 <LaunchScriptEntryButton
                   key={entry.id}
@@ -529,7 +489,7 @@ export function MainHeader({
                 />
               ))}
             </div>
-          )}
+        ) : null}
         {showWorkspaceTools ? (
           <OpenAppMenu
             path={resolvedWorktreePath}

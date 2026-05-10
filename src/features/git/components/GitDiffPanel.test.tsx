@@ -95,7 +95,7 @@ describe("GitDiffPanel", () => {
     expect(within(container).queryByRole("button", { name: "Initialize Git" })).toBeNull();
   });
 
-  it("enables commit when message exists and only unstaged changes", () => {
+  it("does not render commit controls in the diff panel", () => {
     const onCommit = vi.fn();
     render(
       <GitDiffPanel
@@ -109,10 +109,9 @@ describe("GitDiffPanel", () => {
       />,
     );
 
-    const commitButton = screen.getByRole("button", { name: "Commit" });
-    expect((commitButton as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(commitButton);
-    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByPlaceholderText("Commit message...")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Commit" })).toBeNull();
+    expect(onCommit).not.toHaveBeenCalled();
   });
 
   it("runs uncommitted review from unstaged section actions", () => {

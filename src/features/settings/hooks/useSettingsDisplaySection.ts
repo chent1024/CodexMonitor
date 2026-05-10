@@ -5,6 +5,7 @@ import { clampUiScale } from "@utils/uiScale";
 import {
   DEFAULT_CODE_FONT_FAMILY,
   DEFAULT_UI_FONT_FAMILY,
+  clampUiFontSize,
   clampCodeFontSize,
   normalizeFontFamily,
 } from "@utils/fonts";
@@ -27,6 +28,7 @@ export type SettingsDisplaySectionProps = {
   scaleShortcutText: string;
   scaleDraft: string;
   uiFontDraft: string;
+  uiFontSizeDraft: number;
   codeFontDraft: string;
   codeFontSizeDraft: number;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
@@ -36,6 +38,8 @@ export type SettingsDisplaySectionProps = {
   onResetScale: () => Promise<void>;
   onSetUiFontDraft: Dispatch<SetStateAction<string>>;
   onCommitUiFont: () => Promise<void>;
+  onSetUiFontSizeDraft: Dispatch<SetStateAction<number>>;
+  onCommitUiFontSize: (nextSize: number) => Promise<void>;
   onSetCodeFontDraft: Dispatch<SetStateAction<string>>;
   onCommitCodeFont: () => Promise<void>;
   onSetCodeFontSizeDraft: Dispatch<SetStateAction<number>>;
@@ -58,6 +62,9 @@ export const useSettingsDisplaySection = ({
     `${Math.round(clampUiScale(appSettings.uiScale) * 100)}%`,
   );
   const [uiFontDraft, setUiFontDraft] = useState(appSettings.uiFontFamily);
+  const [uiFontSizeDraft, setUiFontSizeDraft] = useState(
+    clampUiFontSize(appSettings.uiFontSize),
+  );
   const [codeFontDraft, setCodeFontDraft] = useState(appSettings.codeFontFamily);
   const [codeFontSizeDraft, setCodeFontSizeDraft] = useState(appSettings.codeFontSize);
 
@@ -68,6 +75,10 @@ export const useSettingsDisplaySection = ({
   useEffect(() => {
     setUiFontDraft(appSettings.uiFontFamily);
   }, [appSettings.uiFontFamily]);
+
+  useEffect(() => {
+    setUiFontSizeDraft(clampUiFontSize(appSettings.uiFontSize));
+  }, [appSettings.uiFontSize]);
 
   useEffect(() => {
     setCodeFontDraft(appSettings.codeFontFamily);
@@ -135,6 +146,18 @@ export const useSettingsDisplaySection = ({
     });
   };
 
+  const handleCommitUiFontSize = async (nextSize: number) => {
+    const clampedSize = clampUiFontSize(nextSize);
+    setUiFontSizeDraft(clampedSize);
+    if (clampedSize === appSettings.uiFontSize) {
+      return;
+    }
+    await onUpdateAppSettings({
+      ...appSettings,
+      uiFontSize: clampedSize,
+    });
+  };
+
   const handleCommitCodeFontSize = async (nextSize: number) => {
     const clampedSize = clampCodeFontSize(nextSize);
     setCodeFontSizeDraft(clampedSize);
@@ -154,6 +177,7 @@ export const useSettingsDisplaySection = ({
     scaleShortcutText,
     scaleDraft,
     uiFontDraft,
+    uiFontSizeDraft,
     codeFontDraft,
     codeFontSizeDraft,
     onUpdateAppSettings,
@@ -163,6 +187,8 @@ export const useSettingsDisplaySection = ({
     onResetScale: handleResetScale,
     onSetUiFontDraft: setUiFontDraft,
     onCommitUiFont: handleCommitUiFont,
+    onSetUiFontSizeDraft: setUiFontSizeDraft,
+    onCommitUiFontSize: handleCommitUiFontSize,
     onSetCodeFontDraft: setCodeFontDraft,
     onCommitCodeFont: handleCommitCodeFont,
     onSetCodeFontSizeDraft: setCodeFontSizeDraft,

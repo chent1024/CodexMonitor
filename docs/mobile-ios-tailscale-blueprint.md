@@ -70,7 +70,6 @@ Success criteria:
 ## Known Mobile Limits
 
 - Terminal tooling is unavailable on mobile builds.
-- Dictation is unavailable on mobile builds.
 
 ## Troubleshooting
 

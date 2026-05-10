@@ -1,19 +1,6 @@
 import type { AppSettings } from "@/types";
 import type { CodexSection, ShortcutDraftKey, ShortcutSettingKey } from "./settingsTypes";
 
-export const DICTATION_MODELS = [
-  { id: "tiny", label: "Tiny", size: "75 MB", note: "Fastest, least accurate." },
-  { id: "base", label: "Base", size: "142 MB", note: "Balanced default." },
-  { id: "small", label: "Small", size: "466 MB", note: "Better accuracy." },
-  { id: "medium", label: "Medium", size: "1.5 GB", note: "High accuracy." },
-  {
-    id: "large-v3",
-    label: "Large V3",
-    size: "3.0 GB",
-    note: "Best accuracy, heavy download.",
-  },
-];
-
 type ComposerPreset = AppSettings["composerEditorPreset"];
 
 type ComposerPresetSettings = Pick<
@@ -29,9 +16,9 @@ type ComposerPresetSettings = Pick<
 >;
 
 export const COMPOSER_PRESET_LABELS: Record<ComposerPreset, string> = {
-  default: "Default (no helpers)",
-  helpful: "Helpful",
-  smart: "Smart",
+  default: "默认（无辅助）",
+  helpful: "实用",
+  smart: "智能",
 };
 
 export const COMPOSER_PRESET_CONFIGS: Record<
@@ -74,19 +61,18 @@ export const SETTINGS_MOBILE_BREAKPOINT_PX = 720;
 export const DEFAULT_REMOTE_HOST = "127.0.0.1:4732";
 
 export const SETTINGS_SECTION_LABELS: Record<CodexSection, string> = {
-  projects: "Projects",
-  environments: "Environments",
-  display: "Display & Sound",
-  about: "About",
+  projects: "项目",
+  environments: "环境",
+  display: "显示与声音",
+  about: "关于",
   composer: "Composer",
-  dictation: "Dictation",
-  shortcuts: "Shortcuts",
-  "open-apps": "Open in",
+  shortcuts: "快捷键",
+  "open-apps": "打开应用",
   git: "Git",
-  server: "Server",
-  agents: "Agents",
+  server: "服务器",
+  agents: "智能体",
   codex: "Codex",
-  features: "Features",
+  features: "功能",
 };
 
 export const SHORTCUT_DRAFT_KEY_BY_SETTING: Record<

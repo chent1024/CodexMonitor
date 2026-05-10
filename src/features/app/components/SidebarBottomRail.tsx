@@ -11,7 +11,9 @@ import { useMenuController } from "../hooks/useMenuController";
 
 type SidebarBottomRailProps = {
   sessionPercent: number | null;
-  weeklyPercent: number | null;
+  weeklyRemainingPercent: number | null;
+  sessionWindowLabel: string;
+  weeklyWindowLabel: string;
   sessionResetLabel: string | null;
   weeklyResetLabel: string | null;
   creditsLabel: string | null;
@@ -35,7 +37,14 @@ type UsageRowProps = {
   resetLabel: string | null;
 };
 
+function formatCompactResetLabel(resetLabel: string | null) {
+  const value = resetLabel?.replace(/^Resets\s+/i, "").trim();
+  return value || null;
+}
+
 function UsageRow({ label, percent, resetLabel }: UsageRowProps) {
+  const compactResetLabel = formatCompactResetLabel(resetLabel);
+
   return (
     <div className="sidebar-usage-row">
       <div className="sidebar-usage-row-head">
@@ -47,14 +56,61 @@ function UsageRow({ label, percent, resetLabel }: UsageRowProps) {
       <div className="sidebar-usage-bar" aria-hidden>
         <span className="sidebar-usage-bar-fill" style={{ width: `${percent ?? 0}%` }} />
       </div>
-      {resetLabel && <div className="sidebar-usage-reset">{resetLabel}</div>}
+      {compactResetLabel && <div className="sidebar-usage-reset">{compactResetLabel}</div>}
+    </div>
+  );
+}
+
+function UsagePanel({
+  sessionPercent,
+  weeklyRemainingPercent,
+  sessionWindowLabel,
+  weeklyWindowLabel,
+  sessionResetLabel,
+  weeklyResetLabel,
+  creditsLabel,
+  showWeekly,
+}: Pick<
+  SidebarBottomRailProps,
+  | "sessionPercent"
+  | "weeklyRemainingPercent"
+  | "sessionWindowLabel"
+  | "weeklyWindowLabel"
+  | "sessionResetLabel"
+  | "weeklyResetLabel"
+  | "creditsLabel"
+  | "showWeekly"
+>) {
+  return (
+    <div className="sidebar-usage-panel">
+      {creditsLabel && (
+        <div className="sidebar-usage-header">
+          <div className="sidebar-usage-credits">{creditsLabel}</div>
+        </div>
+      )}
+      <div className="sidebar-usage-list">
+        <UsageRow
+          label={sessionWindowLabel}
+          percent={sessionPercent}
+          resetLabel={sessionResetLabel}
+        />
+        {showWeekly && (
+          <UsageRow
+            label={weeklyWindowLabel}
+            percent={weeklyRemainingPercent}
+            resetLabel={weeklyResetLabel}
+          />
+        )}
+      </div>
     </div>
   );
 }
 
 export function SidebarBottomRail({
   sessionPercent,
-  weeklyPercent,
+  weeklyRemainingPercent,
+  sessionWindowLabel,
+  weeklyWindowLabel,
   sessionResetLabel,
   weeklyResetLabel,
   creditsLabel,
@@ -87,49 +143,43 @@ export function SidebarBottomRail({
 
   return (
     <div className="sidebar-bottom-rail">
-      <div className="sidebar-usage-panel">
-        <div className="sidebar-usage-header">
-          <div className="sidebar-usage-kicker">Usage</div>
-          {creditsLabel && <div className="sidebar-usage-credits">{creditsLabel}</div>}
-        </div>
-        <div className="sidebar-usage-list">
-          <UsageRow
-            label="Session"
-            percent={sessionPercent}
-            resetLabel={sessionResetLabel}
-          />
-          {showWeekly && (
-            <UsageRow
-              label="Weekly"
-              percent={weeklyPercent}
-              resetLabel={weeklyResetLabel}
-            />
-          )}
-        </div>
-      </div>
       <div
         className={`sidebar-bottom-actions${showAccountSwitcher ? "" : " is-compact"}`}
       >
         {showAccountSwitcher && (
           <div className="sidebar-account-menu" ref={accountMenuRef}>
+            {!accountMenuOpen && (
+              <PopoverSurface className="sidebar-usage-popover" role="status">
+                <UsagePanel
+                  sessionPercent={sessionPercent}
+                  weeklyRemainingPercent={weeklyRemainingPercent}
+                  sessionWindowLabel={sessionWindowLabel}
+                  weeklyWindowLabel={weeklyWindowLabel}
+                  sessionResetLabel={sessionResetLabel}
+                  weeklyResetLabel={weeklyResetLabel}
+                  creditsLabel={creditsLabel}
+                  showWeekly={showWeekly}
+                />
+              </PopoverSurface>
+            )}
             <MenuTrigger
               isOpen={accountMenuOpen}
               popupRole="dialog"
               className="ghost sidebar-labeled-button sidebar-account-trigger"
               activeClassName="is-open"
               onClick={toggleAccountMenu}
-              aria-label="Account"
+              aria-label="账户"
             >
               <span className="sidebar-account-trigger-content">
                 <span className="sidebar-account-avatar" aria-hidden>
-                  <User size={12} aria-hidden />
+                  <User size={14} aria-hidden />
                 </span>
-                <span className="sidebar-account-trigger-label">Account</span>
+                <span className="sidebar-account-trigger-label">账户</span>
               </span>
             </MenuTrigger>
             {accountMenuOpen && (
               <PopoverSurface className="sidebar-account-popover" role="dialog">
-                <div className="sidebar-account-title">Account</div>
+                <div className="sidebar-account-title">账户</div>
                 <div className="sidebar-account-value">{accountLabel}</div>
                 <div className="sidebar-account-actions-row">
                   <button
@@ -152,8 +202,8 @@ export function SidebarBottomRail({
                       className="secondary sidebar-account-cancel"
                       onClick={onCancelSwitchAccount}
                       disabled={accountCancelDisabled}
-                      aria-label="Cancel account switch"
-                      title="Cancel"
+                      aria-label="取消切换账户"
+                      title="取消"
                     >
                       <X size={12} aria-hidden />
                     </button>
@@ -168,19 +218,19 @@ export function SidebarBottomRail({
               className="ghost sidebar-labeled-button sidebar-utility-button"
               type="button"
               onClick={onOpenSettings}
-              aria-label="Open settings"
+              aria-label="打开设置"
             >
               <span className="sidebar-labeled-button-icon" aria-hidden>
                 <Settings size={14} aria-hidden />
               </span>
-              <span>Settings</span>
+              <span>设置</span>
             </button>
           {showDebugButton && (
             <button
               className="ghost sidebar-utility-button"
               type="button"
               onClick={onOpenDebug}
-              aria-label="Open debug log"
+              aria-label="打开调试日志"
             >
               <ScrollText size={14} aria-hidden />
             </button>

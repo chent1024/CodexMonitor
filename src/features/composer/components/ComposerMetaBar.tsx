@@ -1,7 +1,8 @@
-import type { CSSProperties } from "react";
+﻿import type { CSSProperties } from "react";
 import { BrainCog, SlidersHorizontal, Zap } from "lucide-react";
 import type { AccessMode, ServiceTier, ThreadTokenUsage } from "../../../types";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
+import { formatModelDisplayName } from "../../models/utils/modelListResponse";
 
 type ComposerMetaBarProps = {
   disabled: boolean;
@@ -23,6 +24,11 @@ type ComposerMetaBarProps = {
   onSelectCodexArgsOverride?: (value: string | null) => void;
   contextUsage?: ThreadTokenUsage | null;
 };
+
+function resolveComposerModelLabel(model: { displayName: string; model: string }) {
+  const label = model.displayName?.trim() || model.model;
+  return formatModelDisplayName(label);
+}
 
 export function ComposerMetaBar({
   disabled,
@@ -47,7 +53,7 @@ export function ComposerMetaBar({
   const selectedModel =
     models.find((model) => model.id === selectedModelId) ?? null;
   const selectedModelLabel =
-    selectedModel?.displayName || selectedModel?.model || "No models";
+    selectedModel ? resolveComposerModelLabel(selectedModel) : "No models";
   const modelSelectStyle = {
     "--composer-model-select-width": `${Math.max(selectedModelLabel.length + 2, 8)}ch`,
   } as CSSProperties;
@@ -183,7 +189,7 @@ export function ComposerMetaBar({
             {models.length === 0 && <option value="">No models</option>}
             {models.map((model) => (
               <option key={model.id} value={model.id}>
-                {model.displayName || model.model}
+                {resolveComposerModelLabel(model)}
               </option>
             ))}
           </select>
@@ -273,27 +279,18 @@ export function ComposerMetaBar({
         </div>
       </div>
       <div className="composer-context">
-        <div
-          className="composer-context-ring"
-          data-tooltip={
-            contextFreePercent === null
-              ? "Context free --"
-              : `Context free ${Math.round(contextFreePercent)}%`
-          }
-          aria-label={
-            contextFreePercent === null
-              ? "Context free --"
-              : `Context free ${Math.round(contextFreePercent)}%`
-          }
-          style={
-            {
-              "--context-free": contextFreePercent ?? 0,
-            } as CSSProperties
-          }
-        >
-          <span className="composer-context-value">●</span>
+        <div className="composer-context-value" aria-label="Context free percent">
+          {contextFreePercent === null ? (
+            "--"
+          ) : (
+            <>
+              <span>{Math.round(contextFreePercent)}</span>
+              <span className="composer-context-percent-sign">%</span>
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
+

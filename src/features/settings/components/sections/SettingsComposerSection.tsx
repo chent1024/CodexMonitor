@@ -28,11 +28,11 @@ export function SettingsComposerSection({
   return (
     <SettingsSection
       title="Composer"
-      subtitle="Control helpers and formatting behavior inside the message editor."
+      subtitle="控制消息编辑器中的辅助能力和格式化行为。"
     >
       <div className="settings-field">
-        <div className="settings-field-label">Follow-up behavior</div>
-        <div className={`settings-segmented${appSettings.followUpMessageBehavior === "steer" ? " is-second-active" : ""}`} aria-label="Follow-up behavior">
+        <div className="settings-field-label">追问行为</div>
+        <div className={`settings-segmented${appSettings.followUpMessageBehavior === "steer" ? " is-second-active" : ""}`} aria-label="追问行为">
           <label
             className={`settings-segmented-option${
               appSettings.followUpMessageBehavior === "queue" ? " is-active" : ""
@@ -51,13 +51,13 @@ export function SettingsComposerSection({
                 })
               }
             />
-            <span className="settings-segmented-option-label">Queue</span>
+            <span className="settings-segmented-option-label">排队</span>
           </label>
           <label
             className={`settings-segmented-option${
               appSettings.followUpMessageBehavior === "steer" ? " is-active" : ""
             }${steerUnavailable ? " is-disabled" : ""}`}
-            title={steerUnavailable ? "Steer is unavailable in the current Codex config." : ""}
+            title={steerUnavailable ? "当前 Codex 配置不支持 Steer。" : ""}
           >
             <input
               className="settings-segmented-input"
@@ -80,12 +80,11 @@ export function SettingsComposerSection({
           </label>
         </div>
         <div className="settings-help">
-          Choose the default while a run is active. Press {followUpShortcutLabel} to send the
-          opposite behavior for one message.
+          设置任务运行中的默认行为。按 {followUpShortcutLabel} 可为单条消息临时使用相反行为。
         </div>
         <SettingsToggleRow
-          title="Show follow-up hint while processing"
-          subtitle="Displays queue/steer shortcut guidance above the composer."
+          title="处理中显示追问提示"
+          subtitle="在输入框上方显示 queue/steer 的快捷键提示。"
         >
           <SettingsToggleSwitch
             pressed={appSettings.composerFollowUpHintEnabled}
@@ -99,18 +98,18 @@ export function SettingsComposerSection({
         </SettingsToggleRow>
         {steerUnavailable && (
           <div className="settings-help">
-            Steer is unavailable in the current Codex config. Follow-ups will queue.
+            当前 Codex 配置不支持 Steer。追问将按排队方式发送。
           </div>
         )}
       </div>
       <div className="settings-divider" />
-      <div className="settings-subsection-title">Presets</div>
+      <div className="settings-subsection-title">预设</div>
       <div className="settings-subsection-subtitle">
-        Choose a starting point and fine-tune the toggles below.
+        先选择一个起点，再微调下面的开关。
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="composer-preset">
-          Preset
+          预设
         </label>
         <select
           id="composer-preset"
@@ -127,14 +126,14 @@ export function SettingsComposerSection({
           ))}
         </select>
         <div className="settings-help">
-          Presets update the toggles below. Customize any setting after selecting.
+          选择预设后会更新下面的开关；之后仍可继续手动自定义。
         </div>
       </div>
       <div className="settings-divider" />
-      <div className="settings-subsection-title">Code fences</div>
+      <div className="settings-subsection-title">代码围栏</div>
       <SettingsToggleRow
-        title="Expand fences on Space"
-        subtitle="Typing ``` then Space inserts a fenced block."
+        title="按 Space 展开围栏"
+        subtitle="输入 ``` 后按 Space 会插入代码围栏块。"
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceExpandOnSpace}
@@ -147,8 +146,8 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="Expand fences on Enter"
-        subtitle="Use Enter to expand ``` lines when enabled."
+        title="按 Enter 展开围栏"
+        subtitle="启用后，按 Enter 也可展开 ``` 行。"
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceExpandOnEnter}
@@ -161,8 +160,8 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="Support language tags"
-        subtitle="Allows ```lang + Space to include a language."
+        title="支持语言标签"
+        subtitle="允许通过 ```lang + Space 自动带上语言标记。"
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceLanguageTags}
@@ -175,8 +174,8 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="Wrap selection in fences"
-        subtitle="Wraps selected text when creating a fence."
+        title="用围栏包裹选中文本"
+        subtitle="创建围栏时自动包裹已选中的文本。"
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceWrapSelection}
@@ -189,10 +188,10 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="Copy blocks without fences"
+        title="复制代码块时不带围栏"
         subtitle={
           <>
-            When enabled, Copy is plain text. Hold {optionKeyLabel} to include ``` fences.
+            启用后，复制结果为纯文本。按住 {optionKeyLabel} 可包含 ``` 围栏。
           </>
         }
       >
@@ -208,10 +207,10 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <div className="settings-divider" />
-      <div className="settings-subsection-title">Pasting</div>
+      <div className="settings-subsection-title">粘贴</div>
       <SettingsToggleRow
-        title="Auto-wrap multi-line paste"
-        subtitle="Wraps multi-line paste inside a fenced block."
+        title="自动包裹多行粘贴"
+        subtitle="将多行粘贴内容自动放入围栏块中。"
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceAutoWrapPasteMultiline}
@@ -225,8 +224,8 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="Auto-wrap code-like single lines"
-        subtitle="Wraps long single-line code snippets on paste."
+        title="自动包裹类似代码的单行文本"
+        subtitle="粘贴时自动包裹较长的单行代码片段。"
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceAutoWrapPasteCodeLike}
@@ -240,10 +239,10 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <div className="settings-divider" />
-      <div className="settings-subsection-title">Lists</div>
+      <div className="settings-subsection-title">列表</div>
       <SettingsToggleRow
-        title="Continue lists on Shift+Enter"
-        subtitle="Continues numbered and bulleted lists when the line has content."
+        title="Shift+Enter 继续列表"
+        subtitle="当当前行有内容时，继续编号列表或项目符号列表。"
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerListContinuation}
