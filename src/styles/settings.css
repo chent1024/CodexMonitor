@@ -5,6 +5,11 @@
   z-index: 30;
 }
 
+.settings-overlay .ds-modal-backdrop {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .settings-window {
   width: min(980px, 94vw);
   height: min(680px, 88vh);

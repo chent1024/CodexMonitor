@@ -59,11 +59,6 @@ export function useGitPanelController({
   );
   const [diffSource, setDiffSource] = useState<GitDiffSource>("local");
 
-  const { groups: perFileDiffGroups, viewerEntries: perFileDiffs } = useMemo(
-    () => buildPerFileThreadDiffs(activeItems),
-    [activeItems],
-  );
-
   const { status: gitStatus, refresh: refreshGitStatus } = useGitStatus(
     activeWorkspace,
   );
@@ -109,6 +104,14 @@ export function useGitPanelController({
   const diffUiVisible =
     centerMode === "diff" ||
     (isCompact ? compactTab === "git" : gitPanelMode === "diff");
+  const shouldBuildPerFileThreadDiffs = diffUiVisible || diffSource === "perFile";
+  const { groups: perFileDiffGroups, viewerEntries: perFileDiffs } = useMemo(
+    () =>
+      shouldBuildPerFileThreadDiffs
+        ? buildPerFileThreadDiffs(activeItems)
+        : { groups: [], viewerEntries: [] },
+    [activeItems, shouldBuildPerFileThreadDiffs],
+  );
   const shouldPreloadDiffs = Boolean(
     gitDiffPreloadEnabled &&
       activeWorkspace &&

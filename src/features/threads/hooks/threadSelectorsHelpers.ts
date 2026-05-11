@@ -13,16 +13,15 @@ export function getActiveThreadIdForWorkspace(
 
 export function getActiveItemsForThread({
   activeThreadId,
-  itemsByThread,
+  items,
   threads,
 }: {
   activeThreadId: string | null;
-  itemsByThread: Record<string, ConversationItem[]>;
+  items: ConversationItem[] | undefined;
   threads: ThreadSummary[] | undefined;
 }) {
   if (!activeThreadId) {
     return [];
   }
-  const items = itemsByThread[activeThreadId] ?? [];
-  return enrichConversationItemsWithThreads(items, threads ?? []);
+  return enrichConversationItemsWithThreads(items ?? [], threads ?? []);
 }

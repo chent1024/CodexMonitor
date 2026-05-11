@@ -111,21 +111,28 @@ export function useThreads({
     dispatch({ type: "setMaxItemsPerThread", maxItemsPerThread });
   }, [dispatch, maxItemsPerThread]);
   const loadedThreadsRef = useRef<Record<string, boolean>>({});
+  const loadedThreadUpdatedAtRef = useRef<Record<string, number>>({});
   const replaceOnResumeRef = useRef<Record<string, boolean>>({});
   const pendingInterruptsRef = useRef<Set<string>>(new Set());
   const planByThreadRef = useRef(state.planByThread);
   const itemsByThreadRef = useRef(state.itemsByThread);
   const threadsByWorkspaceRef = useRef(state.threadsByWorkspace);
+  const activeThreadIdByWorkspaceRef = useRef(state.activeThreadIdByWorkspace);
+  const threadStatusByIdRef = useRef(state.threadStatusById);
   const activeTurnIdByThreadRef = useRef(state.activeTurnIdByThread);
   const subagentThreadByWorkspaceThreadRef = useRef<Record<string, true>>({});
   const threadParentByIdRef = useRef(state.threadParentById);
   const cascadeArchiveSkipRef = useRef<Record<string, number>>({});
   const subagentHydrationInFlightRef = useRef<Record<string, true>>({});
+  const hiddenThreadIdsByWorkspaceRef = useRef(state.hiddenThreadIdsByWorkspace);
   planByThreadRef.current = state.planByThread;
   itemsByThreadRef.current = state.itemsByThread;
   threadsByWorkspaceRef.current = state.threadsByWorkspace;
+  activeThreadIdByWorkspaceRef.current = state.activeThreadIdByWorkspace;
+  threadStatusByIdRef.current = state.threadStatusById;
   activeTurnIdByThreadRef.current = state.activeTurnIdByThread;
   threadParentByIdRef.current = state.threadParentById;
+  hiddenThreadIdsByWorkspaceRef.current = state.hiddenThreadIdsByWorkspace;
   const rateLimitsByWorkspaceRef = useRef(state.rateLimitsByWorkspace);
   rateLimitsByWorkspaceRef.current = state.rateLimitsByWorkspace;
   const { approvalAllowlistRef, handleApprovalDecision, handleApprovalRemember } =
@@ -142,6 +149,18 @@ export function useThreads({
     isThreadPinned,
     getPinTimestamp,
   } = useThreadStorage();
+
+  const recordLoadedThreadActivity = useCallback(
+    (workspaceId: string, threadId: string, timestamp?: number) => {
+      const activityTimestamp = timestamp ?? Date.now();
+      recordThreadActivity(workspaceId, threadId, activityTimestamp);
+      loadedThreadUpdatedAtRef.current[threadId] = Math.max(
+        loadedThreadUpdatedAtRef.current[threadId] ?? 0,
+        activityTimestamp,
+      );
+    },
+    [recordThreadActivity],
+  );
 
   const activeWorkspaceId = activeWorkspace?.id ?? null;
   const { activeThreadId, activeItems } = useThreadSelectors({
@@ -198,6 +217,12 @@ export function useThreads({
 
   const setThreadLoaded = useCallback((threadId: string, isLoaded: boolean) => {
     loadedThreadsRef.current[threadId] = isLoaded;
+    if (isLoaded) {
+      loadedThreadUpdatedAtRef.current[threadId] = Math.max(
+        loadedThreadUpdatedAtRef.current[threadId] ?? 0,
+        Date.now(),
+      );
+    }
   }, []);
 
   const renameThread = useCallback(
@@ -282,7 +307,7 @@ export function useThreads({
     useDetachedReviewTracking({
       activeThreadId,
       dispatch,
-      recordThreadActivity,
+      recordThreadActivity: recordLoadedThreadActivity,
       safeMessageActivity,
       threadsByWorkspace: state.threadsByWorkspace,
       threadParentById: state.threadParentById,
@@ -420,7 +445,7 @@ export function useThreads({
     setActiveTurnId,
     getActiveTurnId,
     safeMessageActivity,
-    recordThreadActivity,
+    recordThreadActivity: recordLoadedThreadActivity,
     onUserMessageCreated,
     pushThreadErrorMessage,
     onDebug,
@@ -581,6 +606,7 @@ export function useThreads({
     getCustomName,
     threadActivityRef,
     loadedThreadsRef,
+    loadedThreadUpdatedAtRef,
     replaceOnResumeRef,
     applyCollabThreadLinksFromThread,
     updateThreadParent,
@@ -611,14 +637,14 @@ export function useThreads({
 
   const getWorkspaceThreadIds = useCallback(
     (workspaceId: string, includeThreadId?: string) => {
-      const visibleThreadIds = (state.threadsByWorkspace[workspaceId] ?? [])
+      const visibleThreadIds = (threadsByWorkspaceRef.current[workspaceId] ?? [])
         .map((thread) => String(thread.id ?? "").trim())
         .filter((threadId) => threadId.length > 0);
       const hiddenThreadIds = Object.keys(
-        state.hiddenThreadIdsByWorkspace[workspaceId] ?? {},
+        hiddenThreadIdsByWorkspaceRef.current[workspaceId] ?? {},
       );
       const activeThreadIdForWorkspace =
-        state.activeThreadIdByWorkspace[workspaceId] ?? null;
+        activeThreadIdByWorkspaceRef.current[workspaceId] ?? null;
       const threadIds = new Set([...visibleThreadIds, ...hiddenThreadIds]);
       if (activeThreadIdForWorkspace) {
         threadIds.add(activeThreadIdForWorkspace);
@@ -628,11 +654,7 @@ export function useThreads({
       }
       return Array.from(threadIds);
     },
-    [
-      state.activeThreadIdByWorkspace,
-      state.hiddenThreadIdsByWorkspace,
-      state.threadsByWorkspace,
-    ],
+    [],
   );
 
   const hasProcessingThreadInWorkspace = useCallback(
@@ -640,9 +662,9 @@ export function useThreads({
       getWorkspaceThreadIds(workspaceId, excludedThreadId).some(
         (candidateThreadId) =>
           candidateThreadId !== excludedThreadId &&
-          Boolean(state.threadStatusById[candidateThreadId]?.isProcessing),
+          Boolean(threadStatusByIdRef.current[candidateThreadId]?.isProcessing),
       ),
-    [getWorkspaceThreadIds, state.threadStatusById],
+    [getWorkspaceThreadIds],
   );
 
   const shouldPreflightRuntimeCodexArgsForSend = useCallback(
@@ -695,7 +717,8 @@ export function useThreads({
 
   const ensureThreadForWorkspace = useCallback(
     async (workspaceId: string) => {
-      const currentActiveThreadId = state.activeThreadIdByWorkspace[workspaceId] ?? null;
+      const currentActiveThreadId =
+        activeThreadIdByWorkspaceRef.current[workspaceId] ?? null;
       const shouldActivate = workspaceId === activeWorkspaceId;
       let threadId = currentActiveThreadId;
       if (!threadId) {
@@ -721,7 +744,6 @@ export function useThreads({
       loadedThreadsRef,
       resumeThreadForWorkspace,
       startThreadForWorkspace,
-      state.activeThreadIdByWorkspace,
     ],
   );
 
@@ -781,7 +803,7 @@ export function useThreads({
     markProcessing,
     markReviewing,
     setActiveTurnId,
-    recordThreadActivity,
+    recordThreadActivity: recordLoadedThreadActivity,
     safeMessageActivity,
     onDebug,
     pushThreadErrorMessage,
@@ -813,7 +835,8 @@ export function useThreads({
       if (!targetId) {
         return;
       }
-      const currentThreadId = state.activeThreadIdByWorkspace[targetId] ?? null;
+      const currentThreadId =
+        activeThreadIdByWorkspaceRef.current[targetId] ?? null;
       dispatch({ type: "setActiveThreadId", workspaceId: targetId, threadId });
       if (threadId && currentThreadId !== threadId) {
         Sentry.metrics.count("thread_switched", 1, {
@@ -828,6 +851,16 @@ export function useThreads({
         void (async () => {
           const hasLocalSnapshot = hasLocalThreadSnapshot(threadId);
           if (hasLocalSnapshot) {
+            const summaryUpdatedAt =
+              threadsByWorkspaceRef.current[targetId]?.find((thread) => thread.id === threadId)
+                ?.updatedAt ?? 0;
+            const loadedUpdatedAt = loadedThreadUpdatedAtRef.current[threadId] ?? 0;
+            const isProcessing =
+              threadStatusByIdRef.current[threadId]?.isProcessing ?? false;
+            if (summaryUpdatedAt > loadedUpdatedAt && !isProcessing) {
+              await refreshThread(targetId, threadId);
+              return;
+            }
             loadedThreadsRef.current[threadId] = true;
             return;
           }
@@ -844,9 +877,10 @@ export function useThreads({
       ensureWorkspaceRuntimeCodexArgsBestEffort,
       hasLocalThreadSnapshot,
       hasProcessingThreadInWorkspace,
+      loadedThreadUpdatedAtRef,
       loadedThreadsRef,
+      refreshThread,
       resumeThreadForWorkspace,
-      state.activeThreadIdByWorkspace,
     ],
   );
 

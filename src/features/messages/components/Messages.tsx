@@ -10,7 +10,13 @@ import type {
 import { PlanReadyFollowupMessage } from "../../app/components/PlanReadyFollowupMessage";
 import { RequestUserInputMessage } from "../../app/components/RequestUserInputMessage";
 import { useFileLinkOpener } from "../hooks/useFileLinkOpener";
-import { formatCount, parseReasoning } from "../utils/messageRenderUtils";
+import {
+  formatCount,
+  formatDurationMs,
+  parseReasoning,
+  type AssistantTurn,
+  type AssistantTurnActivityBlock,
+} from "../utils/messageRenderUtils";
 import {
   DiffRow,
   ExploreRow,
@@ -144,6 +150,80 @@ export const Messages = memo(function Messages({
       />
     ) : null;
 
+  const renderAssistantTurnActivity = (
+    block: AssistantTurnActivityBlock,
+    isTurnExpanded: boolean,
+  ) => {
+    const isExpanded = isTurnExpanded || expandedItems.has(block.id);
+    const activityBodyId = `assistant-turn-activity-body-${block.id}`;
+    return (
+      <div key={block.id} className="assistant-turn-activity-block">
+        <button
+          type="button"
+          className="assistant-turn-activity-summary"
+          onClick={() => toggleExpanded(block.id)}
+          aria-expanded={isExpanded}
+          aria-controls={activityBodyId}
+        >
+          <span className="assistant-turn-activity-text">{block.summary}</span>
+        </button>
+        {isExpanded && (
+          <div className="assistant-turn-activity" id={activityBodyId}>
+            <div className="tool-group-body">
+              {block.items.map(renderItem)}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAssistantTurn = (turn: AssistantTurn) => {
+    const isExpanded = expandedItems.has(turn.id);
+    const statusText =
+      turn.durationMs !== null
+        ? `已处理 ${formatDurationMs(turn.durationMs)}`
+        : "已处理";
+    const ChevronIcon = isExpanded ? ChevronUp : ChevronDown;
+
+    return (
+      <div key={turn.id} className="assistant-turn">
+        <button
+          type="button"
+          className="assistant-turn-status"
+          onClick={() => toggleExpanded(turn.id)}
+          aria-expanded={isExpanded}
+        >
+          <span className="assistant-turn-status-text">{statusText}</span>
+          <span className="assistant-turn-chevron" aria-hidden>
+            <ChevronIcon size={14} />
+          </span>
+        </button>
+        {turn.blocks.map((block) => {
+          if (block.kind === "activity") {
+            return renderAssistantTurnActivity(block, isExpanded);
+          }
+          const isCopied = copiedMessageId === block.message.id;
+          return (
+            <MessageRow
+              key={block.message.id}
+              item={block.message}
+              isCopied={isCopied}
+              onCopy={handleCopyMessage}
+              onQuote={onQuoteMessage ? handleQuoteMessage : undefined}
+              codeBlockCopyUseModifier={codeBlockCopyUseModifier}
+              showMessageFilePath={showMessageFilePath}
+              workspacePath={workspacePath}
+              onOpenFileLink={openFileLink}
+              onOpenFileLinkMenu={showFileLinkMenu}
+              onOpenThreadLink={handleOpenThreadLink}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderItem = (item: ConversationItem) => {
     if (item.kind === "message") {
       const isCopied = copiedMessageId === item.id;
@@ -239,6 +319,9 @@ export const Messages = memo(function Messages({
     >
       <div className="messages-inner">
         {groupedItems.map((entry) => {
+          if (entry.kind === "assistantTurn") {
+            return renderAssistantTurn(entry.turn);
+          }
           if (entry.kind === "toolGroup") {
             const { group } = entry;
             const isCollapsed = collapsedToolGroups.has(group.id);

@@ -57,6 +57,7 @@ type UseThreadActionsOptions = {
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
   threadActivityRef: MutableRefObject<Record<string, Record<string, number>>>;
   loadedThreadsRef: MutableRefObject<Record<string, boolean>>;
+  loadedThreadUpdatedAtRef: MutableRefObject<Record<string, number>>;
   replaceOnResumeRef: MutableRefObject<Record<string, boolean>>;
   applyCollabThreadLinksFromThread: (
     workspaceId: string,
@@ -86,6 +87,7 @@ export function useThreadActions({
   getCustomName,
   threadActivityRef,
   loadedThreadsRef,
+  loadedThreadUpdatedAtRef,
   replaceOnResumeRef,
   applyCollabThreadLinksFromThread,
   updateThreadParent,
@@ -170,6 +172,7 @@ export function useThreadActions({
             dispatch({ type: "setActiveThreadId", workspaceId, threadId });
           }
           loadedThreadsRef.current[threadId] = true;
+          loadedThreadUpdatedAtRef.current[threadId] = Date.now();
           return threadId;
         }
         return null;
@@ -184,7 +187,7 @@ export function useThreadActions({
         throw error;
       }
     },
-    [dispatch, extractThreadId, loadedThreadsRef, onDebug],
+    [dispatch, extractThreadId, loadedThreadUpdatedAtRef, loadedThreadsRef, onDebug],
   );
 
   const resumeThreadForWorkspace = useCallback(
@@ -238,6 +241,7 @@ export function useThreadActions({
         });
         const thread = extractThreadFromResponse(response);
         if (thread) {
+          const remoteUpdatedAt = getThreadTimestamp(thread);
           dispatch({ type: "ensureThread", workspaceId, threadId });
           applyThreadMetadata(workspaceId, threadId, thread, {
             notifySubagent: true,
@@ -261,6 +265,10 @@ export function useThreadActions({
           });
           if (!hydrationPlan.shouldHydrate) {
             loadedThreadsRef.current[threadId] = true;
+            loadedThreadUpdatedAtRef.current[threadId] = Math.max(
+              loadedThreadUpdatedAtRef.current[threadId] ?? 0,
+              remoteUpdatedAt,
+            );
             return threadId;
           }
           if (hydrationPlan.keepLocalProcessing) {
@@ -313,6 +321,12 @@ export function useThreadActions({
               hydrationPlan.lastMessageTimestamp,
             );
           }
+          loadedThreadUpdatedAtRef.current[threadId] = Math.max(
+            loadedThreadUpdatedAtRef.current[threadId] ?? 0,
+            remoteUpdatedAt,
+          );
+        } else {
+          loadedThreadUpdatedAtRef.current[threadId] = Date.now();
         }
         loadedThreadsRef.current[threadId] = true;
         return threadId;
@@ -345,6 +359,7 @@ export function useThreadActions({
       dispatch,
       getCustomName,
       itemsByThread,
+      loadedThreadUpdatedAtRef,
       loadedThreadsRef,
       onDebug,
       replaceOnResumeRef,
@@ -434,9 +449,15 @@ export function useThreadActions({
       }
       threadIds.forEach((threadId) => {
         loadedThreadsRef.current[threadId] = false;
+        delete loadedThreadUpdatedAtRef.current[threadId];
       });
     },
-    [activeThreadIdByWorkspace, loadedThreadsRef, threadsByWorkspace],
+    [
+      activeThreadIdByWorkspace,
+      loadedThreadUpdatedAtRef,
+      loadedThreadsRef,
+      threadsByWorkspace,
+    ],
   );
 
   const buildThreadSummary = useCallback(

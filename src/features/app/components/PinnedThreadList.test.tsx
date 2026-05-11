@@ -43,7 +43,7 @@ describe("PinnedThreadList", () => {
     cleanup();
   });
 
-  it("renders pinned rows and handles click/context menu", () => {
+  it("renders pinned rows, skips redundant select, and handles context menu", () => {
     const onSelectThread = vi.fn();
     const onShowThreadMenu = vi.fn();
 
@@ -67,7 +67,7 @@ describe("PinnedThreadList", () => {
     expect(screen.queryByText("Pinned")).toBeNull();
 
     fireEvent.click(row);
-    expect(onSelectThread).toHaveBeenCalledWith("ws-1", "thread-1");
+    expect(onSelectThread).not.toHaveBeenCalled();
 
     fireEvent.contextMenu(row);
     expect(onShowThreadMenu).toHaveBeenCalledWith(

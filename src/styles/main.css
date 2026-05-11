@@ -9,8 +9,14 @@
   min-height: 0;
   min-width: 0;
   --main-panel-padding: clamp(14px, 1.5vw, 22px);
-  --main-topbar-side-padding: calc(var(--main-panel-padding) / 2);
-  --conversation-column-width: 100%;
+  --conversation-side-padding: 44px;
+  --main-topbar-side-padding: var(--conversation-side-padding);
+  --main-ui-font-size: var(--ui-font-size, 13px);
+  --main-font-size-xs: calc(var(--main-ui-font-size) * 0.77);
+  --main-font-size-sm: calc(var(--main-ui-font-size) * 0.85);
+  --main-font-size-lg: calc(var(--main-ui-font-size) * 1.08);
+  --surface-messages: #ffffff;
+  --surface-right-panel: var(--surface-messages);
   transition: grid-template-columns 220ms ease;
 }
 
@@ -52,7 +58,7 @@
   align-items: center;
   min-width: 0;
   flex: 1;
-  max-width: min(100%, var(--conversation-column-width));
+  max-width: 100%;
 }
 
 .main-header-actions {
@@ -83,7 +89,7 @@
 }
 
 .diff-view-toggle-button + .diff-view-toggle-button {
-  border-left: 1px solid var(--border-subtle);
+  border-left: 0;
 }
 
 .diff-view-toggle-button:hover:not(:disabled) {
@@ -157,7 +163,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--main-font-size-sm);
   line-height: 1;
 }
 
@@ -166,6 +172,16 @@
   height: 12px;
   border-radius: 3px;
   flex-shrink: 0;
+}
+
+.main-topbar .open-app-label {
+  gap: 0;
+  font-size: 0;
+}
+
+.main-topbar .open-app-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .open-app-toggle {
@@ -215,7 +231,7 @@
 }
 
 .launch-script-title {
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   font-weight: 600;
   color: var(--text-stronger);
   margin-bottom: 8px;
@@ -228,7 +244,7 @@
   background: var(--surface-control);
   color: var(--text-strong);
   padding: 8px;
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   resize: vertical;
   min-height: 96px;
 }
@@ -240,19 +256,19 @@
   background: var(--surface-control);
   color: var(--text-strong);
   padding: 6px 8px;
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   margin-bottom: 8px;
 }
 
 .launch-script-help {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--main-font-size-sm);
   color: var(--text-muted);
 }
 
 .launch-script-error {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--main-font-size-sm);
   color: var(--text-danger);
 }
 
@@ -381,14 +397,15 @@
   align-items: center;
   padding: 4px var(--main-topbar-side-padding);
   border-bottom: 1px solid var(--cm-border-default);
-  background: var(--cm-surface-topbar);
+  background: var(--surface-messages);
   -webkit-app-region: drag;
   grid-column: 1;
   grid-row: 1;
   position: sticky;
   top: 0;
   z-index: 3;
-  backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   min-height: var(--main-topbar-height);
   transition: padding-left 180ms ease, padding-right 180ms ease;
 }
@@ -501,7 +518,7 @@
 }
 
 .workspace-title {
-  font-size: 15px;
+  font-size: var(--main-font-size-lg);
   font-weight: 600;
   letter-spacing: 0.01em;
   max-width: min(32vw, 420px);
@@ -512,13 +529,13 @@
 
 .workspace-separator {
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--main-font-size-xs);
   opacity: 0.7;
 }
 
 .workspace-branch {
   color: var(--text-subtle);
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   font-weight: 500;
   min-width: 0;
   overflow: hidden;
@@ -529,7 +546,7 @@
 
 .workspace-branch-static {
   color: var(--text-stronger);
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   font-weight: 600;
   padding: 2px 10px;
   border-radius: 999px;
@@ -555,7 +572,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   font-weight: 600;
   max-width: min(44vw, 520px);
   overflow: hidden;
@@ -584,7 +601,7 @@
 }
 
 .worktree-info-title {
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   font-weight: 600;
   color: var(--text-stronger);
 }
@@ -602,14 +619,15 @@
 }
 
 .worktree-info-label {
-  font-size: 10px;
+  font-size: var(--main-font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-faint);
 }
 
 .worktree-info-code {
-  font-size: 11px;
+  font-size: var(--code-font-size, 11px);
+  font-family: var(--code-font-family);
   color: var(--text-stronger);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border-muted);
@@ -647,7 +665,7 @@
 
 .worktree-info-subtle {
   text-wrap: auto;
-  font-size: 11px;
+  font-size: var(--main-font-size-sm);
   color: var(--text-faint);
 }
 
@@ -657,7 +675,7 @@
   color: var(--text-stronger);
   border-radius: 8px;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   font-weight: 600;
   cursor: pointer;
   text-align: left;
@@ -679,7 +697,7 @@
   color: var(--text-stronger);
   border-radius: 8px;
   padding: 6px 8px;
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   flex: 1;
 }
 
@@ -703,7 +721,7 @@
 }
 
 .worktree-info-error {
-  font-size: 11px;
+  font-size: var(--main-font-size-sm);
   color: var(--text-danger);
 }
 
@@ -716,7 +734,7 @@
 .worktree-info-upstream-button {
   align-self: flex-start;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   font-weight: 600;
   border-radius: 8px;
 }
@@ -748,7 +766,7 @@
 }
 
 .workspace-branch-caret {
-  font-size: 11px;
+  font-size: var(--main-font-size-sm);
   color: var(--text-faint);
   display: inline-flex;
   transform: rotate(90deg);
@@ -798,7 +816,7 @@
   background: transparent;
   color: var(--text-quiet);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
 }
 
 .branch-action:hover {
@@ -830,7 +848,7 @@
   background: var(--surface-card);
   color: var(--text-stronger);
   padding: 6px 8px;
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
 }
 
 .branch-input:focus {
@@ -843,7 +861,7 @@
   background: var(--surface-card-strong);
   color: var(--text-stronger);
   padding: 6px 8px;
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   cursor: pointer;
 }
 
@@ -858,7 +876,7 @@
 }
 
 .branch-create-hint {
-  font-size: 11px;
+  font-size: var(--main-font-size-sm);
   color: var(--text-faint);
   padding: 2px 8px 0;
 }
@@ -878,7 +896,7 @@
   padding: 6px 8px;
   border-radius: 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--main-font-size-sm);
   cursor: pointer;
 }
 
@@ -889,13 +907,13 @@
 }
 
 .branch-empty {
-  font-size: 11px;
+  font-size: var(--main-font-size-sm);
   color: var(--text-faint);
   padding: 4px 8px;
 }
 
 .branch-error {
-  font-size: 11px;
+  font-size: var(--main-font-size-sm);
   color: rgba(255, 160, 160, 0.9);
   padding: 6px 8px 2px;
   white-space: pre-wrap;
@@ -915,7 +933,7 @@
   border-radius: 999px;
   border: 1px solid var(--border-subtle);
   padding: 3px 8px;
-  font-size: 11px;
+  font-size: var(--main-font-size-sm);
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -958,12 +976,7 @@
   grid-column: 1;
   grid-row: 1 / 3;
   position: relative;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-messages) 94%, transparent) 0%,
-      color-mix(in srgb, var(--surface-messages) 100%, transparent) 100%
-    );
+  background: var(--surface-messages);
 }
 
 .chat-pane {
@@ -1234,13 +1247,13 @@
   bottom: 0;
   left: 3px;
   width: 1px;
-  background: var(--border-strong);
+  background: var(--border-subtle);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
 
 .right-panel-resizer:hover::after {
-  opacity: 1;
+  opacity: 0.45;
 }
 
 .app.right-panel-collapsed .right-panel {

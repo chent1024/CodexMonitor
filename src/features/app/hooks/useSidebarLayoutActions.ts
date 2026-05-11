@@ -1,10 +1,12 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 
 import type { WorkspaceInfo, WorkspaceSettings } from "../../../types";
 
 type AppTab = "home" | "projects" | "codex" | "git" | "log";
 
 type UseSidebarLayoutActionsOptions = {
+  activeWorkspaceId: string | null;
+  activeThreadId: string | null;
   openSettings: () => void;
   resetPullRequestSelection: () => void;
   clearDraftState: () => void;
@@ -33,6 +35,8 @@ type UseSidebarLayoutActionsOptions = {
 };
 
 export function useSidebarLayoutActions({
+  activeWorkspaceId,
+  activeThreadId,
   openSettings,
   resetPullRequestSelection,
   clearDraftState,
@@ -56,6 +60,10 @@ export function useSidebarLayoutActions({
   loadOlderThreadsForWorkspace,
   listThreadsForWorkspace,
 }: UseSidebarLayoutActionsOptions) {
+  const activeSelectionRef = useRef({ activeThreadId, activeWorkspaceId });
+  activeSelectionRef.current.activeThreadId = activeThreadId;
+  activeSelectionRef.current.activeWorkspaceId = activeWorkspaceId;
+
   const onOpenSettings = useCallback(() => {
     openSettings();
   }, [openSettings]);
@@ -108,6 +116,13 @@ export function useSidebarLayoutActions({
 
   const onSelectThread = useCallback(
     (workspaceId: string, threadId: string) => {
+      const activeSelection = activeSelectionRef.current;
+      if (
+        workspaceId === activeSelection.activeWorkspaceId &&
+        threadId === activeSelection.activeThreadId
+      ) {
+        return;
+      }
       exitDiffView();
       resetPullRequestSelection();
       clearDraftState();

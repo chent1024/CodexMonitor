@@ -78,7 +78,6 @@ export function useRemoteThreadLiveConnection({
   backendMode,
   activeWorkspace,
   activeThreadId,
-  activeThreadHasLocalSnapshot = true,
   activeThreadIsProcessing = false,
   refreshThread,
   reconnectWorkspace,
@@ -99,7 +98,6 @@ export function useRemoteThreadLiveConnection({
   const backendModeRef = useRef(backendMode);
   const activeWorkspaceRef = useRef(activeWorkspace);
   const activeThreadIdRef = useRef(activeThreadId);
-  const activeThreadHasLocalSnapshotRef = useRef(activeThreadHasLocalSnapshot);
   const activeThreadIsProcessingRef = useRef(activeThreadIsProcessing);
   const refreshThreadRef = useRef(refreshThread);
   const reconnectWorkspaceRef = useRef(reconnectWorkspace);
@@ -118,7 +116,6 @@ export function useRemoteThreadLiveConnection({
     backendModeRef.current = backendMode;
     activeWorkspaceRef.current = activeWorkspace;
     activeThreadIdRef.current = activeThreadId;
-    activeThreadHasLocalSnapshotRef.current = activeThreadHasLocalSnapshot;
     activeThreadIsProcessingRef.current = activeThreadIsProcessing;
     refreshThreadRef.current = refreshThread;
     reconnectWorkspaceRef.current = reconnectWorkspace;
@@ -126,7 +123,6 @@ export function useRemoteThreadLiveConnection({
     backendMode,
     activeWorkspace,
     activeThreadId,
-    activeThreadHasLocalSnapshot,
     activeThreadIsProcessing,
     refreshThread,
     reconnectWorkspace,
@@ -318,7 +314,7 @@ export function useRemoteThreadLiveConnection({
       return;
     }
     void reconnectLive(parsed.workspaceId, parsed.threadId, {
-      runResume: !activeThreadHasLocalSnapshotRef.current,
+      runResume: false,
       reason: "thread-switch",
     });
   }, [

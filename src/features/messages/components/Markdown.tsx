@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ReactNode, type MouseEvent } from "re
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import Check from "lucide-react/dist/esm/icons/check";
+import Copy from "lucide-react/dist/esm/icons/copy";
 import {
   describeFileTarget,
   formatParsedFileLocation,
@@ -392,7 +394,7 @@ function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
           aria-label="Copy code block"
           title={copied ? "Copied" : "Copy"}
         >
-          {copied ? "Copied" : "Copy"}
+          {copied ? <Check aria-hidden size={14} /> : <Copy aria-hidden size={14} />}
         </button>
       </div>
       <pre>

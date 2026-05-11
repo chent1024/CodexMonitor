@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent } from "react";
+import { memo, useCallback, useMemo, useState, type MouseEvent } from "react";
 
 import type { ThreadSummary } from "../../../types";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
@@ -39,7 +39,7 @@ type ThreadListProps = {
   ) => void;
 };
 
-export function ThreadList({
+function ThreadListInner({
   workspaceId,
   pinnedRows,
   unpinnedRows,
@@ -65,7 +65,7 @@ export function ThreadList({
   const indentUnit = nested ? 10 : 14;
   const [collapsedThreadKeys, setCollapsedThreadKeys] = useState<Set<string>>(new Set());
 
-  const toggleThreadSubagents = (threadId: string) => {
+  const toggleThreadSubagents = useCallback((_workspaceId: string, threadId: string) => {
     const threadKey = `${workspaceId}:${threadId}`;
     setCollapsedThreadKeys((prev) => {
       const next = new Set(prev);
@@ -76,7 +76,7 @@ export function ThreadList({
       }
       return next;
     });
-  };
+  }, [workspaceId]);
 
   const pinnedVisibility = useMemo(
     () =>
@@ -104,10 +104,9 @@ export function ThreadList({
           depth={row.depth}
           workspaceId={workspaceId}
           indentUnit={indentUnit}
-          activeWorkspaceId={activeWorkspaceId}
-          activeThreadId={activeThreadId}
-          threadStatusById={threadStatusById}
-          pendingUserInputKeys={pendingUserInputKeys}
+          isActive={workspaceId === activeWorkspaceId && row.thread.id === activeThreadId}
+          threadStatus={threadStatusById[row.thread.id]}
+          hasPendingUserInput={pendingUserInputKeys?.has(`${workspaceId}:${row.thread.id}`)}
           getThreadTime={getThreadTime}
           getThreadArgsBadge={getThreadArgsBadge}
           isThreadPinned={isThreadPinned}
@@ -115,7 +114,7 @@ export function ThreadList({
           onShowThreadMenu={onShowThreadMenu}
           hasSubagentChildren={pinnedVisibility.rowsWithChildren.has(row)}
           subagentsExpanded={!collapsedThreadKeys.has(`${workspaceId}:${row.thread.id}`)}
-          onToggleSubagents={(_, threadId) => toggleThreadSubagents(threadId)}
+          onToggleSubagents={toggleThreadSubagents}
         />
       ))}
       {pinnedVisibility.visibleRows.length > 0 && unpinnedVisibility.visibleRows.length > 0 && (
@@ -128,10 +127,9 @@ export function ThreadList({
           depth={row.depth}
           workspaceId={workspaceId}
           indentUnit={indentUnit}
-          activeWorkspaceId={activeWorkspaceId}
-          activeThreadId={activeThreadId}
-          threadStatusById={threadStatusById}
-          pendingUserInputKeys={pendingUserInputKeys}
+          isActive={workspaceId === activeWorkspaceId && row.thread.id === activeThreadId}
+          threadStatus={threadStatusById[row.thread.id]}
+          hasPendingUserInput={pendingUserInputKeys?.has(`${workspaceId}:${row.thread.id}`)}
           getThreadTime={getThreadTime}
           getThreadArgsBadge={getThreadArgsBadge}
           isThreadPinned={isThreadPinned}
@@ -139,7 +137,7 @@ export function ThreadList({
           onShowThreadMenu={onShowThreadMenu}
           hasSubagentChildren={unpinnedVisibility.rowsWithChildren.has(row)}
           subagentsExpanded={!collapsedThreadKeys.has(`${workspaceId}:${row.thread.id}`)}
-          onToggleSubagents={(_, threadId) => toggleThreadSubagents(threadId)}
+          onToggleSubagents={toggleThreadSubagents}
         />
       ))}
       {showExpandToggle && totalThreadRoots > 3 && (
@@ -172,3 +170,96 @@ export function ThreadList({
     </div>
   );
 }
+
+function areThreadListRowsEqual(prevRows: ThreadListRow[], nextRows: ThreadListRow[]) {
+  if (prevRows.length !== nextRows.length) {
+    return false;
+  }
+  return prevRows.every(
+    (row, index) =>
+      row.thread.id === nextRows[index].thread.id &&
+      row.depth === nextRows[index].depth,
+  );
+}
+
+function hasVisibleStatusChanged(
+  prev: ThreadListProps,
+  next: ThreadListProps,
+): boolean {
+  const rows = [...prev.pinnedRows, ...prev.unpinnedRows];
+  const nextRows = [...next.pinnedRows, ...next.unpinnedRows];
+
+  if (!areThreadListRowsEqual(rows, nextRows)) {
+    return true;
+  }
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const prevThreadId = rows[index].thread.id;
+    const nextThreadId = nextRows[index].thread.id;
+    if (prevThreadId !== nextThreadId) {
+      return true;
+    }
+    const prevStatus = prev.threadStatusById[prevThreadId];
+    const nextStatus = next.threadStatusById[nextThreadId];
+    if (
+      prevStatus?.hasUnread !== nextStatus?.hasUnread ||
+      prevStatus?.isProcessing !== nextStatus?.isProcessing ||
+      prevStatus?.isReviewing !== nextStatus?.isReviewing ||
+      prevStatus?.processingStartedAt !== nextStatus?.processingStartedAt ||
+      prevStatus?.lastDurationMs !== nextStatus?.lastDurationMs
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasPendingInputChanged(
+  prev: ThreadListProps,
+  next: ThreadListProps,
+): boolean {
+  if (prev.pendingUserInputKeys === next.pendingUserInputKeys) {
+    return false;
+  }
+  if (prev.pendingUserInputKeys === undefined || next.pendingUserInputKeys === undefined) {
+    return true;
+  }
+  if (prev.pendingUserInputKeys.size !== next.pendingUserInputKeys.size) {
+    return true;
+  }
+  for (const key of prev.pendingUserInputKeys) {
+    if (!next.pendingUserInputKeys.has(key)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const ThreadList = memo(
+  ThreadListInner,
+  (prev, next) =>
+    prev.workspaceId === next.workspaceId &&
+    prev.totalThreadRoots === next.totalThreadRoots &&
+    prev.isExpanded === next.isExpanded &&
+    prev.showExpandToggle === next.showExpandToggle &&
+    prev.nextCursor === next.nextCursor &&
+    prev.isPaging === next.isPaging &&
+    prev.nested === next.nested &&
+    prev.showLoadOlder === next.showLoadOlder &&
+    prev.activeWorkspaceId === next.activeWorkspaceId &&
+    prev.activeThreadId === next.activeThreadId &&
+    prev.onToggleExpanded === next.onToggleExpanded &&
+    prev.onLoadOlderThreads === next.onLoadOlderThreads &&
+    prev.onSelectThread === next.onSelectThread &&
+    prev.onShowThreadMenu === next.onShowThreadMenu &&
+    prev.getThreadTime === next.getThreadTime &&
+    prev.getThreadArgsBadge === next.getThreadArgsBadge &&
+    prev.isThreadPinned === next.isThreadPinned &&
+    prev.pinnedRows === next.pinnedRows &&
+    prev.unpinnedRows === next.unpinnedRows &&
+    !hasVisibleStatusChanged(prev, next) &&
+    !hasPendingInputChanged(prev, next),
+);
+
+export { ThreadList };

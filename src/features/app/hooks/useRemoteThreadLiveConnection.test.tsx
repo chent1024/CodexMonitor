@@ -520,7 +520,7 @@ describe("useRemoteThreadLiveConnection", () => {
     expect(refreshThread).toHaveBeenCalledTimes(0);
   });
 
-  it("resumes when switching to a thread without local snapshot", async () => {
+  it("does not duplicate resume when switching to a thread without local snapshot", async () => {
     const refreshThread = vi.fn().mockResolvedValue(undefined);
     const workspace = {
       id: "ws-1",
@@ -561,8 +561,7 @@ describe("useRemoteThreadLiveConnection", () => {
 
     expect(threadLiveSubscribeMock).toHaveBeenCalledTimes(2);
     expect(threadLiveUnsubscribeMock).toHaveBeenCalledTimes(1);
-    expect(refreshThread).toHaveBeenCalledTimes(1);
-    expect(refreshThread).toHaveBeenCalledWith("ws-1", "thread-2");
+    expect(refreshThread).not.toHaveBeenCalled();
   });
 
   it("ignores self-triggered detached event during dedupe reconnect", async () => {

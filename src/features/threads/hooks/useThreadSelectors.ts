@@ -27,15 +27,16 @@ export function useThreadSelectors({
   const activeWorkspaceThreads = activeWorkspaceId
     ? threadsByWorkspace[activeWorkspaceId]
     : undefined;
+  const activeThreadItems = activeThreadId ? itemsByThread[activeThreadId] : undefined;
 
   const activeItems = useMemo<ConversationItem[]>(
     () =>
       getActiveItemsForThread({
         activeThreadId,
-        itemsByThread,
+        items: activeThreadItems,
         threads: activeWorkspaceThreads,
       }),
-    [activeThreadId, activeWorkspaceThreads, itemsByThread],
+    [activeThreadId, activeThreadItems, activeWorkspaceThreads],
   );
 
   return { activeThreadId, activeItems };

@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent } from "react";
+import { memo, useCallback, type CSSProperties, type MouseEvent } from "react";
 
 import type { ThreadSummary } from "../../../types";
 import { getThreadStatusClass, type ThreadStatusById } from "../../../utils/threadStatus";
@@ -45,10 +45,9 @@ type ThreadRowProps = {
   depth: number;
   workspaceId: string;
   indentUnit: number;
-  activeWorkspaceId: string | null;
-  activeThreadId: string | null;
-  threadStatusById: ThreadStatusById;
-  pendingUserInputKeys?: Set<string>;
+  isActive: boolean;
+  threadStatus?: ThreadStatusById[string];
+  hasPendingUserInput?: boolean;
   workspaceLabel?: string | null;
   getThreadTime: (thread: ThreadSummary) => string | null;
   getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
@@ -66,15 +65,14 @@ type ThreadRowProps = {
   showPinnedLabel?: boolean;
 };
 
-export function ThreadRow({
+export const ThreadRow = memo(function ThreadRow({
   thread,
   depth,
   workspaceId,
   indentUnit,
-  activeWorkspaceId,
-  activeThreadId,
-  threadStatusById,
-  pendingUserInputKeys,
+  isActive,
+  threadStatus,
+  hasPendingUserInput = false,
   workspaceLabel,
   getThreadTime,
   getThreadArgsBadge,
@@ -98,11 +96,8 @@ export function ThreadRow({
     depth > 0
       ? ({ "--thread-indent": `${depth * indentUnit}px` } as CSSProperties)
       : undefined;
-  const hasPendingUserInput = Boolean(
-    pendingUserInputKeys?.has(`${workspaceId}:${thread.id}`),
-  );
   const statusClass = getThreadStatusClass(
-    threadStatusById[thread.id],
+    threadStatus,
     hasPendingUserInput,
   );
   const statusLabel =
@@ -140,26 +135,30 @@ export function ThreadRow({
     effectiveWorkspaceLabel || subagentLabel || contextLabel || statusLabel || isPinned,
   );
 
+  const handleSelect = useCallback(() => {
+    if (isActive) {
+      return;
+    }
+    onSelectThread(workspaceId, thread.id);
+  }, [isActive, onSelectThread, thread.id, workspaceId]);
+
   return (
     <div
-      className={`thread-row ${
-        workspaceId === activeWorkspaceId && thread.id === activeThreadId
-          ? "active"
-          : ""
-      }${hasDetails ? " has-details" : ""}${
+      className={`thread-row ${isActive ? "active" : ""}${
+        hasDetails ? " has-details" : ""}${
         hasDetails ? " has-secondary-line" : ""
       }${canToggleSubagents ? " has-subagent-children" : ""}${
         depth > 0 ? " is-nested" : ""
       }${isPinned ? " is-pinned" : ""}`}
       style={indentStyle}
-      onClick={() => onSelectThread(workspaceId, thread.id)}
+      onClick={handleSelect}
       onContextMenu={(event) => onShowThreadMenu(event, workspaceId, thread.id, canPin)}
       role="button"
       tabIndex={0}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onSelectThread(workspaceId, thread.id);
+          handleSelect();
         }
       }}
     >
@@ -225,4 +224,4 @@ export function ThreadRow({
       </div>
     </div>
   );
-}
+});

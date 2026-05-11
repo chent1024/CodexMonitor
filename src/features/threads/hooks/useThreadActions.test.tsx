@@ -16,7 +16,6 @@ import {
   getThreadTimestamp,
   isReviewingFromThread,
   mergeThreadItems,
-  previewThreadName,
 } from "@utils/threadItems";
 import { saveThreadActivity } from "@threads/utils/threadStorage";
 import { useThreadActions } from "./useThreadActions";
@@ -36,7 +35,6 @@ vi.mock("@utils/threadItems", () => ({
   getThreadTimestamp: vi.fn(),
   isReviewingFromThread: vi.fn(),
   mergeThreadItems: vi.fn(),
-  previewThreadName: vi.fn(),
 }));
 
 vi.mock("@threads/utils/threadStorage", () => ({
@@ -70,6 +68,7 @@ describe("useThreadActions", () => {
   ) {
     const dispatch = vi.fn();
     const loadedThreadsRef = { current: {} as Record<string, boolean> };
+    const loadedThreadUpdatedAtRef = { current: {} as Record<string, number> };
     const replaceOnResumeRef = { current: {} as Record<string, boolean> };
     const threadActivityRef = {
       current: {} as Record<string, Record<string, number>>,
@@ -91,6 +90,7 @@ describe("useThreadActions", () => {
       getCustomName: () => undefined,
       threadActivityRef,
       loadedThreadsRef,
+      loadedThreadUpdatedAtRef,
       replaceOnResumeRef,
       applyCollabThreadLinksFromThread,
       updateThreadParent,
@@ -104,6 +104,7 @@ describe("useThreadActions", () => {
       args,
       dispatch,
       loadedThreadsRef: args.loadedThreadsRef,
+      loadedThreadUpdatedAtRef: args.loadedThreadUpdatedAtRef,
       replaceOnResumeRef: args.replaceOnResumeRef,
       threadActivityRef: args.threadActivityRef,
       applyCollabThreadLinksFromThread: args.applyCollabThreadLinksFromThread,
@@ -271,12 +272,16 @@ describe("useThreadActions", () => {
 
     vi.mocked(resumeThread).mockResolvedValue({
       result: {
-        thread: { id: "thread-2", preview: "preview", updated_at: 555 },
+        thread: {
+          id: "thread-2",
+          preview: "preview",
+          threadName: "Preview Name",
+          updated_at: 555,
+        },
       },
     });
     vi.mocked(buildItemsFromThread).mockReturnValue([assistantItem]);
     vi.mocked(isReviewingFromThread).mockReturnValue(true);
-    vi.mocked(previewThreadName).mockReturnValue("Preview Name");
     vi.mocked(getThreadTimestamp).mockReturnValue(999);
     vi.mocked(mergeThreadItems).mockReturnValue([assistantItem]);
 

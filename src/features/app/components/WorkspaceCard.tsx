@@ -1,11 +1,11 @@
 import type { MouseEvent } from "react";
+import Folder from "lucide-react/dist/esm/icons/folder";
 
 import type { WorkspaceInfo } from "../../../types";
 
 type WorkspaceCardProps = {
   workspace: WorkspaceInfo;
   workspaceName?: React.ReactNode;
-  summary?: string | null;
   isActive: boolean;
   isCollapsed: boolean;
   addMenuOpen: boolean;
@@ -26,7 +26,6 @@ type WorkspaceCardProps = {
 export function WorkspaceCard({
   workspace,
   workspaceName,
-  summary = null,
   isActive,
   isCollapsed,
   addMenuOpen,
@@ -58,6 +57,9 @@ export function WorkspaceCard({
         <div className="workspace-copy">
           <div className="workspace-name-row">
             <div className="workspace-title">
+              <span className="workspace-title-icon" aria-hidden="true">
+                <Folder />
+              </span>
               <span className="workspace-name">{workspaceName ?? workspace.name}</span>
               <button
                 className={`workspace-toggle ${isCollapsed ? "" : "expanded"}`}
@@ -73,7 +75,6 @@ export function WorkspaceCard({
               </button>
             </div>
           </div>
-          {summary && <div className="workspace-summary">{summary}</div>}
         </div>
         <div className="workspace-actions">
           <button

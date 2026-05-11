@@ -3,18 +3,18 @@
   flex-direction: column;
   gap: 8px;
   -webkit-app-region: no-drag;
-  padding: 8px var(--main-panel-padding) 14px;
-  border-top: 1px solid var(--cm-border-default);
-  background: var(--cm-surface-composer);
-  backdrop-filter: blur(18px) saturate(1.1);
-  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  padding: 8px var(--conversation-side-padding, var(--main-panel-padding)) 14px;
+  border-top: none;
+  background: var(--surface-messages);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   grid-column: 1;
   grid-row: 3;
 }
 
 .composer > * {
-  width: min(100%, var(--conversation-column-width, 900px));
-  margin-inline: auto;
+  width: 100%;
+  margin-inline: 0;
 }
 
 .app.reduced-transparency .composer {
@@ -148,10 +148,12 @@
   position: relative;
   min-width: 0;
   border: 1px solid var(--cm-border-heavy);
-  background: var(--cm-surface-panel-elevated);
+  background: var(--surface-messages);
   border-radius: 8px;
   padding: 8px 10px 8px 9px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow:
+    0 8px 20px color-mix(in srgb, var(--shadow-soft, rgba(15, 23, 42, 0.16)) 42%, transparent),
+    0 1px 2px color-mix(in srgb, var(--shadow-soft, rgba(15, 23, 42, 0.16)) 18%, transparent);
 }
 
 .composer-input-area.is-drag-over {

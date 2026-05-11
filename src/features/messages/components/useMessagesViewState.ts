@@ -10,7 +10,7 @@ import type { ConversationItem } from "../../../types";
 import { isPlanReadyTaggedMessage } from "../../../utils/internalPlanReadyMessages";
 import {
   SCROLL_THRESHOLD_PX,
-  buildToolGroups,
+  buildMessageEntries,
   computePlanFollowupState,
   parseReasoning,
   scrollKeyForItems,
@@ -245,7 +245,7 @@ export function useMessagesViewState({
     }
   }, [visibleItems]);
 
-  const groupedItems = useMemo(() => buildToolGroups(visibleItems), [visibleItems]);
+  const groupedItems = useMemo(() => buildMessageEntries(visibleItems), [visibleItems]);
 
   const planFollowup = useMemo(() => {
     if (!onPlanAccept || !onPlanSubmitChanges) {

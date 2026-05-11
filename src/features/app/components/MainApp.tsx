@@ -1406,6 +1406,8 @@ export default function MainApp() {
 
   const sidebarMenuOrchestration = useMainAppSidebarMenuOrchestration({
     sidebarActions: {
+      activeWorkspaceId,
+      activeThreadId,
       openSettings: modalActions.openSettings,
       resetPullRequestSelection,
       clearDraftState,

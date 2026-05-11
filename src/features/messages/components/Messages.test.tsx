@@ -1053,9 +1053,9 @@ describe("Messages", () => {
     expect(screen.queryByText(/tool calls/i)).toBeNull();
     const exploreItems = container.querySelectorAll(".explore-inline-item");
     expect(exploreItems.length).toBe(2);
-    expect(container.querySelector(".explore-inline-title")?.textContent ?? "").toContain(
-      "Explored",
-    );
+    expect(container.querySelector(".explore-inline-title")).toBeNull();
+    expect(screen.getByText("Find routes")).toBeTruthy();
+    expect(screen.getByText("routes.ts")).toBeTruthy();
   });
 
   it("uses the latest explore status when merging a consecutive run", async () => {
@@ -1088,8 +1088,9 @@ describe("Messages", () => {
     await waitFor(() => {
       expect(container.querySelectorAll(".explore-inline").length).toBe(1);
     });
-    const exploreTitle = container.querySelector(".explore-inline-title");
-    expect(exploreTitle?.textContent ?? "").toContain("Explored");
+    expect(container.querySelector(".explore-inline-title")).toBeNull();
+    expect(screen.getByText("starting")).toBeTruthy();
+    expect(screen.getByText("finished")).toBeTruthy();
   });
 
   it("does not merge explore items across interleaved tools", async () => {
@@ -1188,7 +1189,7 @@ describe("Messages", () => {
     expect(reasoningBeforeSecond).toBeTruthy();
   });
 
-  it("does not merge across message boundaries and does not drop messages", async () => {
+  it("folds activity around an assistant message into a Codex-like processed turn", async () => {
     const items: ConversationItem[] = [
       {
         id: "explore-before",
@@ -1222,10 +1223,96 @@ describe("Messages", () => {
     );
 
     await waitFor(() => {
-      const exploreBlocks = container.querySelectorAll(".explore-inline");
-      expect(exploreBlocks.length).toBe(2);
+      expect(screen.getByText("A message between explore blocks")).toBeTruthy();
     });
-    expect(screen.getByText("A message between explore blocks")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /已处理/i })).toBeTruthy();
+    expect(container.querySelectorAll(".explore-inline").length).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /已处理/i }));
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".explore-inline-item").length).toBe(2);
+    });
+    expect(screen.getByText("before message")).toBeTruthy();
+    expect(screen.getByText("after message")).toBeTruthy();
+  });
+
+  it("keeps one assistant reading flow when tools are interleaved between messages", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "First paragraph.",
+      },
+      {
+        id: "tool-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: rg content_id",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+        durationMs: 2_000,
+      },
+      {
+        id: "assistant-2",
+        kind: "message",
+        role: "assistant",
+        text: "Second paragraph.",
+      },
+      {
+        id: "explore-1",
+        kind: "explore",
+        status: "explored",
+        entries: [{ kind: "read", label: "routes.ts" }],
+      },
+      {
+        id: "assistant-3",
+        kind: "message",
+        role: "assistant",
+        text: "Final paragraph.",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".assistant-turn").length).toBe(1);
+    });
+    const turnBlocks = Array.from(
+      container.querySelectorAll(".assistant-turn > .message, .assistant-turn-activity-block"),
+    );
+    expect(turnBlocks.length).toBe(5);
+    expect(turnBlocks[0].textContent ?? "").toContain("First paragraph.");
+    expect(turnBlocks[1].textContent ?? "").toContain("已运行 1 条命令");
+    expect(turnBlocks[2].textContent ?? "").toContain("Second paragraph.");
+    expect(turnBlocks[3].textContent ?? "").toContain("已探索 1 个文件");
+    expect(turnBlocks[4].textContent ?? "").toContain("Final paragraph.");
+    expect(screen.getByRole("button", { name: /已处理 0:02/i })).toBeTruthy();
+    expect(screen.queryByText(/rg content_id/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /已运行 1 条命令/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/rg content_id/i)).toBeTruthy();
+    });
+    expect(screen.queryByText("routes.ts")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /已探索 1 个文件/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("routes.ts")).toBeTruthy();
+    });
   });
 
   it("counts explore entry steps in the tool group summary", async () => {

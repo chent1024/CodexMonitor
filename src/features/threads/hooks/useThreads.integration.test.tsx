@@ -137,6 +137,94 @@ describe("useThreads UX integration", () => {
     }
   });
 
+  it("refreshes a cached selected thread when the list summary is newer", async () => {
+    vi.mocked(resumeThread)
+      .mockResolvedValueOnce({
+        result: {
+          thread: {
+            id: "thread-1",
+            preview: "Remote preview",
+            updated_at: 100,
+            turns: [
+              {
+                items: [
+                  {
+                    type: "agentMessage",
+                    id: "assistant-old",
+                    text: "Old cached answer",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          thread: {
+            id: "thread-1",
+            preview: "Remote preview",
+            updated_at: 500,
+            turns: [
+              {
+                items: [
+                  {
+                    type: "agentMessage",
+                    id: "assistant-new",
+                    text: "Latest answer",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-1",
+            cwd: workspace.path,
+            preview: "Remote preview",
+            updated_at: 500,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-1");
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeItems.some((item) => item.id === "assistant-old")).toBe(
+        true,
+      );
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    act(() => {
+      result.current.setActiveThreadId("thread-1");
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeItems.some((item) => item.id === "assistant-new")).toBe(
+        true,
+      );
+    });
+  });
+
   it("applies runtime codex args before start and selection resume", async () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => undefined);
     vi.mocked(startThread).mockResolvedValue({

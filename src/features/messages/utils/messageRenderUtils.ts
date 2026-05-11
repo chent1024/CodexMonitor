@@ -34,9 +34,35 @@ export type ToolGroup = {
   messageCount: number;
 };
 
+export type AssistantTurnActivityBlock = {
+  kind: "activity";
+  id: string;
+  summary: string;
+  items: ToolGroupItem[];
+  toolCount: number;
+  messageCount: number;
+  durationMs: number | null;
+};
+
+export type AssistantTurnMessageBlock = {
+  kind: "message";
+  message: Extract<ConversationItem, { kind: "message" }>;
+};
+
+export type AssistantTurnBlock = AssistantTurnMessageBlock | AssistantTurnActivityBlock;
+
+export type AssistantTurn = {
+  id: string;
+  blocks: AssistantTurnBlock[];
+  toolCount: number;
+  messageCount: number;
+  durationMs: number | null;
+};
+
 export type MessageListEntry =
   | { kind: "item"; item: ConversationItem }
-  | { kind: "toolGroup"; group: ToolGroup };
+  | { kind: "toolGroup"; group: ToolGroup }
+  | { kind: "assistantTurn"; turn: AssistantTurn };
 
 export const SCROLL_THRESHOLD_PX = 120;
 export const MAX_COMMAND_OUTPUT_LINES = 200;
@@ -228,6 +254,16 @@ function isToolGroupItem(item: ConversationItem): item is ToolGroupItem {
   );
 }
 
+function isAssistantMessage(
+  item: ConversationItem,
+): item is Extract<ConversationItem, { kind: "message" }> {
+  return item.kind === "message" && item.role === "assistant";
+}
+
+function isUserMessage(item: ConversationItem) {
+  return item.kind === "message" && item.role === "user";
+}
+
 function mergeExploreItems(
   items: Extract<ConversationItem, { kind: "explore" }>[],
 ): Extract<ConversationItem, { kind: "explore" }> {
@@ -269,6 +305,261 @@ function mergeConsecutiveExploreRuns(items: ToolGroupItem[]): ToolGroupItem[] {
   });
   flushRun();
   return result;
+}
+
+function countToolCalls(items: ToolGroupItem[]) {
+  return items.reduce((total, item) => {
+    if (item.kind === "tool") {
+      return total + 1;
+    }
+    if (item.kind === "explore") {
+      return total + item.entries.length;
+    }
+    return total;
+  }, 0);
+}
+
+function countNonToolMessages(items: ToolGroupItem[]) {
+  return items.filter((item) => item.kind !== "tool" && item.kind !== "explore").length;
+}
+
+function sumActivityDuration(items: ToolGroupItem[]) {
+  let durationMs = 0;
+  let hasDuration = false;
+  items.forEach((item) => {
+    if (
+      item.kind === "tool" &&
+      typeof item.durationMs === "number" &&
+      Number.isFinite(item.durationMs)
+    ) {
+      durationMs += item.durationMs;
+      hasDuration = true;
+    }
+  });
+  return hasDuration ? durationMs : null;
+}
+
+function formatChineseCount(count: number, unit: string) {
+  return `${count} ${unit}`;
+}
+
+export function formatActivitySummary(items: ToolGroupItem[]) {
+  let readCount = 0;
+  let listCount = 0;
+  let searchCount = 0;
+  let commandCount = 0;
+  let createdFiles = 0;
+  let editedFiles = 0;
+  let deletedFiles = 0;
+
+  items.forEach((item) => {
+    if (item.kind === "explore") {
+      item.entries.forEach((entry) => {
+        if (entry.kind === "read") {
+          readCount += 1;
+        } else if (entry.kind === "list") {
+          listCount += 1;
+        } else if (entry.kind === "search") {
+          searchCount += 1;
+        } else if (entry.kind === "run") {
+          commandCount += 1;
+        }
+      });
+      return;
+    }
+    if (item.kind !== "tool") {
+      return;
+    }
+    if (item.toolType === "commandExecution") {
+      commandCount += 1;
+      return;
+    }
+    if (item.toolType === "fileChange") {
+      const changes = item.changes ?? [];
+      if (changes.length === 0) {
+        editedFiles += 1;
+        return;
+      }
+      changes.forEach((change) => {
+        const kind = (change.kind ?? "").toLowerCase();
+        if (kind === "add" || kind === "create" || kind === "created") {
+          createdFiles += 1;
+        } else if (kind === "delete" || kind === "deleted" || kind === "remove") {
+          deletedFiles += 1;
+        } else {
+          editedFiles += 1;
+        }
+      });
+    }
+  });
+
+  const parts: string[] = [];
+  const exploreParts = [
+    readCount > 0 ? formatChineseCount(readCount, "个文件") : "",
+    listCount > 0 ? formatChineseCount(listCount, "个列表") : "",
+  ].filter(Boolean);
+  if (exploreParts.length > 0) {
+    parts.push(`已探索 ${exploreParts.join(",")}`);
+  }
+  if (searchCount > 0) {
+    parts.push(`已搜索 ${formatChineseCount(searchCount, "次")}`);
+  }
+  if (commandCount > 0) {
+    parts.push(`已运行 ${formatChineseCount(commandCount, "条命令")}`);
+  }
+  if (createdFiles > 0) {
+    parts.push(`已创建 ${formatChineseCount(createdFiles, "个文件")}`);
+  }
+  if (editedFiles > 0) {
+    parts.push(`已编辑 ${formatChineseCount(editedFiles, "个文件")}`);
+  }
+  if (deletedFiles > 0) {
+    parts.push(`已删除 ${formatChineseCount(deletedFiles, "个文件")}`);
+  }
+  if (parts.length > 0) {
+    return parts.join(",");
+  }
+  const toolCount = countToolCalls(items);
+  return toolCount > 0 ? `已处理 ${formatChineseCount(toolCount, "个操作")}` : "已处理";
+}
+
+function buildToolGroupEntries(items: ToolGroupItem[]): MessageListEntry[] {
+  const normalizedBuffer = mergeConsecutiveExploreRuns(items);
+  const toolCount = countToolCalls(normalizedBuffer);
+  const messageCount = countNonToolMessages(normalizedBuffer);
+  if (toolCount === 0 || normalizedBuffer.length === 1) {
+    return normalizedBuffer.map((item) => ({ kind: "item", item }));
+  }
+  return [
+    {
+      kind: "toolGroup",
+      group: {
+        id: normalizedBuffer[0].id,
+        items: normalizedBuffer,
+        toolCount,
+        messageCount,
+      },
+    },
+  ];
+}
+
+function buildAssistantTurnEntry(segment: ConversationItem[]): MessageListEntry[] {
+  const assistantMessages = segment.filter(isAssistantMessage);
+  if (assistantMessages.length === 0) {
+    const entries: MessageListEntry[] = [];
+    let activityBuffer: ToolGroupItem[] = [];
+    const flushActivity = () => {
+      if (activityBuffer.length > 0) {
+        entries.push(...buildToolGroupEntries(activityBuffer));
+        activityBuffer = [];
+      }
+    };
+    segment.forEach((item) => {
+      if (isToolGroupItem(item)) {
+        activityBuffer.push(item);
+      } else {
+        flushActivity();
+        entries.push({ kind: "item", item });
+      }
+    });
+    flushActivity();
+    return entries;
+  }
+
+  const blocks: AssistantTurnBlock[] = [];
+  let activityBuffer: ToolGroupItem[] = [];
+  let messageBuffer: Extract<ConversationItem, { kind: "message" }>[] = [];
+
+  const flushMessages = () => {
+    if (messageBuffer.length === 0) {
+      return;
+    }
+    const first = messageBuffer[0];
+    const last = messageBuffer[messageBuffer.length - 1];
+    const text = messageBuffer
+      .map((message) => message.text.trim())
+      .filter(Boolean)
+      .join("\n\n");
+    blocks.push({
+      kind: "message",
+      message: {
+        ...last,
+        id: `assistant-turn-message-${first.id}-${last.id}`,
+        kind: "message",
+        role: "assistant",
+        text,
+      },
+    });
+    messageBuffer = [];
+  };
+
+  const flushActivity = () => {
+    if (activityBuffer.length === 0) {
+      return;
+    }
+    const activity = mergeConsecutiveExploreRuns(activityBuffer);
+    const first = activity[0];
+    const last = activity[activity.length - 1];
+    blocks.push({
+      kind: "activity",
+      id: `assistant-turn-activity-${first.id}-${last.id}`,
+      summary: formatActivitySummary(activity),
+      items: activity,
+      toolCount: countToolCalls(activity),
+      messageCount: countNonToolMessages(activity),
+      durationMs: sumActivityDuration(activity),
+    });
+    activityBuffer = [];
+  };
+
+  segment.forEach((item) => {
+    if (isAssistantMessage(item)) {
+      flushActivity();
+      messageBuffer.push(item);
+      return;
+    }
+    if (isToolGroupItem(item)) {
+      flushMessages();
+      activityBuffer.push(item);
+      return;
+    }
+    flushActivity();
+    flushMessages();
+  });
+  flushActivity();
+  flushMessages();
+
+  const hasActivity = blocks.some((block) => block.kind === "activity");
+  if (!hasActivity && blocks.length === 1 && blocks[0].kind === "message") {
+    return [{ kind: "item", item: blocks[0].message }];
+  }
+
+  const activityBlocks = blocks.filter(
+    (block): block is AssistantTurnActivityBlock => block.kind === "activity",
+  );
+  const toolCount = activityBlocks.reduce((total, block) => total + block.toolCount, 0);
+  const messageCount = activityBlocks.reduce((total, block) => total + block.messageCount, 0);
+  const durationValues = activityBlocks
+    .map((block) => block.durationMs)
+    .filter((duration): duration is number => duration !== null);
+  const durationMs =
+    durationValues.length > 0
+      ? durationValues.reduce((total, duration) => total + duration, 0)
+      : null;
+  const firstSegmentItem = segment[0];
+  const lastSegmentItem = segment[segment.length - 1];
+  return [
+    {
+      kind: "assistantTurn",
+      turn: {
+        id: `assistant-turn-${firstSegmentItem.id}-${lastSegmentItem.id}`,
+        blocks,
+        toolCount,
+        messageCount,
+        durationMs,
+      },
+    },
+  ];
 }
 
 export function buildToolGroups(items: ConversationItem[]): MessageListEntry[] {
@@ -317,6 +608,35 @@ export function buildToolGroups(items: ConversationItem[]): MessageListEntry[] {
     }
   });
   flush();
+  return entries;
+}
+
+export function buildMessageEntries(items: ConversationItem[]): MessageListEntry[] {
+  const entries: MessageListEntry[] = [];
+  let segment: ConversationItem[] = [];
+
+  const flushSegment = () => {
+    if (segment.length === 0) {
+      return;
+    }
+    entries.push(...buildAssistantTurnEntry(segment));
+    segment = [];
+  };
+
+  items.forEach((item) => {
+    if (isUserMessage(item)) {
+      flushSegment();
+      entries.push({ kind: "item", item });
+      return;
+    }
+    if (isAssistantMessage(item) || isToolGroupItem(item)) {
+      segment.push(item);
+      return;
+    }
+    flushSegment();
+    entries.push({ kind: "item", item });
+  });
+  flushSegment();
   return entries;
 }
 

@@ -1,9 +1,12 @@
 .file-tree-panel {
+  --file-tree-ui-font-size: var(--ui-font-size, 13px);
+  --file-tree-font-size-xs: calc(var(--file-tree-ui-font-size) * 0.77);
+  --file-tree-font-size-sm: calc(var(--file-tree-ui-font-size) * 0.85);
   gap: 7px;
 }
 
 .file-tree-count {
-  font-size: 11px;
+  font-size: var(--file-tree-font-size-sm);
   color: var(--text-faint);
 }
 
@@ -86,7 +89,7 @@
 }
 
 .file-tree-empty {
-  font-size: 12px;
+  font-size: var(--file-tree-font-size-sm);
   color: var(--text-faint);
 }
 
@@ -121,7 +124,8 @@
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-emphasis);
-  font-size: 11px;
+  font-size: var(--file-tree-font-size-sm);
+  font-weight: 400;
   text-align: left;
   width: 100%;
   box-sizing: border-box;
@@ -147,7 +151,7 @@
 }
 
 .file-tree-row.is-folder {
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .file-tree-chevron {
@@ -253,7 +257,7 @@
 }
 
 .file-preview-path {
-  font-size: 12px;
+  font-size: var(--file-tree-font-size-sm);
   color: var(--text-strong);
   white-space: nowrap;
   overflow: hidden;
@@ -261,7 +265,7 @@
 }
 
 .file-preview-warning {
-  font-size: 10px;
+  font-size: var(--file-tree-font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-faint);
@@ -272,7 +276,7 @@
 }
 
 .file-preview-status {
-  font-size: 12px;
+  font-size: var(--file-tree-font-size-sm);
   color: var(--text-faint);
 }
 
@@ -316,7 +320,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: 11px;
+  font-size: var(--file-tree-font-size-sm);
   color: var(--text-faint);
 }
 
@@ -331,7 +335,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--file-tree-font-size-xs);
   color: var(--text-fainter);
 }
 
@@ -350,7 +354,7 @@
   align-items: center;
   padding: 6px 12px;
   min-height: 30px;
-  font-size: 12px;
+  font-size: var(--file-tree-font-size-sm);
   line-height: 1.2;
   border-radius: 10px;
 }

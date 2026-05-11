@@ -298,6 +298,43 @@ function buildPlanExportFileName(itemId: string) {
   return normalized.startsWith("plan-") ? `${normalized}.md` : `plan-${normalized}.md`;
 }
 
+function countDiffStats(diff?: string) {
+  if (!diff) {
+    return { additions: 0, deletions: 0 };
+  }
+  let additions = 0;
+  let deletions = 0;
+  for (const line of diff.split(/\r?\n/)) {
+    if (line.startsWith("+++") || line.startsWith("---")) {
+      continue;
+    }
+    if (line.startsWith("+")) {
+      additions += 1;
+    } else if (line.startsWith("-")) {
+      deletions += 1;
+    }
+  }
+  return { additions, deletions };
+}
+
+function formatFileChangeSummary(
+  changes: NonNullable<Extract<ConversationItem, { kind: "tool" }>["changes"]>,
+) {
+  if (changes.length === 0) {
+    return "changes";
+  }
+  if (changes.length > 1) {
+    return `${changes.length} files`;
+  }
+  const change = changes[0];
+  const { additions, deletions } = countDiffStats(change.diff);
+  const stats = [
+    additions > 0 ? `+${additions}` : "",
+    deletions > 0 ? `-${deletions}` : "",
+  ].filter(Boolean);
+  return [basename(change.path), ...stats].filter(Boolean).join(" ");
+}
+
 export const WorkingIndicator = memo(function WorkingIndicator({
   isThinking,
   processingStartedAt = null,
@@ -444,7 +481,7 @@ export const MessageRow = memo(function MessageRow({
     <div className={`message ${item.role}`}>
       <div
         ref={bubbleRef}
-        className={`bubble message-bubble${isTableOnlyAssistantMessage ? " message-bubble-table-only" : ""}`}
+        className={`bubble message-bubble${isTableOnlyAssistantMessage ? " message-bubble-table-only" : ""}${imageItems.length > 0 ? " message-bubble-with-images" : ""}`}
       >
         {imageItems.length > 0 && (
           <MessageImageGrid
@@ -701,24 +738,18 @@ export const ToolRow = memo(function ToolRow({
     ? item.title.replace(/^Command:\s*/i, "").trim()
     : "";
   const summary = buildToolSummary(item, commandText);
-  const changeNames = (item.changes ?? [])
-    .map((change) => basename(change.path))
-    .filter(Boolean);
-  const hasChanges = changeNames.length > 0;
+  const fileChanges = item.changes ?? [];
+  const hasChanges = fileChanges.length > 0;
   const tone = toolStatusTone(item, hasChanges);
   const ToolIcon = toolIconForSummary(item, summary);
   const summaryLabel = isFileChange
-    ? changeNames.length > 1
-      ? "files edited"
-      : "file edited"
+    ? "edited"
     : isCommand
       ? ""
       : summary.label;
   const inlineStatus = formatToolStatusLabel(item);
   const summaryValue = isFileChange
-    ? changeNames.length > 1
-      ? `${changeNames[0]} +${changeNames.length - 1}`
-      : changeNames[0] || "changes"
+    ? formatFileChangeSummary(fileChanges)
     : summary.value;
   const shouldFadeCommand =
     isCommand && !isExpanded && (summaryValue?.length ?? 0) > 80;
@@ -730,6 +761,7 @@ export const ToolRow = memo(function ToolRow({
   const isLongRunning = commandDurationMs !== null && commandDurationMs >= 1200;
   const [showLiveOutput, setShowLiveOutput] = useState(false);
   const [isExportingPlan, setIsExportingPlan] = useState(false);
+  const [copiedChangeKey, setCopiedChangeKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isCommandRunning) {
@@ -777,6 +809,34 @@ export const ToolRow = memo(function ToolRow({
       }
     },
     [item.id, summary.output],
+  );
+
+  const handleCopyFileDiff = useCallback(
+    async (
+      event: MouseEvent<HTMLButtonElement>,
+      key: string,
+      diff: string,
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!diff.trim()) {
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(diff);
+        setCopiedChangeKey(key);
+        window.setTimeout(() => {
+          setCopiedChangeKey((current) => (current === key ? null : current));
+        }, 1400);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to copy diff.";
+        pushErrorToast({
+          title: "Copy failed",
+          message,
+        });
+      }
+    },
+    [],
   );
 
   return (
@@ -832,28 +892,52 @@ export const ToolRow = memo(function ToolRow({
         )}
         {isExpanded && isFileChange && hasChanges && (
           <div className="tool-inline-change-list">
-            {item.changes?.map((change, index) => (
-              <div
-                key={`${change.path}-${index}`}
-                className="tool-inline-change"
-              >
-                <div className="tool-inline-change-header">
-                  {change.kind && (
-                    <span className="tool-inline-change-kind">
-                      {change.kind.toUpperCase()}
+            {fileChanges.map((change, index) => {
+              const changeKey = `${change.path}-${index}`;
+              const { additions, deletions } = countDiffStats(change.diff);
+              return (
+                <div
+                  key={changeKey}
+                  className="message-file-diff-card"
+                >
+                  <div className="message-file-diff-header">
+                    <span className="message-file-diff-name" title={change.path}>
+                      {basename(change.path)}
                     </span>
-                  )}
-                  <span className="tool-inline-change-path">
-                    {basename(change.path)}
-                  </span>
-                </div>
-                {change.diff && (
-                  <div className="diff-viewer-output">
-                    <PierreDiffBlock diff={change.diff} displayPath={change.path} />
+                    {additions > 0 && (
+                      <span className="message-file-diff-stat message-file-diff-stat-add">
+                        +{additions}
+                      </span>
+                    )}
+                    {deletions > 0 && (
+                      <span className="message-file-diff-stat message-file-diff-stat-del">
+                        -{deletions}
+                      </span>
+                    )}
+                    {change.diff && (
+                      <button
+                        type="button"
+                        className="message-file-diff-copy"
+                        onClick={(event) => handleCopyFileDiff(event, changeKey, change.diff ?? "")}
+                        aria-label={`Copy ${basename(change.path)} diff`}
+                        title="Copy diff"
+                      >
+                        {copiedChangeKey === changeKey ? (
+                          <Check size={12} aria-hidden />
+                        ) : (
+                          <Copy size={12} aria-hidden />
+                        )}
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                  {change.diff && (
+                    <div className="message-file-diff-body">
+                      <PierreDiffBlock diff={change.diff} displayPath={change.path} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
         {isExpanded && isFileChange && !hasChanges && item.detail && (
@@ -898,21 +982,10 @@ export const ToolRow = memo(function ToolRow({
 });
 
 export const ExploreRow = memo(function ExploreRow({ item }: ExploreRowProps) {
-  const title = item.status === "exploring" ? "Exploring" : "Explored";
   return (
     <div className="tool-inline explore-inline">
       <div className="tool-inline-bar-toggle" aria-hidden />
       <div className="tool-inline-content">
-        <div className="explore-inline-header">
-          <Terminal
-            className={`tool-inline-icon ${
-              item.status === "exploring" ? "processing" : "completed"
-            }`}
-            size={14}
-            aria-hidden
-          />
-          <span className="explore-inline-title">{title}</span>
-        </div>
         <div className="explore-inline-list">
           {item.entries.map((entry, index) => (
             <div key={`${entry.kind}-${entry.label}-${index}`} className="explore-inline-item">

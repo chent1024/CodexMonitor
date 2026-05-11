@@ -11,7 +11,7 @@ import {
   isSubagentThreadSource,
   shouldHideSubagentThreadFromSidebar,
 } from "@threads/utils/threadRpc";
-import { clampThreadName } from "@threads/utils/threadNaming";
+import { getThreadDisplayTitle } from "@threads/utils/threadNaming";
 
 type BuildThreadSummaryFromThreadOptions = {
   workspaceId: string;
@@ -51,7 +51,7 @@ export function buildThreadSummaryFromThread({
   const fallbackName = `Agent ${fallbackIndex + 1}`;
   const name = customName
     ? customName
-    : clampThreadName(preview) ?? fallbackName;
+    : getThreadDisplayTitle(thread, preview) ?? fallbackName;
   const metadata = extractThreadCodexMetadata(thread);
   if (shouldHideSubagentThreadFromSidebar(thread.source)) {
     return null;

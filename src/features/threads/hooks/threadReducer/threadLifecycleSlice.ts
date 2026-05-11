@@ -20,30 +20,57 @@ export function reduceThreadLifecycle(
 ): ThreadState {
   switch (action.type) {
     case "setActiveThreadId":
-      return {
-        ...state,
-        activeThreadIdByWorkspace: {
-          ...state.activeThreadIdByWorkspace,
-          [action.workspaceId]: action.threadId,
-        },
-        threadStatusById: action.threadId
+      {
+        const currentActiveThreadId =
+          state.activeThreadIdByWorkspace[action.workspaceId] ?? null;
+        const shouldUpdateActiveThreadId =
+          currentActiveThreadId !== action.threadId;
+        const nextActiveThreadIdByWorkspace = shouldUpdateActiveThreadId
           ? {
-              ...state.threadStatusById,
-              [action.threadId]: {
-                isProcessing:
-                  state.threadStatusById[action.threadId]?.isProcessing ?? false,
-                hasUnread: false,
-                isReviewing:
-                  state.threadStatusById[action.threadId]?.isReviewing ?? false,
-                processingStartedAt:
-                  state.threadStatusById[action.threadId]?.processingStartedAt ??
-                  null,
-                lastDurationMs:
-                  state.threadStatusById[action.threadId]?.lastDurationMs ?? null,
-              },
+              ...state.activeThreadIdByWorkspace,
+              [action.workspaceId]: action.threadId,
             }
-          : state.threadStatusById,
-      };
+          : state.activeThreadIdByWorkspace;
+        if (!action.threadId) {
+          if (!shouldUpdateActiveThreadId) {
+            return state;
+          }
+          return {
+            ...state,
+            activeThreadIdByWorkspace: nextActiveThreadIdByWorkspace,
+          };
+        }
+        const previousStatus = state.threadStatusById[action.threadId];
+        if (previousStatus && previousStatus.hasUnread === false) {
+          if (!shouldUpdateActiveThreadId) {
+            return state;
+          }
+          return {
+            ...state,
+            activeThreadIdByWorkspace: nextActiveThreadIdByWorkspace,
+          };
+        }
+        const nextStatus: ThreadStatus = previousStatus
+          ? {
+              ...previousStatus,
+              hasUnread: false,
+            }
+          : {
+              isProcessing: false,
+              hasUnread: false,
+              isReviewing: false,
+              processingStartedAt: null,
+              lastDurationMs: null,
+            };
+        return {
+          ...state,
+          activeThreadIdByWorkspace: nextActiveThreadIdByWorkspace,
+          threadStatusById: {
+            ...state.threadStatusById,
+            [action.threadId]: nextStatus,
+          },
+        };
+      }
     case "ensureThread": {
       const hidden =
         state.hiddenThreadIdsByWorkspace[action.workspaceId]?.[action.threadId] ??

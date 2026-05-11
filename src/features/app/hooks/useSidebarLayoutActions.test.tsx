@@ -16,6 +16,8 @@ const workspace: WorkspaceInfo = {
 describe("useSidebarLayoutActions", () => {
   it("keeps handlers referentially stable across unrelated rerenders", () => {
     const options = {
+      activeWorkspaceId: "ws-1",
+      activeThreadId: "thread-1",
       openSettings: vi.fn(),
       resetPullRequestSelection: vi.fn(),
       clearDraftState: vi.fn(),
@@ -41,12 +43,12 @@ describe("useSidebarLayoutActions", () => {
     } as const;
 
     const { result, rerender } = renderHook(
-      ({ tick }: { tick: number }) => {
+      ({ tick, activeThreadId }: { tick: number; activeThreadId: string | null }) => {
         void tick;
-        return useSidebarLayoutActions(options);
+        return useSidebarLayoutActions({ ...options, activeThreadId });
       },
       {
-        initialProps: { tick: 0 },
+        initialProps: { tick: 0, activeThreadId: "thread-1" },
       },
     );
 
@@ -57,7 +59,7 @@ describe("useSidebarLayoutActions", () => {
       onLoadOlderThreads: result.current.onLoadOlderThreads,
     };
 
-    rerender({ tick: 1 });
+    rerender({ tick: 1, activeThreadId: "thread-2" });
 
     expect(result.current.onSelectWorkspace).toBe(firstRefs.onSelectWorkspace);
     expect(result.current.onSelectThread).toBe(firstRefs.onSelectThread);
@@ -73,6 +75,8 @@ describe("useSidebarLayoutActions", () => {
     const setActiveThreadId = vi.fn();
     const { result } = renderHook(() =>
       useSidebarLayoutActions({
+        activeWorkspaceId: "ws-1",
+        activeThreadId: null,
         openSettings: vi.fn(),
         resetPullRequestSelection,
         clearDraftState: vi.fn(),
@@ -114,6 +118,8 @@ describe("useSidebarLayoutActions", () => {
     const setActiveTab = vi.fn();
     const { result } = renderHook(() =>
       useSidebarLayoutActions({
+        activeWorkspaceId: "ws-1",
+        activeThreadId: null,
         openSettings: vi.fn(),
         resetPullRequestSelection: vi.fn(),
         clearDraftState: vi.fn(),
@@ -145,5 +151,51 @@ describe("useSidebarLayoutActions", () => {
 
     expect(connectWorkspace).toHaveBeenCalledWith(workspace);
     expect(setActiveTab).toHaveBeenCalledWith("codex");
+  });
+
+  it("does nothing when selecting the already active thread", () => {
+    const exitDiffView = vi.fn();
+    const resetPullRequestSelection = vi.fn();
+    const clearDraftState = vi.fn();
+    const selectWorkspace = vi.fn();
+    const setActiveThreadId = vi.fn();
+    const { result } = renderHook(() =>
+      useSidebarLayoutActions({
+        activeWorkspaceId: "ws-1",
+        activeThreadId: "thread-1",
+        openSettings: vi.fn(),
+        resetPullRequestSelection,
+        clearDraftState,
+        clearDraftStateIfDifferentWorkspace: vi.fn(),
+        selectHome: vi.fn(),
+        exitDiffView,
+        selectWorkspace,
+        setActiveThreadId,
+        connectWorkspace: vi.fn(async () => {}),
+        isCompact: false,
+        setActiveTab: vi.fn(),
+        workspacesById: new Map([[workspace.id, workspace]]),
+        updateWorkspaceSettings: vi.fn(async () => workspace),
+        removeThread: vi.fn(),
+        clearDraftForThread: vi.fn(),
+        removeImagesForThread: vi.fn(),
+        refreshThread: vi.fn(async () => {}),
+        handleRenameThread: vi.fn(),
+        removeWorkspace: vi.fn(async () => {}),
+        removeWorktree: vi.fn(async () => {}),
+        loadOlderThreadsForWorkspace: vi.fn(async () => {}),
+        listThreadsForWorkspace: vi.fn(async () => {}),
+      }),
+    );
+
+    act(() => {
+      result.current.onSelectThread("ws-1", "thread-1");
+    });
+
+    expect(exitDiffView).not.toHaveBeenCalled();
+    expect(resetPullRequestSelection).not.toHaveBeenCalled();
+    expect(clearDraftState).not.toHaveBeenCalled();
+    expect(selectWorkspace).not.toHaveBeenCalled();
+    expect(setActiveThreadId).not.toHaveBeenCalled();
   });
 });

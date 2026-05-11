@@ -54,6 +54,44 @@ describe("useThreadSelectors", () => {
     expect(result.current.activeItems).toEqual([]);
   });
 
+  it("does not rebuild active items when another thread updates", () => {
+    const activeItems = [messageItem];
+    const initialItemsByThread: Record<string, ConversationItem[]> = {
+      "thread-1": activeItems,
+      "thread-2": [],
+    };
+    const { result, rerender } = renderHook(
+      ({ itemsByThread }: { itemsByThread: Record<string, ConversationItem[]> }) =>
+        useThreadSelectors({
+          activeWorkspaceId: "workspace-1",
+          activeThreadIdByWorkspace: { "workspace-1": "thread-1" },
+          itemsByThread,
+          threadsByWorkspace: {},
+        }),
+      {
+        initialProps: {
+          itemsByThread: initialItemsByThread,
+        },
+      },
+    );
+    const firstActiveItems = result.current.activeItems;
+
+    rerender({
+      itemsByThread: {
+        "thread-1": activeItems,
+        "thread-2": [
+          {
+            ...messageItem,
+            id: "item-2",
+            text: "Other thread",
+          },
+        ],
+      },
+    });
+
+    expect(result.current.activeItems).toBe(firstActiveItems);
+  });
+
   it("enriches collab tool items from active workspace thread metadata", () => {
     const collabItem: ConversationItem = {
       id: "collab-1",
