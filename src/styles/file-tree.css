@@ -9,6 +9,8 @@
   width: 22px;
   height: 22px;
   padding: 0;
+  border-color: transparent;
+  background: transparent;
 }
 
 .file-tree-toggle svg {
@@ -22,6 +24,8 @@
   height: 22px;
   border-radius: 5px;
   padding: 0;
+  border-color: transparent;
+  background: transparent;
   color: var(--text-faint);
 }
 
