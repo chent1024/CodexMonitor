@@ -67,14 +67,14 @@
   --text-accent: rgba(164, 195, 255, 0.7);
   --message-link-color: rgba(196, 154, 255, 0.96);
   --shadow-accent: rgba(92, 168, 255, 0.28);
-  --titlebar-inset-left: 72px;
+  --titlebar-inset-left: 36px;
   --titlebar-height: 24px;
   --titlebar-toggle-size: 24px;
   --titlebar-toggle-offset: 0px;
-  --titlebar-collapsed-left-extra: 14px;
+  --titlebar-collapsed-left-extra: 30px;
   --titlebar-toggle-title-offset: -6px;
-  --titlebar-toggle-side-gap: 12px;
-  --topbar-compact-padding: 16px;
+  --titlebar-toggle-side-gap: 6px;
+  --topbar-compact-padding: 8px;
   --status-success: rgba(120, 235, 190, 0.95);
   --status-warning: rgba(255, 175, 85, 0.95);
   --status-error: rgba(255, 110, 110, 0.95);

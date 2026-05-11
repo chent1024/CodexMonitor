@@ -20,6 +20,7 @@ import { useMenuController } from "../hooks/useMenuController";
 
 type MainHeaderProps = {
   workspace: WorkspaceInfo;
+  threadTitle?: string | null;
   parentName?: string | null;
   worktreeLabel?: string | null;
   disableBranchMenu?: boolean;
@@ -73,6 +74,7 @@ type MainHeaderProps = {
 
 export function MainHeader({
   workspace,
+  threadTitle = null,
   parentName = null,
   worktreeLabel = null,
   disableBranchMenu = false,
@@ -178,7 +180,7 @@ export function MainHeader({
       <div className="workspace-header">
         <div className="workspace-title-line">
           <span className="workspace-title">
-            {parentName ? parentName : workspace.name}
+            {threadTitle ?? (parentName ?? workspace.name)}
           </span>
           <span className="workspace-separator" aria-hidden>
             ›

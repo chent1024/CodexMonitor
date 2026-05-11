@@ -2,6 +2,8 @@ export type ThreadStatusFlags = {
   isProcessing?: boolean;
   hasUnread?: boolean;
   isReviewing?: boolean;
+  processingStartedAt?: number | null;
+  lastDurationMs?: number | null;
 };
 
 export type ThreadStatusById = Record<string, ThreadStatusFlags>;

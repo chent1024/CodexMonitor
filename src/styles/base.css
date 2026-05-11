@@ -56,6 +56,9 @@ body {
   overflow: hidden;
   position: relative;
   --main-topbar-height: 42px;
+  --titlebar-inset-left: 36px;
+  --titlebar-collapsed-left-extra: 30px;
+  --titlebar-toggle-side-gap: 6px;
   /* Shared Codex Monitor chrome language */
   --cm-surface-row: color-mix(in srgb, var(--surface-card) 44%, transparent);
   --cm-surface-panel-soft: color-mix(in srgb, var(--surface-card) 56%, transparent);
@@ -128,19 +131,19 @@ body {
 
 
 .titlebar-toggle-left {
-  left: calc(10px + var(--titlebar-inset-left, 0px));
+  left: calc(5px + var(--titlebar-inset-left, 0px));
 }
 
 .app.sidebar-collapsed .titlebar-toggle-left {
   left: calc(
-    10px
+    5px
     + var(--titlebar-inset-left, 0px)
     + var(--titlebar-collapsed-left-extra, 0px)
   );
 }
 
 .titlebar-toggle-right {
-  right: calc(10px + var(--window-caption-width, 0px) + var(--window-caption-gap, 0px));
+  right: calc(5px + var(--window-caption-width, 0px) + var(--window-caption-gap, 0px));
 }
 
 .window-caption-controls {

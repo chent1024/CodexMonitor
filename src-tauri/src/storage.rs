@@ -231,7 +231,17 @@ fn migrate_automatic_app_update_checks_setting(value: &mut Value) -> bool {
         return false;
     };
     match root.get_mut("automaticAppUpdateChecksEnabled") {
-        Some(Value::Bool(_)) => false,
+        Some(Value::Bool(current)) => {
+            if *current {
+                root.insert(
+                    "automaticAppUpdateChecksEnabled".to_string(),
+                    Value::Bool(false),
+                );
+                true
+            } else {
+                false
+            }
+        }
         Some(_) => {
             root.insert(
                 "automaticAppUpdateChecksEnabled".to_string(),
@@ -525,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn read_settings_keeps_explicit_automatic_app_update_checks_setting() {
+    fn read_settings_migrates_explicit_automatic_app_update_checks_setting_to_false() {
         let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");
         let path = temp_dir.join("settings.json");
@@ -537,6 +547,6 @@ mod tests {
         .expect("write settings");
 
         let settings = read_settings(&path).expect("read settings");
-        assert!(settings.automatic_app_update_checks_enabled);
+        assert!(!settings.automatic_app_update_checks_enabled);
     }
 }

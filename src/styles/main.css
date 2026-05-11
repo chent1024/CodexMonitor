@@ -10,7 +10,7 @@
   min-width: 0;
   --main-panel-padding: clamp(14px, 1.5vw, 22px);
   --conversation-side-padding: 44px;
-  --main-topbar-side-padding: var(--conversation-side-padding);
+  --main-topbar-side-padding: calc(var(--conversation-side-padding) / 2);
   --main-ui-font-size: var(--ui-font-size, 13px);
   --main-font-size-xs: calc(var(--main-ui-font-size) * 0.77);
   --main-font-size-sm: calc(var(--main-ui-font-size) * 0.85);
@@ -696,7 +696,10 @@
   background: rgba(12, 16, 26, 0.94);
   color: var(--text-stronger);
   border-radius: 8px;
-  padding: 6px 8px;
+  padding: 2px 8px;
+  height: 20px;
+  box-sizing: border-box;
+  line-height: 1;
   font-size: var(--main-font-size-sm);
   flex: 1;
 }
@@ -847,7 +850,10 @@
   border-radius: 8px;
   background: var(--surface-card);
   color: var(--text-stronger);
-  padding: 6px 8px;
+  padding: 2px 8px;
+  height: 20px;
+  box-sizing: border-box;
+  line-height: 1;
   font-size: var(--main-font-size-sm);
 }
 

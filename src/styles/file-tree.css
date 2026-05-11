@@ -5,11 +5,6 @@
   gap: 7px;
 }
 
-.file-tree-count {
-  font-size: var(--file-tree-font-size-sm);
-  color: var(--text-faint);
-}
-
 .file-tree-toggle {
   width: 22px;
   height: 22px;

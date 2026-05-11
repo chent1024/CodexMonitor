@@ -77,8 +77,8 @@ export function useAppShellOrchestration({
         ? "calc(var(--main-topbar-height, 44px) + 6px)"
         : "12px",
       "--home-scroll-offset": isWindows ? "var(--main-topbar-height, 44px)" : "0px",
-      "--window-caption-width": isWindows ? "138px" : "0px",
-      "--window-caption-gap": isWindows ? "10px" : "0px",
+      "--window-caption-width": isWindows ? "114px" : "0px",
+      "--window-caption-gap": isWindows ? "5px" : "0px",
       ...(isWindows
         ? {
             "--titlebar-height": "8px",
@@ -89,7 +89,7 @@ export function useAppShellOrchestration({
             "--titlebar-inset-left": "0px",
             "--titlebar-collapsed-left-extra": "0px",
             "--titlebar-toggle-size": "32px",
-            "--titlebar-toggle-side-gap": "14px",
+            "--titlebar-toggle-side-gap": "7px",
             "--titlebar-toggle-title-offset": "0px",
             "--titlebar-toggle-offset": "0px",
           }

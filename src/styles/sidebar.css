@@ -928,7 +928,7 @@
 .workspace-summary {
   margin-top: 6px;
   padding-left: 31px;
-  font-size: calc(var(--sidebar-ui-font-size) * 0.8125);
+  font-size: calc(var(--sidebar-ui-font-size) * 0.9375);
   line-height: 1.25;
   color: var(--text-muted);
   white-space: nowrap;
@@ -1105,10 +1105,10 @@
 .thread-row {
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-height: 43px;
-  padding: 8px 12px 8px calc(40px + var(--thread-indent, 0px));
-  border-radius: 12px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px 4px calc(32px + var(--thread-indent, 0px));
+  border-radius: 10px;
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-quiet);
@@ -1141,10 +1141,10 @@
 
 .thread-row.is-nested {
   margin-left: 3px;
-  gap: 6px;
-  min-height: 34px;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  gap: 5px;
+  min-height: 28px;
+  padding-top: 3px;
+  padding-bottom: 3px;
 }
 
 .thread-status {
@@ -1206,7 +1206,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .thread-row.is-nested .thread-content {
@@ -1216,7 +1216,7 @@
 .thread-headline {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -1228,11 +1228,11 @@
   white-space: nowrap;
   font-size: calc(var(--sidebar-ui-font-size) * 0.9375);
   font-weight: 500;
-  line-height: 1.22;
+  line-height: 1.08;
 }
 
 .thread-row.active .thread-name {
-  font-size: calc(var(--sidebar-ui-font-size) * 0.9375);
+  font-size: inherit;
   font-weight: 600;
 }
 

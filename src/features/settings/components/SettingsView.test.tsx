@@ -113,7 +113,7 @@ const baseSettings: AppSettings = {
   showMessageFilePath: true,
   chatHistoryScrollbackItems: 200,
   threadTitleAutogenerationEnabled: false,
-  automaticAppUpdateChecksEnabled: true,
+  automaticAppUpdateChecksEnabled: false,
   uiFontFamily:
     'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   uiFontSize: 13,

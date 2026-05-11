@@ -711,17 +711,6 @@ export function FileTreePanel({
       headerClassName="git-panel-header"
       headerRight={
         <PanelMeta className="file-tree-meta">
-          <div className="file-tree-count">
-            {visibleEntries.length
-              ? filterMode === "modified"
-                ? `${visibleEntries.length} modified`
-                : `${visibleEntries.length} file${visibleEntries.length === 1 ? "" : "s"}`
-              : showLoading
-                ? "Loading files"
-                : filterMode === "modified"
-                  ? "No modified"
-                  : "No files"}
-          </div>
           {hasFolders ? (
             <button
               type="button"

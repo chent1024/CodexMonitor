@@ -572,6 +572,12 @@ function buildPrimarySurface({
     mainHeaderProps: activeWorkspace
       ? {
           workspace: activeWorkspace,
+          threadTitle: (() => {
+            const threads = threadsByWorkspace[activeWorkspace.id] ?? [];
+            const activeThread = threads.find((thread) => thread.id === activeThreadId);
+            const activeThreadName = activeThread?.name?.trim();
+            return activeThreadName && activeThreadName.length > 0 ? activeThreadName : null;
+          })(),
           parentName: worktreeState.activeParentWorkspace?.name ?? null,
           worktreeLabel: worktreeState.worktreeLabel,
           worktreeRename: worktreeState.worktreeRename ?? undefined,
