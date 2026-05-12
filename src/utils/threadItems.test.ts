@@ -900,6 +900,66 @@ describe("threadItems", () => {
     }
   });
 
+  it("builds OpenAI conversation item type branches", () => {
+    const assistant = buildConversationItem({
+      type: "assistant-message",
+      id: "assistant-openai-1",
+      text: "Assistant branch",
+    });
+    expect(assistant).toMatchObject({
+      kind: "message",
+      role: "assistant",
+      itemType: "assistant-message",
+      text: "Assistant branch",
+    });
+
+    const user = buildConversationItem({
+      type: "user-message",
+      id: "user-openai-1",
+      text: "User branch",
+    });
+    expect(user).toMatchObject({
+      kind: "message",
+      role: "user",
+      itemType: "user-message",
+      text: "User branch",
+    });
+
+    [
+      "auto-review-interruption-warning",
+      "automation-update",
+      "automatic-approval-review",
+      "dynamic-tool-call",
+      "forked-from-conversation",
+      "generated-image",
+      "model-rerouted",
+      "multi-agent-action",
+      "personality-changed",
+      "plan-implementation",
+      "proposed-plan",
+      "steered",
+      "turn-diff",
+      "user-input-response",
+      "worked-for",
+    ].forEach((type) => {
+      const item = buildConversationItem({
+        type,
+        id: `${type}-1`,
+        title: type,
+        detail: "detail",
+        url: "data:image/png;base64,AAA",
+      });
+      expect(item).not.toBeNull();
+      expect(item).toMatchObject({
+        kind: "tool",
+        itemType: type,
+      });
+      if (item?.kind === "tool" && type === "generated-image") {
+        expect(item.generatedImage).toBe("data:image/png;base64,AAA");
+      }
+    });
+  });
+
   it("parses ISO timestamps for thread updates", () => {
     const timestamp = getThreadTimestamp({ updated_at: "2025-01-01T00:00:00Z" });
     expect(timestamp).toBe(Date.parse("2025-01-01T00:00:00Z"));

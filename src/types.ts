@@ -87,6 +87,40 @@ export type Message = {
   text: string;
 };
 
+export type OpenAIConversationItemType =
+  | "assistant-message"
+  | "auto-review-interruption-warning"
+  | "automation-update"
+  | "automatic-approval-review"
+  | "context-compaction"
+  | "dynamic-tool-call"
+  | "exec"
+  | "forked-from-conversation"
+  | "generated-image"
+  | "hook"
+  | "mcp-server-elicitation"
+  | "mcp-tool-call"
+  | "model-changed"
+  | "model-rerouted"
+  | "multi-agent-action"
+  | "patch"
+  | "permission-request"
+  | "personality-changed"
+  | "plan-implementation"
+  | "proposed-plan"
+  | "reasoning"
+  | "remote-task-created"
+  | "steered"
+  | "stream-error"
+  | "system-error"
+  | "todo-list"
+  | "turn-diff"
+  | "user-input-response"
+  | "user-message"
+  | "userInput"
+  | "web-search"
+  | "worked-for";
+
 export type CollabAgentRef = {
   threadId: string;
   nickname?: string;
@@ -103,7 +137,49 @@ export type ConversationItem =
       kind: "message";
       role: "user" | "assistant";
       text: string;
+      itemType?: OpenAIConversationItemType;
       images?: string[];
+      attachments?: { path: string; label?: string; kind?: string }[];
+      parentContext?: {
+        sourceConversationId: string;
+        label?: string;
+        kind?: "parent-context" | "thread-fork";
+      } | null;
+      codexDelegation?: {
+        sourceThreadId: string;
+        label?: string;
+      } | null;
+      heartbeatTrigger?: {
+        automationId: string;
+        label?: string;
+      } | null;
+      forkedFromConversation?: {
+        sourceConversationId: string;
+        label?: string;
+      } | null;
+      sentAtMs?: number | null;
+      messageStatus?: string | null;
+      referencesPriorConversation?: boolean;
+      reviewMode?: boolean;
+      pullRequestFixMode?: boolean;
+      autoResolveSync?: boolean;
+      commentCount?: number;
+      browserCommentCount?: number;
+      diffCommentCount?: number;
+      selectedTextAttachmentCount?: number;
+      pullRequestCheckCount?: number;
+      collapsedLineCount?: number | null;
+      canEdit?: boolean;
+      siblingTurnCount?: number | null;
+      selectedTurnIndex?: number | null;
+      selectedTurnId?: string | null;
+      hasAppliedCodeLocally?: boolean;
+      forkTurnId?: string | null;
+      automationCitations?: { automationId?: string | null; index?: number | null }[];
+      renderCodeBlocksAsWritingBlocks?: boolean;
+      forceCodeBlockWordWrap?: boolean;
+      hasArtifacts?: boolean;
+      artifacts?: { id: string; title?: string; kind?: string; description?: string }[];
     }
   | {
       id: string;
@@ -131,10 +207,40 @@ export type ConversationItem =
       toolType: string;
       title: string;
       detail: string;
+      itemType?: OpenAIConversationItemType;
       status?: string;
       output?: string;
+      generatedImage?: string | null;
+      artifact?: { id: string; title?: string; kind?: string; description?: string } | null;
+      mcpApp?: {
+        id: string;
+        title?: string;
+        expanded?: boolean;
+        url?: string | null;
+      } | null;
+      multiAgentRows?: {
+        id: string;
+        label: string;
+        status?: string | null;
+        detail?: string | null;
+      }[];
+      turnDiffRows?: {
+        id: string;
+        label: string;
+        additions?: number | null;
+        deletions?: number | null;
+      }[];
       durationMs?: number | null;
-      changes?: { path: string; kind?: string; diff?: string }[];
+      changes?: {
+        path: string;
+        kind?: string;
+        diff?: string;
+        reviewPath?: string;
+        diffLoadStatus?: "idle" | "loading" | "loaded" | "error";
+        repositorySource?: "local" | "cloud";
+        reviewSummarySource?: string | null;
+        generatedPathsReady?: boolean;
+      }[];
       collabSender?: CollabAgentRef;
       collabReceiver?: CollabAgentRef;
       collabReceivers?: CollabAgentRef[];

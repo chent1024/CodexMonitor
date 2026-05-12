@@ -1,6 +1,218 @@
 import type { ConversationItem } from "../types";
+import type { OpenAIConversationItemType } from "../types";
 import { parseCollabToolCallItem } from "./threadItems.collab";
 import { asNumber, asString } from "./threadItems.shared";
+
+const OPENAI_ITEM_TYPE_BY_PROTOCOL_TYPE = new Map<string, OpenAIConversationItemType>([
+  ["agentMessage", "assistant-message"],
+  ["assistantMessage", "assistant-message"],
+  ["assistant-message", "assistant-message"],
+  ["autoReviewInterruptionWarning", "auto-review-interruption-warning"],
+  ["auto-review-interruption-warning", "auto-review-interruption-warning"],
+  ["automationUpdate", "automation-update"],
+  ["automation-update", "automation-update"],
+  ["automaticApprovalReview", "automatic-approval-review"],
+  ["automatic-approval-review", "automatic-approval-review"],
+  ["commandExecution", "exec"],
+  ["exec", "exec"],
+  ["contextCompaction", "context-compaction"],
+  ["context-compaction", "context-compaction"],
+  ["dynamicToolCall", "dynamic-tool-call"],
+  ["dynamic-tool-call", "dynamic-tool-call"],
+  ["fileChange", "patch"],
+  ["patch", "patch"],
+  ["forkedFromConversation", "forked-from-conversation"],
+  ["forked-from-conversation", "forked-from-conversation"],
+  ["generatedImage", "generated-image"],
+  ["generated-image", "generated-image"],
+  ["hook", "hook"],
+  ["mcpServerElicitation", "mcp-server-elicitation"],
+  ["mcp-server-elicitation", "mcp-server-elicitation"],
+  ["mcpToolCall", "mcp-tool-call"],
+  ["mcp-tool-call", "mcp-tool-call"],
+  ["modelChanged", "model-changed"],
+  ["model-changed", "model-changed"],
+  ["modelRerouted", "model-rerouted"],
+  ["model-rerouted", "model-rerouted"],
+  ["multiAgentAction", "multi-agent-action"],
+  ["multi-agent-action", "multi-agent-action"],
+  ["permissionRequest", "permission-request"],
+  ["permission-request", "permission-request"],
+  ["personalityChanged", "personality-changed"],
+  ["personality-changed", "personality-changed"],
+  ["planImplementation", "plan-implementation"],
+  ["plan-implementation", "plan-implementation"],
+  ["proposedPlan", "proposed-plan"],
+  ["proposed-plan", "proposed-plan"],
+  ["reasoning", "reasoning"],
+  ["remoteTaskCreated", "remote-task-created"],
+  ["remote-task-created", "remote-task-created"],
+  ["steered", "steered"],
+  ["streamError", "stream-error"],
+  ["stream-error", "stream-error"],
+  ["systemError", "system-error"],
+  ["system-error", "system-error"],
+  ["todoList", "todo-list"],
+  ["todo-list", "todo-list"],
+  ["turnDiff", "turn-diff"],
+  ["turn-diff", "turn-diff"],
+  ["userInputResponse", "user-input-response"],
+  ["user-input-response", "user-input-response"],
+  ["userMessage", "user-message"],
+  ["user-message", "user-message"],
+  ["userInput", "userInput"],
+  ["webSearch", "web-search"],
+  ["web-search", "web-search"],
+  ["workedFor", "worked-for"],
+  ["worked-for", "worked-for"],
+]);
+
+const GENERIC_OPENAI_TOOL_ITEM_TYPES = new Set<OpenAIConversationItemType>([
+  "auto-review-interruption-warning",
+  "automation-update",
+  "automatic-approval-review",
+  "dynamic-tool-call",
+  "forked-from-conversation",
+  "generated-image",
+  "hook",
+  "mcp-server-elicitation",
+  "model-changed",
+  "model-rerouted",
+  "multi-agent-action",
+  "permission-request",
+  "personality-changed",
+  "plan-implementation",
+  "proposed-plan",
+  "remote-task-created",
+  "steered",
+  "stream-error",
+  "system-error",
+  "todo-list",
+  "turn-diff",
+  "user-input-response",
+  "worked-for",
+]);
+
+function normalizeOpenAIItemType(type: string) {
+  return OPENAI_ITEM_TYPE_BY_PROTOCOL_TYPE.get(type) ?? null;
+}
+
+function openAIItemTitle(itemType: OpenAIConversationItemType) {
+  switch (itemType) {
+    case "auto-review-interruption-warning":
+      return "Auto-review interruption warning";
+    case "automation-update":
+      return "Automation update";
+    case "automatic-approval-review":
+      return "Automatic approval review";
+    case "dynamic-tool-call":
+      return "Dynamic tool call";
+    case "forked-from-conversation":
+      return "Forked from conversation";
+    case "generated-image":
+      return "Generated image";
+    case "hook":
+      return "Hook";
+    case "mcp-server-elicitation":
+      return "MCP server requested input";
+    case "model-changed":
+      return "Model changed";
+    case "model-rerouted":
+      return "Model rerouted";
+    case "multi-agent-action":
+      return "Multi-agent action";
+    case "permission-request":
+      return "Permission request";
+    case "personality-changed":
+      return "Personality changed";
+    case "plan-implementation":
+      return "Plan implementation";
+    case "proposed-plan":
+      return "Proposed plan";
+    case "remote-task-created":
+      return "Remote task created";
+    case "steered":
+      return "Steered";
+    case "stream-error":
+      return "Stream error";
+    case "system-error":
+      return "System error";
+    case "todo-list":
+      return "Todo list";
+    case "turn-diff":
+      return "Turn diff";
+    case "user-input-response":
+      return "User input response";
+    case "worked-for":
+      return "Worked for";
+    default:
+      return itemType;
+  }
+}
+
+function extractOpenAIDetail(item: Record<string, unknown>) {
+  const value =
+    asString(item.detail ?? "") ||
+    asString(item.message ?? "") ||
+    asString(item.text ?? "") ||
+    asString(item.name ?? "") ||
+    asString(item.status ?? "") ||
+    asString(item.summary ?? "");
+  return value.trim();
+}
+
+function extractOpenAIOutput(item: Record<string, unknown>) {
+  return (
+    asString(item.output ?? "") ||
+    asString(item.result ?? "") ||
+    asString(item.error ?? "") ||
+    asString(item.content ?? "")
+  );
+}
+
+function extractGeneratedImage(item: Record<string, unknown>) {
+  return (
+    asString(item.src ?? "") ||
+    asString(item.url ?? "") ||
+    asString(item.path ?? "") ||
+    asString(item.image ?? "") ||
+    asString(item.generatedImage ?? "")
+  ).trim();
+}
+
+function buildGenericOpenAIActivityItem(
+  item: Record<string, unknown>,
+  itemType: OpenAIConversationItemType,
+): ConversationItem {
+  const title = asString(item.title ?? "") || openAIItemTitle(itemType);
+  const detail = extractOpenAIDetail(item);
+  const status = asString(item.status ?? "");
+  const generatedImage =
+    itemType === "generated-image" ? extractGeneratedImage(item) || null : null;
+  const mcpAppId =
+    itemType === "mcp-server-elicitation" || itemType === "mcp-tool-call"
+      ? asString(item.mcpAppId ?? item.appId ?? item.server ?? item.id)
+      : "";
+  return {
+    id: asString(item.id),
+    kind: "tool",
+    toolType: itemType,
+    itemType,
+    title,
+    detail,
+    status,
+    output: extractOpenAIOutput(item),
+    generatedImage,
+    mcpApp: mcpAppId
+      ? {
+          id: mcpAppId,
+          title: asString(item.mcpAppTitle ?? item.server ?? item.title ?? "") || undefined,
+          expanded: Boolean(item.expanded),
+          url: asString(item.url ?? "") || null,
+        }
+      : null,
+  };
+}
 
 function extractImageInputValue(input: Record<string, unknown>) {
   const value =
@@ -49,17 +261,28 @@ export function buildConversationItem(
   if (!id || !type) {
     return null;
   }
-  if (type === "agentMessage") {
-    return null;
+  const openAIItemType = normalizeOpenAIItemType(type);
+  if (type === "agentMessage" || type === "assistantMessage" || type === "assistant-message") {
+    const text = asString(item.text ?? item.content ?? "");
+    return text
+      ? {
+          id,
+          kind: "message",
+          role: "assistant",
+          text,
+          itemType: "assistant-message",
+        }
+      : null;
   }
-  if (type === "userMessage") {
+  if (type === "userMessage" || type === "user-message") {
     const content = Array.isArray(item.content) ? item.content : [];
     const { text, images } = parseUserInputs(content as Array<Record<string, unknown>>);
     return {
       id,
       kind: "message",
       role: "user",
-      text,
+      text: text || asString(item.text ?? ""),
+      itemType: "user-message",
       images: images.length > 0 ? images : undefined,
     };
   }
@@ -75,6 +298,7 @@ export function buildConversationItem(
       id,
       kind: "tool",
       toolType: "plan",
+      itemType: openAIItemType === "proposed-plan" ? "proposed-plan" : undefined,
       title: "Plan",
       detail: asString(item.status ?? ""),
       status: asString(item.status ?? ""),
@@ -90,6 +314,7 @@ export function buildConversationItem(
       id,
       kind: "tool",
       toolType: type,
+      itemType: "exec",
       title: command ? `Command: ${command}` : "Command",
       detail: asString(item.cwd ?? ""),
       status: asString(item.status ?? ""),
@@ -136,6 +361,7 @@ export function buildConversationItem(
       id,
       kind: "tool",
       toolType: type,
+      itemType: "patch",
       title: "File changes",
       detail: paths || "Pending changes",
       status: asString(item.status ?? ""),
@@ -151,6 +377,7 @@ export function buildConversationItem(
       id,
       kind: "tool",
       toolType: type,
+      itemType: "mcp-tool-call",
       title: `Tool: ${server}${tool ? ` / ${tool}` : ""}`,
       detail: args,
       status: asString(item.status ?? ""),
@@ -166,6 +393,7 @@ export function buildConversationItem(
       id,
       kind: "tool",
       toolType: type,
+      itemType: "web-search",
       title: "Web search",
       detail: asString(item.query ?? ""),
       status: status || "completed",
@@ -189,6 +417,7 @@ export function buildConversationItem(
       id,
       kind: "tool",
       toolType: type,
+      itemType: "context-compaction",
       title: "Context compaction",
       detail: "Compacting conversation context to fit token limits.",
       status: status || "completed",
@@ -203,6 +432,9 @@ export function buildConversationItem(
       text: asString(item.review ?? ""),
     };
   }
+  if (openAIItemType && GENERIC_OPENAI_TOOL_ITEM_TYPES.has(openAIItemType)) {
+    return buildGenericOpenAIActivityItem(item, openAIItemType);
+  }
   return null;
 }
 
@@ -214,23 +446,25 @@ export function buildConversationItemFromThreadItem(
   if (!id || !type) {
     return null;
   }
-  if (type === "userMessage") {
+  if (type === "userMessage" || type === "user-message") {
     const content = Array.isArray(item.content) ? item.content : [];
     const { text, images } = parseUserInputs(content as Array<Record<string, unknown>>);
     return {
       id,
       kind: "message",
       role: "user",
-      text,
+      text: text || asString(item.text ?? ""),
+      itemType: "user-message",
       images: images.length > 0 ? images : undefined,
     };
   }
-  if (type === "agentMessage") {
+  if (type === "agentMessage" || type === "assistantMessage" || type === "assistant-message") {
     return {
       id,
       kind: "message",
       role: "assistant",
       text: asString(item.text),
+      itemType: "assistant-message",
     };
   }
   if (type === "reasoning") {

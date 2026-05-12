@@ -394,19 +394,6 @@ export function formatActivitySummary(items: ToolGroupItem[]) {
   });
 
   const parts: string[] = [];
-  const exploreParts = [
-    readCount > 0 ? formatChineseCount(readCount, "个文件") : "",
-    listCount > 0 ? formatChineseCount(listCount, "个列表") : "",
-  ].filter(Boolean);
-  if (exploreParts.length > 0) {
-    parts.push(`已探索 ${exploreParts.join(",")}`);
-  }
-  if (searchCount > 0) {
-    parts.push(`已搜索 ${formatChineseCount(searchCount, "次")}`);
-  }
-  if (commandCount > 0) {
-    parts.push(`已运行 ${formatChineseCount(commandCount, "条命令")}`);
-  }
   if (createdFiles > 0) {
     parts.push(`已创建 ${formatChineseCount(createdFiles, "个文件")}`);
   }
@@ -415,6 +402,17 @@ export function formatActivitySummary(items: ToolGroupItem[]) {
   }
   if (deletedFiles > 0) {
     parts.push(`已删除 ${formatChineseCount(deletedFiles, "个文件")}`);
+  }
+  const exploreParts = [
+    readCount > 0 ? formatChineseCount(readCount, "个文件") : "",
+    listCount > 0 ? formatChineseCount(listCount, "个列表") : "",
+    searchCount > 0 ? `${searchCount} 次搜索` : "",
+  ].filter(Boolean);
+  if (exploreParts.length > 0) {
+    parts.push(`已探索 ${exploreParts.join(",")}`);
+  }
+  if (commandCount > 0) {
+    parts.push(`已运行 ${formatChineseCount(commandCount, "条命令")}`);
   }
   if (parts.length > 0) {
     return parts.join(",");

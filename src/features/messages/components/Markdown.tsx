@@ -337,15 +337,15 @@ function FileReferenceLink({
   return (
     <a
       href={href}
-      className="message-file-link"
+      className="group/inline-mention group/file-diff oai-message-file-link"
       title={fullPath}
       onClick={(event) => onClick(event, rawPath)}
       onContextMenu={(event) => onContextMenu(event, rawPath)}
     >
-      <span className="message-file-link-name">{fileName}</span>
-      {lineLabel ? <span className="message-file-link-line">L{lineLabel}</span> : null}
+      <span className="oai-message-file-link-name">{fileName}</span>
+      {lineLabel ? <span className="oai-message-file-link-line">L{lineLabel}</span> : null}
       {showFilePath && parentPath ? (
-        <span className="message-file-link-path">{parentPath}</span>
+        <span className="oai-message-file-link-path">{parentPath}</span>
       ) : null}
     </a>
   );

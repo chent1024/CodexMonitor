@@ -10,6 +10,7 @@
   min-width: 0;
   --main-panel-padding: clamp(14px, 1.5vw, 22px);
   --conversation-side-padding: 44px;
+  --chat-content-side-padding: 28px;
   --main-topbar-side-padding: calc(var(--conversation-side-padding) / 2);
   --main-ui-font-size: var(--ui-font-size, 13px);
   --main-font-size-xs: calc(var(--main-ui-font-size) * 0.77);
@@ -59,6 +60,16 @@
   min-width: 0;
   flex: 1;
   max-width: 100%;
+  gap: 8px;
+}
+
+.workspace-header-blank-region {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 32px;
+  background: transparent;
+  cursor: default;
+  -webkit-app-region: no-drag;
 }
 
 .main-header-actions {

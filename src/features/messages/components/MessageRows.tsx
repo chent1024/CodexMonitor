@@ -1,15 +1,21 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { createPortal } from "react-dom";
+import BadgeCheck from "lucide-react/dist/esm/icons/badge-check";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import Check from "lucide-react/dist/esm/icons/check";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Diff from "lucide-react/dist/esm/icons/diff";
+import File from "lucide-react/dist/esm/icons/file";
 import FileDiffIcon from "lucide-react/dist/esm/icons/file-diff";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Image from "lucide-react/dist/esm/icons/image";
+import MessageSquare from "lucide-react/dist/esm/icons/message-square";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Quote from "lucide-react/dist/esm/icons/quote";
 import Search from "lucide-react/dist/esm/icons/search";
+import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import Users from "lucide-react/dist/esm/icons/users";
 import Wrench from "lucide-react/dist/esm/icons/wrench";
@@ -19,6 +25,7 @@ import { pushErrorToast } from "@services/toasts";
 import type { ConversationItem } from "../../../types";
 import type { ParsedFileLocation } from "../../../utils/fileLinks";
 import { PierreDiffBlock } from "../../git/components/PierreDiffBlock";
+import { relativeDisplayPath } from "../utils/messageFileLinks";
 import {
   MAX_COMMAND_OUTPUT_LINES,
   basename,
@@ -60,7 +67,9 @@ type MessageRowProps = MarkdownFileLinkProps & {
   isCopied: boolean;
   onCopy: (item: Extract<ConversationItem, { kind: "message" }>) => void;
   onQuote?: (item: Extract<ConversationItem, { kind: "message" }>, selectedText?: string) => void;
+  onEditMessage?: (item: Extract<ConversationItem, { kind: "message" }>, text: string) => void;
   codeBlockCopyUseModifier?: boolean;
+  showActions?: boolean;
 };
 
 type ReasoningRowProps = MarkdownFileLinkProps & {
@@ -95,9 +104,150 @@ type ExploreRowProps = {
   item: Extract<ConversationItem, { kind: "explore" }>;
 };
 
+export type FileChangeEntry = NonNullable<
+  Extract<ConversationItem, { kind: "tool" }>["changes"]
+>[number];
+
+type FileChangeSummaryCardProps = {
+  changes: FileChangeEntry[];
+  workspacePath?: string | null;
+};
+
+type CopyFileDiffHandler = (
+  event: MouseEvent<HTMLButtonElement>,
+  key: string,
+  diff: string,
+) => void | Promise<void>;
+
+type FileDiffCardProps = {
+  change: FileChangeEntry;
+  changeKey: string;
+  copiedChangeKey: string | null;
+  onCopyFileDiff: CopyFileDiffHandler;
+  fileBody?: boolean;
+  className?: string;
+};
+
+type FileChangeSummaryEntry = FileChangeEntry & {
+  displayPath: string;
+};
+
 type CommandOutputProps = {
   output: string;
 };
+
+function buildUserMessageMetadata(item: Extract<ConversationItem, { kind: "message" }>) {
+  const text = item.text.toLowerCase();
+  const chips: { kind: string; label: string }[] = [];
+  if (
+    item.referencesPriorConversation ||
+    text.includes("prior conversation") ||
+    text.includes("记忆引用")
+  ) {
+    chips.push({ kind: "prior-conversation", label: "References prior conversation" });
+  }
+  if (item.reviewMode || text.includes("review mode") || text.includes("审查模式")) {
+    chips.push({ kind: "review-mode", label: "Review mode" });
+  }
+  if (item.pullRequestFixMode) {
+    chips.push({ kind: "pull-request-fix", label: "Fix PR" });
+  }
+  if (item.autoResolveSync) {
+    chips.push({ kind: "auto-resolve-sync", label: "Auto-resolve sync" });
+  }
+  if ((item.commentCount ?? 0) > 0) {
+    const count = item.commentCount ?? 0;
+    chips.push({ kind: "comments", label: `${count} comment${count === 1 ? "" : "s"}` });
+  }
+  if ((item.browserCommentCount ?? 0) > 0) {
+    const count = item.browserCommentCount ?? 0;
+    chips.push({ kind: "browser-comments", label: `${count} browser comment${count === 1 ? "" : "s"}` });
+  }
+  if ((item.diffCommentCount ?? 0) > 0) {
+    const count = item.diffCommentCount ?? 0;
+    chips.push({ kind: "diff-comments", label: `${count} diff comment${count === 1 ? "" : "s"}` });
+  }
+  if ((item.selectedTextAttachmentCount ?? 0) > 0) {
+    const count = item.selectedTextAttachmentCount ?? 0;
+    chips.push({ kind: "selected-text-attachments", label: `${count} selected text attachment${count === 1 ? "" : "s"}` });
+  }
+  if ((item.pullRequestCheckCount ?? 0) > 0) {
+    const count = item.pullRequestCheckCount ?? 0;
+    chips.push({ kind: "pull-request-checks", label: `${count} PR check${count === 1 ? "" : "s"}` });
+  }
+  if (item.messageStatus) {
+    chips.push({ kind: "message-status", label: item.messageStatus });
+  }
+  if (item.sentAtMs) {
+    chips.push({
+      kind: "sent-at",
+      label: new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(item.sentAtMs)),
+    });
+  }
+  return chips;
+}
+
+function buildOpenAIUserAttachments(item: Extract<ConversationItem, { kind: "message" }>) {
+  const richAttachments: { kind: string; label: string; title?: string }[] = [];
+  if (item.codexDelegation) {
+    richAttachments.push({
+      kind: "codexDelegation",
+      label: item.codexDelegation.label ?? "Sent by Codex from another thread",
+      title: item.codexDelegation.sourceThreadId,
+    });
+  }
+  if (item.heartbeatTrigger) {
+    richAttachments.push({
+      kind: "heartbeatTrigger",
+      label: item.heartbeatTrigger.label ?? "Automation heartbeat",
+      title: item.heartbeatTrigger.automationId,
+    });
+  }
+  if (item.forkedFromConversation) {
+    richAttachments.push({
+      kind: "forkedFromConversation",
+      label: item.forkedFromConversation.label ?? "Forked from conversation",
+      title: item.forkedFromConversation.sourceConversationId,
+    });
+  }
+  if ((item.browserCommentCount ?? 0) > 0) {
+    richAttachments.push({
+      kind: "browserCommentCount",
+      label: `${item.browserCommentCount} browser comment${item.browserCommentCount === 1 ? "" : "s"}`,
+    });
+  }
+  if ((item.diffCommentCount ?? 0) > 0) {
+    richAttachments.push({
+      kind: "diffCommentCount",
+      label: `${item.diffCommentCount} diff comments`,
+    });
+  }
+  if ((item.selectedTextAttachmentCount ?? 0) > 0) {
+    richAttachments.push({
+      kind: "selectedTextAttachmentCount",
+      label: `${item.selectedTextAttachmentCount} selected text`,
+    });
+  }
+  return richAttachments;
+}
+
+function attachmentLabel(path: string, label?: string) {
+  if (label?.trim()) {
+    return label.trim();
+  }
+  return basename(path);
+}
+
+function userMessageIsCollapsible(text: string, collapsedLineCount: number) {
+  if (!text.trim()) {
+    return false;
+  }
+  const lineCount = text.split(/\r?\n/).length;
+  return lineCount > collapsedLineCount || text.length > collapsedLineCount * 96;
+}
 
 const MessageImageGrid = memo(function MessageImageGrid({
   images,
@@ -110,14 +260,14 @@ const MessageImageGrid = memo(function MessageImageGrid({
 }) {
   return (
     <div
-      className={`message-image-grid${hasText ? " message-image-grid--with-text" : ""}`}
+      className={`oai-message-image-grid${hasText ? " oai-message-image-grid-with-text" : ""}`}
       role="list"
     >
       {images.map((image, index) => (
         <button
           key={`${image.src}-${index}`}
           type="button"
-          className="message-image-thumb"
+          className="oai-message-image-thumb"
           onClick={() => onOpen(index)}
           aria-label={`Open image ${index + 1}`}
         >
@@ -165,18 +315,18 @@ const ImageLightbox = memo(function ImageLightbox({
 
   return createPortal(
     <div
-      className="message-image-lightbox"
+      className="oai-message-image-lightbox"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
     >
       <div
-        className="message-image-lightbox-content"
+        className="oai-message-image-lightbox-content"
         onClick={(event) => event.stopPropagation()}
       >
         <button
           type="button"
-          className="message-image-lightbox-close"
+          className="oai-message-image-lightbox-close"
           onClick={onClose}
           aria-label="Close image preview"
         >
@@ -186,6 +336,255 @@ const ImageLightbox = memo(function ImageLightbox({
       </div>
     </div>,
     document.body,
+  );
+});
+
+const UserMessageAttachments = memo(function UserMessageAttachments({
+  images,
+  attachments,
+  richAttachments,
+  parentContext,
+  onOpenImage,
+}: {
+  images: MessageImage[];
+  attachments: NonNullable<Extract<ConversationItem, { kind: "message" }>["attachments"]>;
+  richAttachments: ReturnType<typeof buildOpenAIUserAttachments>;
+  parentContext?: Extract<ConversationItem, { kind: "message" }>["parentContext"];
+  onOpenImage: (index: number) => void;
+}) {
+  if (images.length === 0 && attachments.length === 0 && richAttachments.length === 0 && !parentContext) {
+    return null;
+  }
+
+  return (
+    <div
+      className="flex flex-wrap items-end justify-end gap-2 self-end oai-user-message-attachments"
+      data-user-message-attachments
+    >
+      {parentContext ? (
+        <div
+          className="group/file-attachment oai-user-message-attachment oai-user-message-parent-context"
+          data-user-message-attachment
+          data-attachment-kind={parentContext.kind ?? "parent-context"}
+          data-parent-context
+          data-source-conversation-id={parentContext.sourceConversationId}
+          title={parentContext.label ?? parentContext.sourceConversationId}
+        >
+          <ChevronRight className="oai-user-message-attachment-icon" size={13} aria-hidden />
+          <span className="oai-user-message-attachment-label">
+            {parentContext.label ?? "Parent chat"}
+          </span>
+        </div>
+      ) : null}
+      {richAttachments.map((attachment, index) => (
+        <div
+          key={`${attachment.kind}-${index}`}
+          className="group/file-attachment oai-user-message-attachment oai-user-message-rich-attachment"
+          data-user-message-attachment
+          data-user-message-rich-attachment
+          data-attachment-kind={attachment.kind}
+          title={attachment.title ?? attachment.label}
+        >
+          {attachment.kind === "codexDelegation" || attachment.kind === "heartbeatTrigger" ? (
+            <Sparkles className="oai-user-message-attachment-icon" size={13} aria-hidden />
+          ) : attachment.kind.includes("Comment") ? (
+            <MessageSquare className="oai-user-message-attachment-icon" size={13} aria-hidden />
+          ) : (
+            <ChevronRight className="oai-user-message-attachment-icon" size={13} aria-hidden />
+          )}
+          <span className="oai-user-message-attachment-label">{attachment.label}</span>
+        </div>
+      ))}
+      {attachments.map((attachment, index) => {
+        const label = attachmentLabel(attachment.path, attachment.label);
+        return (
+          <div
+            key={`${attachment.path}-${index}`}
+            className="group/file-attachment oai-user-message-attachment"
+            data-user-message-attachment
+            data-attachment-kind={attachment.kind ?? "file"}
+            title={attachment.path}
+          >
+            <File className="oai-user-message-attachment-icon" size={13} aria-hidden />
+            <span className="oai-user-message-attachment-label">{label}</span>
+          </div>
+        );
+      })}
+      {images.length > 0 && (
+        <MessageImageGrid
+          images={images}
+          onOpen={onOpenImage}
+          hasText={false}
+        />
+      )}
+    </div>
+  );
+});
+
+const UserMessageText = memo(function UserMessageText({
+  item,
+  displayText,
+  isEditing,
+  editText,
+  onEditTextChange,
+  onSubmitEdit,
+  onCancelEdit,
+  codeBlockCopyUseModifier,
+  showMessageFilePath,
+  workspacePath,
+  onOpenFileLink,
+  onOpenFileLinkMenu,
+  onOpenThreadLink,
+}: MarkdownFileLinkProps & {
+  item: Extract<ConversationItem, { kind: "message" }>;
+  displayText: string;
+  isEditing: boolean;
+  editText: string;
+  onEditTextChange: (text: string) => void;
+  onSubmitEdit: () => void;
+  onCancelEdit: () => void;
+  codeBlockCopyUseModifier?: boolean;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const collapsedLineCount = Math.max(1, item.collapsedLineCount ?? 20);
+  const isCollapsible = userMessageIsCollapsible(displayText, collapsedLineCount);
+
+  useEffect(() => {
+    if (!isEditing || !textareaRef.current) {
+      return;
+    }
+    const textarea = textareaRef.current;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.max(48, textarea.scrollHeight)}px`;
+  }, [editText, isEditing]);
+
+  if (isEditing) {
+    return (
+      <form
+        className="oai-user-message-edit-form"
+        data-user-message-edit-form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmitEdit();
+        }}
+      >
+        <textarea
+          ref={textareaRef}
+          className="oai-user-message-edit-textarea"
+          data-user-message-edit-textarea
+          value={editText}
+          rows={3}
+          onChange={(event) => onEditTextChange(event.target.value)}
+        />
+        <div className="oai-user-message-edit-actions" data-user-message-edit-actions>
+          <button
+            type="button"
+            className="oai-user-message-edit-cancel"
+            data-cancel-edit-message="cancelEditMessage"
+            onClick={onCancelEdit}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="oai-user-message-edit-submit"
+            data-send-edited-message="sendEditedMessage"
+          >
+            Send
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <>
+      <div
+        className="oai-user-message-text-shell"
+        data-user-message-text
+        data-user-message-collapsed={
+          isCollapsible && !isExpanded ? "true" : "false"
+        }
+        style={
+          isCollapsible && !isExpanded
+            ? {
+                WebkitBoxOrient: "vertical",
+                WebkitLineClamp: collapsedLineCount,
+                maxHeight: `${collapsedLineCount}lh`,
+              }
+            : undefined
+        }
+      >
+        <Markdown
+          value={displayText}
+          className="markdown"
+          codeBlockStyle="message"
+          codeBlockCopyUseModifier={codeBlockCopyUseModifier}
+          showFilePath={showMessageFilePath}
+          workspacePath={workspacePath}
+          onOpenFileLink={onOpenFileLink}
+          onOpenFileLinkMenu={onOpenFileLinkMenu}
+          onOpenThreadLink={onOpenThreadLink}
+        />
+      </div>
+      {isCollapsible ? (
+        <button
+          type="button"
+          className="oai-user-message-collapse-toggle"
+          data-user-message-collapse-toggle
+          aria-expanded={isExpanded}
+          onClick={() => setIsExpanded((current) => !current)}
+        >
+          {isExpanded ? "Show less" : "Show more"}
+        </button>
+      ) : null}
+    </>
+  );
+});
+
+const MessageArtifacts = memo(function MessageArtifacts({
+  item,
+}: {
+  item: Extract<ConversationItem, { kind: "message" }>;
+}) {
+  const artifacts = item.artifacts ?? [];
+  if (!item.hasArtifacts && artifacts.length === 0) {
+    return null;
+  }
+  return (
+    <div
+      className="oai-message-artifacts"
+      data-message-artifacts
+      data-has-artifacts={item.hasArtifacts ? "true" : "false"}
+    >
+      {artifacts.length > 0 ? (
+        artifacts.map((artifact) => (
+          <div
+            key={artifact.id}
+            className="oai-message-artifact"
+            data-message-artifact
+            data-artifact-id={artifact.id}
+            data-artifact-kind={artifact.kind ?? "artifact"}
+          >
+            <Sparkles size={13} aria-hidden />
+            <span className="oai-message-artifact-title">
+              {artifact.title ?? artifact.id}
+            </span>
+            {artifact.description ? (
+              <span className="oai-message-artifact-description">
+                {artifact.description}
+              </span>
+            ) : null}
+          </div>
+        ))
+      ) : (
+        <div className="oai-message-artifact" data-message-artifact data-artifact-kind="artifact">
+          <Sparkles size={13} aria-hidden />
+          <span className="oai-message-artifact-title">Artifact</span>
+        </div>
+      )}
+    </div>
   );
 });
 
@@ -229,16 +628,23 @@ const CommandOutput = memo(function CommandOutput({ output }: CommandOutputProps
   }
 
   return (
-    <div className="tool-inline-terminal" role="log" aria-live="polite">
+    <div
+      className="oai-tool-terminal"
+      role="log"
+      aria-live="polite"
+      data-oai-tool-terminal
+    >
       <div
-        className="tool-inline-terminal-lines"
+        className="oai-tool-terminal-lines"
+        data-oai-tool-terminal-lines
         ref={containerRef}
         onScroll={handleScroll}
       >
         {lineWindow.lines.map((line, index) => (
           <div
             key={`${lineWindow.offset + index}-${line}`}
-            className="tool-inline-terminal-line"
+            className="oai-tool-terminal-line"
+            data-oai-tool-terminal-line
           >
             {line || " "}
           </div>
@@ -285,6 +691,65 @@ function toolIconForSummary(
   return Wrench;
 }
 
+function openAIActivityTypeLabel(item: Extract<ConversationItem, { kind: "tool" }>) {
+  switch (item.itemType) {
+    case "auto-review-interruption-warning":
+      return "Auto-review interruption warning";
+    case "automation-update":
+      return "Automation updated";
+    case "automatic-approval-review":
+      return "Automatic approval review";
+    case "permission-request":
+      return "Permission requested";
+    case "mcp-server-elicitation":
+      return "MCP server requested input";
+    case "dynamic-tool-call":
+      return "Dynamic tool call";
+    case "forked-from-conversation":
+      return "Forked from conversation";
+    case "context-compaction":
+      return "Context compacted";
+    case "todo-list":
+      return "Todo list updated";
+    case "generated-image":
+      return "Generated image";
+    case "hook":
+      return "Hook";
+    case "mcp-tool-call":
+      return "MCP tool call";
+    case "model-rerouted":
+      return "Model rerouted";
+    case "multi-agent-action":
+      return "Multi-agent action";
+    case "personality-changed":
+      return "Personality changed";
+    case "plan-implementation":
+      return "Plan implementation";
+    case "proposed-plan":
+      return "Proposed plan";
+    case "stream-error":
+      return "Stream error";
+    case "system-error":
+      return "System error";
+    case "remote-task-created":
+      return "Remote task created";
+    case "model-changed":
+      return "Model changed";
+    case "steered":
+      return "Steered";
+    case "turn-diff":
+      return "Turn diff";
+    case "user-input-response":
+      return "User input response";
+    case "web-search":
+      return "Web search";
+    case "worked-for":
+      return "Worked for";
+    default:
+      return null;
+  }
+}
+
 function buildPlanExportFileName(itemId: string) {
   const normalized = itemId
     .trim()
@@ -298,7 +763,48 @@ function buildPlanExportFileName(itemId: string) {
   return normalized.startsWith("plan-") ? `${normalized}.md` : `plan-${normalized}.md`;
 }
 
-function countDiffStats(diff?: string) {
+function isMcpAppActivity(item: Extract<ConversationItem, { kind: "tool" }>) {
+  return (
+    item.itemType === "mcp-server-elicitation" ||
+    item.itemType === "mcp-tool-call" ||
+    item.toolType.toLowerCase().includes("mcp")
+  );
+}
+
+function buildMultiAgentRows(item: Extract<ConversationItem, { kind: "tool" }>) {
+  if (item.multiAgentRows?.length) {
+    return item.multiAgentRows;
+  }
+  if (item.collabStatuses?.length) {
+    return item.collabStatuses.map((status) => ({
+      id: status.threadId,
+      label: status.nickname || status.threadId,
+      status: status.status,
+      detail: status.role ?? null,
+    }));
+  }
+  return [];
+}
+
+function buildTurnDiffRows(item: Extract<ConversationItem, { kind: "tool" }>) {
+  if (item.turnDiffRows?.length) {
+    return item.turnDiffRows;
+  }
+  if (item.changes?.length) {
+    return item.changes.map((change, index) => {
+      const stats = countDiffStats(change.diff);
+      return {
+        id: `${change.path}-${index}`,
+        label: change.path,
+        additions: stats.additions,
+        deletions: stats.deletions,
+      };
+    });
+  }
+  return [];
+}
+
+export function countDiffStats(diff?: string) {
   if (!diff) {
     return { additions: 0, deletions: 0 };
   }
@@ -315,6 +821,106 @@ function countDiffStats(diff?: string) {
     }
   }
   return { additions, deletions };
+}
+
+function DiffStat({
+  value,
+  tone,
+}: {
+  value: number;
+  tone: "add" | "del";
+}) {
+  if (value <= 0) {
+    return null;
+  }
+
+  const sign = tone === "add" ? "+" : "-";
+  const digits = String(value).split("");
+
+  return (
+    <span
+      className={`oai-file-diff-stat oai-file-diff-stat-${tone}`}
+      aria-label={`${sign}${value}`}
+    >
+      <span className="oai-file-diff-stat-text">{`${sign}${value}`}</span>
+      <span className="oai-file-diff-stat-sign" aria-hidden>
+        {sign}
+      </span>
+      {digits.map((digit, index) => (
+        <span
+          key={`${tone}-${value}-${index}`}
+          className="diff-stat-digit-column"
+          aria-hidden
+        >
+          <span className={`diff-stat-digit-stack diff-stat-digit-stack-${digit}`}>
+            <span>0</span>
+            <span>1</span>
+            <span>2</span>
+            <span>3</span>
+            <span>4</span>
+            <span>5</span>
+            <span>6</span>
+            <span>7</span>
+            <span>8</span>
+            <span>9</span>
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function summarizeFileChanges(changes: FileChangeEntry[]) {
+  return changes.reduce(
+    (summary, change) => {
+      const stats = countDiffStats(change.diff);
+      summary.additions += stats.additions;
+      summary.deletions += stats.deletions;
+      return summary;
+    },
+    { additions: 0, deletions: 0 },
+  );
+}
+
+function mergeFileChangesForSummary(
+  changes: FileChangeEntry[],
+  workspacePath?: string | null,
+): FileChangeSummaryEntry[] {
+  const merged = new Map<string, FileChangeSummaryEntry>();
+
+  for (const change of changes) {
+    const reviewPath = change.reviewPath ?? change.path;
+    const key = reviewPath || change.path;
+    if (!key) {
+      continue;
+    }
+    const displayPath = relativeDisplayPath(key, workspacePath);
+    const summaryReviewPath = change.reviewPath ?? displayPath;
+
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, {
+        ...change,
+        path: key,
+        reviewPath: summaryReviewPath,
+        displayPath,
+      });
+      continue;
+    }
+
+    merged.set(key, {
+      ...existing,
+      kind: existing.kind ?? change.kind,
+      diff: [existing.diff, change.diff].filter(Boolean).join("\n\n") || undefined,
+      reviewPath: existing.reviewPath ?? summaryReviewPath,
+      repositorySource: change.repositorySource ?? existing.repositorySource,
+      reviewSummarySource: change.reviewSummarySource ?? existing.reviewSummarySource,
+      generatedPathsReady: Boolean(existing.generatedPathsReady || change.generatedPathsReady),
+      displayPath,
+    });
+  }
+
+  return Array.from(merged.values());
 }
 
 function formatFileChangeSummary(
@@ -380,23 +986,25 @@ export const WorkingIndicator = memo(function WorkingIndicator({
   return (
     <>
       {isThinking && (
-        <div className="working">
-          <span className="working-spinner" aria-hidden />
-          <div className="working-timer">
-            <span className="working-timer-clock">{formatDurationMs(elapsedMs)}</span>
+        <div className="oai-thinking-shimmer" data-oai-thinking-shimmer>
+          <span className="oai-thinking-shimmer__spinner" aria-hidden />
+          <div className="oai-thinking-shimmer__timer">
+            <span className="oai-thinking-shimmer__timer-clock">{formatDurationMs(elapsedMs)}</span>
           </div>
-          <span className="working-text">{reasoningLabel || "Working…"}</span>
+          <span className="oai-thinking-shimmer__label" data-oai-thinking-shimmer-label>
+            {reasoningLabel || "Working…"}
+          </span>
         </div>
       )}
       {!isThinking && lastDurationMs !== null && hasItems && (
-        <div className="turn-complete" aria-live="polite">
-          <span className="turn-complete-line" aria-hidden />
-          <span className="turn-complete-label">
+        <div className="oai-turn-status" aria-live="polite" data-oai-turn-status>
+          <span className="oai-turn-status__line" aria-hidden />
+          <span className="oai-turn-status__label">
             {showPollingFetchStatus
               ? `New message will be fetched in ${pollCountdownSeconds} seconds`
               : `Done in ${formatDurationMs(lastDurationMs)}`}
           </span>
-          <span className="turn-complete-line" aria-hidden />
+          <span className="oai-turn-status__line" aria-hidden />
         </div>
       )}
     </>
@@ -408,7 +1016,9 @@ export const MessageRow = memo(function MessageRow({
   isCopied,
   onCopy,
   onQuote,
+  onEditMessage,
   codeBlockCopyUseModifier,
+  showActions = true,
   showMessageFilePath,
   workspacePath,
   onOpenFileLink,
@@ -416,9 +1026,23 @@ export const MessageRow = memo(function MessageRow({
   onOpenThreadLink,
 }: MessageRowProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [isEditingUserMessage, setIsEditingUserMessage] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [committedUserText, setCommittedUserText] = useState(item.text);
+  const [userEditText, setUserEditText] = useState(item.text);
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const selectionSnapshotRef = useRef<string | null>(null);
-  const hasText = item.text.trim().length > 0;
+  const displayItem = useMemo(
+    () =>
+      item.role === "user"
+        ? {
+            ...item,
+            text: committedUserText,
+          }
+        : item,
+    [committedUserText, item],
+  );
+  const hasText = displayItem.text.trim().length > 0;
   const imageItems = useMemo(() => {
     if (!item.images || item.images.length === 0) {
       return [];
@@ -438,6 +1062,27 @@ export const MessageRow = memo(function MessageRow({
     hasText &&
     imageItems.length === 0 &&
     isStandaloneMarkdownTable(item.text);
+  const isUserMessage = item.role === "user";
+  const attachmentItems = item.attachments ?? [];
+  const userMetadata = useMemo(() => buildUserMessageMetadata(displayItem), [displayItem]);
+  const richUserAttachments = useMemo(
+    () => buildOpenAIUserAttachments(displayItem),
+    [displayItem],
+  );
+  const inlineImageItems = isUserMessage ? [] : imageItems;
+  const canEditUserMessage = isUserMessage && (item.canEdit ?? true) && hasText;
+
+  useEffect(() => {
+    setCommittedUserText(item.text);
+    setEditingMessageId(null);
+    setIsEditingUserMessage(false);
+  }, [item.id, item.text]);
+
+  useEffect(() => {
+    if (!isEditingUserMessage) {
+      setUserEditText(displayItem.text);
+    }
+  }, [displayItem.text, isEditingUserMessage]);
 
   const getSelectedMessageText = useCallback(() => {
     const bubble = bubbleRef.current;
@@ -459,7 +1104,7 @@ export const MessageRow = memo(function MessageRow({
         return false;
       }
       const element = node instanceof Element ? node : node.parentElement;
-      return Boolean(element?.closest(".message-quote-button, .message-copy-button"));
+      return Boolean(element?.closest(".oai-message-quote-button, .oai-message-copy-button"));
     };
 
     if (isWithinMessageControls(selection.anchorNode) || isWithinMessageControls(selection.focusNode)) {
@@ -477,69 +1122,229 @@ export const MessageRow = memo(function MessageRow({
     onQuote(item, selectedText);
   }, [getSelectedMessageText, item, onQuote]);
 
-  return (
-    <div className={`message ${item.role}`}>
+  const messageContent = (
+    <>
       <div
-        ref={bubbleRef}
-        className={`bubble message-bubble${isTableOnlyAssistantMessage ? " message-bubble-table-only" : ""}${imageItems.length > 0 ? " message-bubble-with-images" : ""}`}
+        className={`oai-message-content ${
+          isUserMessage
+            ? "text-size-chat relative w-full min-w-0 contain-inline-size"
+            : "text-size-chat relative w-full min-w-0 oai-assistant-markdown-content"
+        }`}
+        data-automation-citations={displayItem.automationCitations?.length ? "true" : "false"}
+        data-render-code-blocks-as-writing-blocks={
+          displayItem.renderCodeBlocksAsWritingBlocks ? "true" : "false"
+        }
+        data-force-code-block-word-wrap={displayItem.forceCodeBlockWordWrap ? "true" : "false"}
+        data-on-add-selected-text-to-chat={onQuote ? "true" : "false"}
+        data-on-add-selected-text-to-chat-handler={onQuote ? "onAddSelectedTextToChat" : undefined}
       >
-        {imageItems.length > 0 && (
+        {inlineImageItems.length > 0 && (
           <MessageImageGrid
-            images={imageItems}
+            images={inlineImageItems}
             onOpen={setLightboxIndex}
             hasText={hasText}
           />
         )}
         {hasText && (
-          <Markdown
-            value={item.text}
-            className="markdown"
-            codeBlockStyle="message"
-            codeBlockCopyUseModifier={codeBlockCopyUseModifier}
-            showFilePath={showMessageFilePath}
-            workspacePath={workspacePath}
-            onOpenFileLink={onOpenFileLink}
-            onOpenFileLinkMenu={onOpenFileLinkMenu}
-            onOpenThreadLink={onOpenThreadLink}
-          />
+          isUserMessage ? (
+            <UserMessageText
+              item={displayItem}
+              displayText={displayItem.text}
+              isEditing={isEditingUserMessage}
+              editText={userEditText}
+              onEditTextChange={setUserEditText}
+              onCancelEdit={() => {
+                setUserEditText(displayItem.text);
+                setEditingMessageId(null);
+                setIsEditingUserMessage(false);
+              }}
+              onSubmitEdit={() => {
+                const nextText = userEditText.trim();
+                if (nextText) {
+                  setCommittedUserText(nextText);
+                  onEditMessage?.(displayItem, nextText);
+                }
+                setEditingMessageId(null);
+                setIsEditingUserMessage(false);
+              }}
+              codeBlockCopyUseModifier={codeBlockCopyUseModifier}
+              showMessageFilePath={showMessageFilePath}
+              workspacePath={workspacePath}
+              onOpenFileLink={onOpenFileLink}
+              onOpenFileLinkMenu={onOpenFileLinkMenu}
+              onOpenThreadLink={onOpenThreadLink}
+            />
+          ) : (
+            <Markdown
+              value={displayItem.text}
+              className="markdown"
+              codeBlockStyle="message"
+              codeBlockCopyUseModifier={codeBlockCopyUseModifier}
+              showFilePath={showMessageFilePath}
+              workspacePath={workspacePath}
+              onOpenFileLink={onOpenFileLink}
+              onOpenFileLinkMenu={onOpenFileLinkMenu}
+              onOpenThreadLink={onOpenThreadLink}
+            />
+          )
         )}
-        {lightboxIndex !== null && imageItems.length > 0 && (
-          <ImageLightbox
-            images={imageItems}
-            activeIndex={lightboxIndex}
-            onClose={() => setLightboxIndex(null)}
-          />
-        )}
-        {onQuote && hasText && (
-          <button
-            type="button"
-            className="ghost message-quote-button"
-            onMouseDown={() => {
-              selectionSnapshotRef.current = getSelectedMessageText();
-            }}
-            onTouchStart={() => {
-              selectionSnapshotRef.current = getSelectedMessageText();
-            }}
-            onClick={handleQuote}
-            aria-label="Quote message"
-            title="Quote message"
-          >
-            <Quote size={14} aria-hidden />
-          </button>
-        )}
-        <button
-          type="button"
-          className={`ghost message-copy-button${isCopied ? " is-copied" : ""}`}
-          onClick={() => onCopy(item)}
-          aria-label="Copy message"
-          title="Copy message"
-        >
-          <span className="message-copy-icon" aria-hidden>
-            <Copy className="message-copy-icon-copy" size={14} />
-            <Check className="message-copy-icon-check" size={14} />
-          </span>
-        </button>
+        {!isUserMessage && <MessageArtifacts item={displayItem} />}
       </div>
+      {lightboxIndex !== null && imageItems.length > 0 && (
+        <ImageLightbox
+          images={imageItems}
+          activeIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+    </>
+  );
+
+	if (isUserMessage) {
+    const shouldRenderBubble = hasText || imageItems.length === 0;
+	    return (
+	      <div
+	        className="group flex w-full flex-col items-end justify-end gap-1 oai-user-message-group"
+	        data-message-role="user"
+	        data-message-author-role="user"
+          data-openai-message-item-type={displayItem.itemType ?? "user-message"}
+	      >
+          <UserMessageAttachments
+            images={imageItems}
+            attachments={attachmentItems}
+            richAttachments={richUserAttachments}
+            parentContext={displayItem.parentContext}
+            onOpenImage={setLightboxIndex}
+          />
+	        <div
+	          className={`ms-1 mr-1 flex items-center gap-2 oai-user-message-metadata${
+	            userMetadata.length === 0 ? " hidden" : ""
+          }`}
+          data-user-message-metadata=""
+          aria-hidden={userMetadata.length === 0 ? "true" : undefined}
+        >
+	          {userMetadata.map(({ kind, label }) => (
+	            <span
+	              key={`${kind}-${label}`}
+	              className="oai-user-message-metadata-chip"
+	              data-user-message-metadata-chip
+                data-user-message-metadata-kind={kind}
+	            >
+                {kind === "comments" ? (
+                  <MessageSquare size={12} aria-hidden />
+                ) : kind === "pull-request-checks" ? (
+                  <BadgeCheck size={12} aria-hidden />
+                ) : null}
+	              {label}
+	            </span>
+	          ))}
+	        </div>
+          {shouldRenderBubble && (
+            <div
+              ref={bubbleRef}
+              className={`bg-token-foreground/5 max-w-[77%] break-words rounded-2xl px-3 py-2 [&_.contain-inline-size]:[contain:initial]${!hasText && imageItems.length === 0 ? " leading-none" : ""}`}
+              data-message-part="content"
+              data-message-has-images={imageItems.length > 0 ? "true" : "false"}
+              data-message-has-attachments={attachmentItems.length > 0 || richUserAttachments.length > 0 ? "true" : "false"}
+              data-editing-message-id={editingMessageId ?? undefined}
+              data-send-edited-message={isEditingUserMessage ? "true" : "false"}
+              data-cancel-edit-message={isEditingUserMessage ? "true" : "false"}
+            >
+              {messageContent}
+              {!hasText && imageItems.length === 0 && (
+                <div
+                  className="text-size-chat mb-px text-token-description-foreground oai-user-message-no-content"
+                  data-message-empty-content
+                >
+                  (No content)
+                </div>
+              )}
+            </div>
+          )}
+	        {showActions && (
+          <div
+            className="flex flex-row-reverse items-center gap-1"
+            data-message-part="actions"
+          >
+            <div
+              className="mr-1 ms-1 flex items-center gap-2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+              data-message-actions-row
+            >
+              <span
+                className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 oai-message-action-metadata"
+                data-message-action-metadata
+                aria-hidden
+              />
+              <div className="flex items-center gap-1" data-message-actions-controls>
+                {onQuote && hasText && (
+                  <button
+                    type="button"
+                    className="ghost oai-message-action-button oai-message-quote-button"
+                    data-utility-button
+                    data-message-action="quote"
+                    onMouseDown={() => {
+                      selectionSnapshotRef.current = getSelectedMessageText();
+                    }}
+                    onTouchStart={() => {
+                      selectionSnapshotRef.current = getSelectedMessageText();
+                    }}
+                    onClick={handleQuote}
+                    aria-label="Quote message"
+                    title="Quote message"
+                  >
+                    <Quote size={14} aria-hidden />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`ghost oai-message-action-button oai-message-copy-button${isCopied ? " is-copied" : ""}`}
+                  data-utility-button
+                  data-message-action="copy"
+                  onClick={() => onCopy(displayItem)}
+                  aria-label="Copy message"
+                  title="Copy message"
+                >
+                  <span className="oai-message-copy-icon" aria-hidden>
+                    <Copy className="oai-message-copy-icon-copy" size={14} />
+                    <Check className="oai-message-copy-icon-check" size={14} />
+                  </span>
+                </button>
+                {canEditUserMessage && (
+                  <button
+                    type="button"
+                    className="ghost oai-message-action-button oai-message-edit-button"
+                    data-utility-button
+                    data-message-action="edit"
+                    onClick={() => {
+                      setEditingMessageId(displayItem.id);
+                      setUserEditText(displayItem.text);
+                      setIsEditingUserMessage(true);
+                    }}
+                    aria-label="Edit message"
+                    title="Edit message"
+                  >
+                    <Pencil size={14} aria-hidden />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`w-full min-w-0${isTableOnlyAssistantMessage ? " oai-assistant-table-only" : ""}`}
+      data-message-role="assistant"
+      data-message-author-role="assistant"
+      data-openai-message-item-type={displayItem.itemType ?? "assistant-message"}
+      data-message-part="content"
+      data-message-content-root
+      ref={bubbleRef}
+    >
+      {messageContent}
     </div>
   );
 });
@@ -558,33 +1363,37 @@ export const ReasoningRow = memo(function ReasoningRow({
   const { summaryTitle, bodyText, hasBody } = parsed;
   const reasoningTone: StatusTone = hasBody ? "completed" : "processing";
   return (
-    <div className="tool-inline reasoning-inline">
+    <div
+      className="flex w-full min-w-0 flex-col oai-activity-detail oai-reasoning-detail"
+      data-oai-activity-detail="reasoning"
+      data-oai-reasoning-detail
+    >
       <button
         type="button"
-        className="tool-inline-bar-toggle"
+        className="oai-activity-detail-gutter"
         onClick={() => onToggle(item.id)}
         aria-expanded={isExpanded}
         aria-label="Toggle reasoning details"
       />
-      <div className="tool-inline-content">
+      <div className="oai-activity-detail-content">
         <button
           type="button"
-          className="tool-inline-summary tool-inline-toggle"
+          className="oai-activity-detail-summary oai-activity-detail-toggle"
           onClick={() => onToggle(item.id)}
           aria-expanded={isExpanded}
         >
           <Brain
-            className={`tool-inline-icon ${reasoningTone}`}
+            className={`oai-activity-detail-icon ${reasoningTone}`}
             size={14}
             aria-hidden
           />
-          <span className="tool-inline-value">{summaryTitle}</span>
+          <span className="oai-activity-detail-value">{summaryTitle}</span>
         </button>
         {hasBody && (
           <Markdown
             value={bodyText}
-            className={`reasoning-inline-detail markdown ${
-              isExpanded ? "" : "tool-inline-clamp"
+            className={`oai-reasoning-detail-body markdown ${
+              isExpanded ? "" : "oai-activity-detail-clamp"
             }`}
             showFilePath={showMessageFilePath}
             workspacePath={workspacePath}
@@ -608,11 +1417,14 @@ export const ReviewRow = memo(function ReviewRow({
 }: ReviewRowProps) {
   const title = item.state === "started" ? "Review started" : "Review completed";
   return (
-    <div className="item-card review">
-      <div className="review-header">
-        <span className="review-title">{title}</span>
+    <div
+      className="w-full min-w-0 oai-review-card"
+      data-oai-review-row
+    >
+      <div className="oai-review-header">
+        <span className="oai-review-title">{title}</span>
         <span
-          className={`review-badge ${item.state === "started" ? "active" : "done"}`}
+          className={`oai-review-badge ${item.state === "started" ? "active" : "done"}`}
         >
           Review
         </span>
@@ -620,7 +1432,7 @@ export const ReviewRow = memo(function ReviewRow({
       {item.text && (
         <Markdown
           value={item.text}
-          className="item-text markdown"
+          className="oai-review-text markdown"
           showFilePath={showMessageFilePath}
           workspacePath={workspacePath}
           onOpenFileLink={onOpenFileLink}
@@ -634,10 +1446,13 @@ export const ReviewRow = memo(function ReviewRow({
 
 export const DiffRow = memo(function DiffRow({ item }: DiffRowProps) {
   return (
-    <div className="item-card diff">
-      <div className="diff-header">
-        <span className="diff-title">{item.title}</span>
-        {item.status && <span className="item-status">{item.status}</span>}
+    <div
+      className="w-full min-w-0 oai-diff-card"
+      data-oai-diff-row
+    >
+      <div className="oai-diff-header">
+        <span className="oai-diff-title">{item.title}</span>
+        {item.status && <span className="oai-diff-status">{item.status}</span>}
       </div>
       <div className="diff-viewer-output">
         <PierreDiffBlock diff={item.diff} displayPath={item.title} />
@@ -662,51 +1477,56 @@ export const UserInputRow = memo(function UserInputRow({
   const extraQuestions = Math.max(0, item.questions.length - 1);
 
   return (
-    <div className={`tool-inline user-input-inline ${isExpanded ? "tool-inline-expanded" : ""}`}>
+    <div
+      className={`flex w-full min-w-0 flex-col oai-activity-detail oai-user-input-detail${isExpanded ? " oai-activity-detail-expanded" : ""}`}
+      data-oai-activity-detail="user-input"
+      data-oai-user-input-detail
+      data-oai-activity-detail-expanded={isExpanded ? "true" : "false"}
+    >
       <button
         type="button"
-        className="tool-inline-bar-toggle"
+        className="oai-activity-detail-gutter"
         onClick={() => onToggle(item.id)}
         aria-expanded={isExpanded}
         aria-label="Toggle answered input details"
       />
-      <div className="tool-inline-content">
+      <div className="oai-activity-detail-content">
         <button
           type="button"
-          className="tool-inline-summary tool-inline-toggle"
+          className="oai-activity-detail-summary oai-activity-detail-toggle"
           onClick={() => onToggle(item.id)}
           aria-expanded={isExpanded}
         >
-          <Check className="tool-inline-icon completed" size={14} aria-hidden />
-          <span className="tool-inline-label">answered:</span>
-          <span className="tool-inline-value user-input-inline-preview">
+          <Check className="oai-activity-detail-icon completed" size={14} aria-hidden />
+          <span className="oai-activity-detail-label">answered:</span>
+          <span className="oai-activity-detail-value oai-user-input-preview">
             {previewQuestion}: {previewAnswer}
             {extraQuestions > 0 ? ` +${extraQuestions} more` : ""}
           </span>
         </button>
         {isExpanded && (
-          <div className="user-input-inline-details">
+          <div className="oai-user-input-details">
             {item.questions.map((question, index) => {
               const title = question.question || question.header || `Question ${index + 1}`;
               return (
                 <div
                   key={`${question.id}-${index}`}
-                  className="user-input-inline-entry"
+                  className="oai-user-input-entry"
                 >
-                  <div className="user-input-inline-question">{title}</div>
+                  <div className="oai-user-input-question">{title}</div>
                   {question.answers.length > 0 ? (
-                    <div className="user-input-inline-answers">
+                    <div className="oai-user-input-answers">
                       {question.answers.map((answer, answerIndex) => (
                         <div
                           key={`${question.id}-answer-${answerIndex}`}
-                          className="user-input-inline-answer"
+                          className="oai-user-input-answer"
                         >
                           {answer}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="user-input-inline-empty-answer">
+                    <div className="oai-user-input-empty-answer">
                       No answer provided.
                     </div>
                   )}
@@ -716,6 +1536,270 @@ export const UserInputRow = memo(function UserInputRow({
           </div>
         )}
       </div>
+    </div>
+  );
+});
+
+export const FileChangeSummaryCard = memo(function FileChangeSummaryCard({
+  changes,
+  workspacePath = null,
+}: FileChangeSummaryCardProps) {
+  const [isListExpanded, setIsListExpanded] = useState(true);
+  const [expandedDiffs, setExpandedDiffs] = useState<Set<string>>(new Set());
+  const [copiedChangeKey, setCopiedChangeKey] = useState<string | null>(null);
+  const summaryChanges = useMemo(
+    () => mergeFileChangesForSummary(changes, workspacePath),
+    [changes, workspacePath],
+  );
+  const totals = useMemo(() => summarizeFileChanges(summaryChanges), [summaryChanges]);
+  const fileCount = summaryChanges.length;
+
+  const handleToggleDiff = useCallback((key: string) => {
+    setExpandedDiffs((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleCopyFileDiff = useCallback(
+    async (
+      event: MouseEvent<HTMLButtonElement>,
+      key: string,
+      diff: string,
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!diff.trim()) {
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(diff);
+        setCopiedChangeKey(key);
+        window.setTimeout(() => {
+          setCopiedChangeKey((current) => (current === key ? null : current));
+        }, 1400);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to copy diff.";
+        pushErrorToast({
+          title: "Copy failed",
+          message,
+        });
+      }
+    },
+    [],
+  );
+
+  if (fileCount === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className="codex-review-diff-card oai-review-diff-summary-card"
+      data-codex-review-diff-card
+      data-codex-review-diff-summary
+      data-diffs
+      data-diffs-card
+      data-diffs-review-summary
+      data-diffs-summary-card
+      data-diffs-mode="summary"
+      data-expanded={isListExpanded ? "true" : "false"}
+    >
+      <div
+        className="group/custom-section-header oai-review-diff-summary-header"
+        data-diffs-header="summary"
+        data-diffs-summary-header
+      >
+        <button
+          type="button"
+          className="oai-review-diff-summary-toggle"
+          data-utility-button
+          data-diffs-summary-toggle
+          onClick={() => setIsListExpanded((current) => !current)}
+          aria-expanded={isListExpanded}
+        >
+          <span className="oai-review-diff-summary-title">
+            {fileCount} 个文件已更改
+          </span>
+          <span className="oai-review-diff-summary-meta" data-diffs-summary-meta>
+            <DiffStat value={totals.additions} tone="add" />
+            <DiffStat value={totals.deletions} tone="del" />
+            <span
+              className={`oai-review-diff-summary-chevron${isListExpanded ? " is-expanded" : ""}`}
+              aria-hidden
+            >
+              <ChevronRight size={14} />
+            </span>
+          </span>
+        </button>
+      </div>
+      {isListExpanded && (
+        <div className="oai-review-diff-file-list" data-diffs-file-list>
+          {summaryChanges.map((change, index) => {
+              const changeKey = `${change.path}-${index}`;
+              const { additions, deletions } = countDiffStats(change.diff);
+              const isDiffExpanded = expandedDiffs.has(changeKey);
+              const reviewPath = change.reviewPath ?? change.path;
+              const repositorySource = change.repositorySource ?? "local";
+              const reviewSummarySource = change.reviewSummarySource ?? "assistant-turn";
+              return (
+                <div
+                  className="oai-review-diff-file-entry"
+                  key={changeKey}
+                  data-diffs-file-entry
+                  data-expanded={isDiffExpanded ? "true" : "false"}
+                  data-review-path={reviewPath}
+                  data-repository-source={repositorySource}
+                  data-review-summary-source={reviewSummarySource}
+                  data-generated-paths-ready={change.generatedPathsReady ? "true" : "false"}
+                >
+                  <button
+                    type="button"
+                    className="oai-review-diff-file-row"
+                    data-codex-review-diff-file-row
+                    data-diffs-file-row
+                    data-utility-button
+                    data-app-action-review-file
+                    data-review-path={reviewPath}
+                    data-repository-source={repositorySource}
+                    data-review-summary-source={reviewSummarySource}
+                    onClick={() => handleToggleDiff(changeKey)}
+                  aria-expanded={isDiffExpanded}
+                  aria-label={`${basename(change.displayPath)} ${additions > 0 ? `+${additions}` : ""} ${
+                    deletions > 0 ? `-${deletions}` : ""
+                  }`.trim()}
+                >
+                  <span className="oai-review-diff-file-name" title={reviewPath}>
+                    {change.displayPath}
+                  </span>
+                  <span className="oai-review-diff-file-meta" data-diffs-file-meta>
+                    <DiffStat value={additions} tone="add" />
+                    <DiffStat value={deletions} tone="del" />
+                    <span
+                      className={`oai-review-diff-file-chevron${isDiffExpanded ? " is-expanded" : ""}`}
+                      aria-hidden
+                    >
+                      <ChevronRight size={14} />
+                    </span>
+                  </span>
+                </button>
+                {isDiffExpanded && change.diff && (
+                  <div
+                    className="oai-review-diff-file-panel"
+                    data-diffs-file-panel
+                    data-expanded="true"
+                  >
+                    <FileDiffCard
+                      change={change}
+                      changeKey={changeKey}
+                      copiedChangeKey={copiedChangeKey}
+                      onCopyFileDiff={handleCopyFileDiff}
+                      fileBody
+                      className="oai-review-diff-file-body"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+});
+
+const FileDiffCard = memo(function FileDiffCard({
+  change,
+  changeKey,
+  copiedChangeKey,
+  onCopyFileDiff,
+  fileBody = false,
+  className,
+}: FileDiffCardProps) {
+  const { additions, deletions } = countDiffStats(change.diff);
+  const reviewPath = change.reviewPath ?? change.path;
+  const fileName = basename(reviewPath || change.path);
+  const changeType = change.kind ?? "file";
+  const repositorySource = change.repositorySource ?? "local";
+  const reviewSummarySource = change.reviewSummarySource ?? "assistant-turn";
+  return (
+    <div
+      className={`codex-review-diff-card oai-file-diff-card${fileBody ? " oai-file-diff-file-body" : ""}${
+        className ? ` ${className}` : ""
+      }`}
+      data-codex-review-diff-card
+      data-diffs
+      data-diff
+      data-file
+      data-diffs-card
+      data-diffs-mode="file"
+      data-change-type={changeType}
+      data-review-path={reviewPath}
+      data-repository-source={repositorySource}
+      data-review-summary-source={reviewSummarySource}
+      data-generated-paths-ready={change.generatedPathsReady ? "true" : "false"}
+      data-diff-load-status={change.diffLoadStatus ?? (change.diff ? "loaded" : "idle")}
+      {...(fileBody
+        ? {
+            "data-codex-review-diff-file-body": true,
+            "data-diffs-file-body": true,
+          }
+        : {})}
+    >
+      {!fileBody && (
+        <div
+          className="oai-file-diff-header"
+          data-diffs-header="file"
+          data-change-type={changeType}
+        >
+          <span className="oai-file-diff-change-icon" data-change-icon={changeType} aria-hidden />
+          <span className="oai-file-diff-name" title={reviewPath}>
+            {fileName}
+          </span>
+          <span className="oai-file-diff-header-meta" data-diffs-file-header-meta>
+            <span className="oai-file-diff-header-metadata" data-header-metadata aria-hidden />
+            <DiffStat value={additions} tone="add" />
+            <DiffStat value={deletions} tone="del" />
+          </span>
+          <span className="oai-file-diff-header-controls" data-diffs-file-header-controls>
+            {change.diff && (
+              <button
+                type="button"
+                className="oai-file-diff-copy"
+                data-utility-button
+                data-app-action-review-file
+                data-review-path={reviewPath}
+                onClick={(event) => onCopyFileDiff(event, changeKey, change.diff ?? "")}
+                aria-label={`Copy ${fileName} diff`}
+                title="Copy diff"
+              >
+                {copiedChangeKey === changeKey ? (
+                  <Check size={12} aria-hidden />
+                ) : (
+                  <Copy size={12} aria-hidden />
+                )}
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+      {change.diff && (
+        <div
+          className="oai-file-diff-body"
+          data-diffs-body
+          data-diffs-file-body-content
+          data-file-body-content
+        >
+          <div className="thread-diff-virtualized oai-thread-diff-virtualized" data-thread-diff-virtualized>
+            <PierreDiffBlock diff={change.diff} displayPath={reviewPath || change.path} />
+          </div>
+        </div>
+      )}
     </div>
   );
 });
@@ -738,6 +1822,7 @@ export const ToolRow = memo(function ToolRow({
     ? item.title.replace(/^Command:\s*/i, "").trim()
     : "";
   const summary = buildToolSummary(item, commandText);
+  const openAIItemTypeLabel = openAIActivityTypeLabel(item);
   const fileChanges = item.changes ?? [];
   const hasChanges = fileChanges.length > 0;
   const tone = toolStatusTone(item, hasChanges);
@@ -754,6 +1839,15 @@ export const ToolRow = memo(function ToolRow({
   const shouldFadeCommand =
     isCommand && !isExpanded && (summaryValue?.length ?? 0) > 80;
   const showToolOutput = isExpanded && (!isFileChange || !hasChanges);
+  const showFileChangeDetails = isFileChange && hasChanges && isExpanded;
+  const isMcpApp = isMcpAppActivity(item);
+  const mcpAppId = item.mcpApp?.id ?? item.detail ?? item.id;
+  const mcpAppTitle = item.mcpApp?.title ?? summary.value ?? item.title;
+  const mcpAppExpanded = item.mcpApp?.expanded ?? isExpanded;
+  const multiAgentRows = buildMultiAgentRows(item);
+  const showMultiAgentAction = item.itemType === "multi-agent-action";
+  const turnDiffRows = buildTurnDiffRows(item);
+  const showTurnDiffRow = item.itemType === "turn-diff" || (isFileChange && hasChanges);
   const normalizedStatus = (item.status ?? "").toLowerCase();
   const isCommandRunning = isCommand && /in[_\s-]*progress|running|started/.test(normalizedStatus);
   const commandDurationMs =
@@ -780,6 +1874,18 @@ export const ToolRow = memo(function ToolRow({
     isCommand &&
     summary.output &&
     (isExpanded || (isCommandRunning && showLiveOutput) || isLongRunning);
+  const hasToolDetailBody = Boolean(
+    (isExpanded && summary.detail && !isFileChange) ||
+      (isExpanded && isCommand && item.detail) ||
+      openAIItemTypeLabel ||
+      item.generatedImage ||
+      item.artifact ||
+      showFileChangeDetails ||
+      (isExpanded && isFileChange && !hasChanges && item.detail) ||
+      showCommandOutput ||
+      (showToolOutput && summary.output && !isCommand) ||
+      (showToolOutput && isPlan && (summary.output ?? "").trim()),
+  );
 
   useEffect(() => {
     if (showCommandOutput && isCommandRunning && showLiveOutput) {
@@ -840,142 +1946,283 @@ export const ToolRow = memo(function ToolRow({
   );
 
   return (
-    <div className={`tool-inline tool-inline-row ${isExpanded ? "tool-inline-expanded" : ""}`}>
-      <button
-        type="button"
-        className="tool-inline-bar-toggle"
-        onClick={() => onToggle(item.id)}
-        aria-expanded={isExpanded}
-        aria-label="Toggle tool details"
-      />
-      <div className="tool-inline-content">
-        <button
-          type="button"
-          className="tool-inline-summary tool-inline-toggle"
-          onClick={() => onToggle(item.id)}
-          aria-expanded={isExpanded}
+    <div
+      className={`flex w-full min-w-0 oai-activity-detail oai-tool-detail${isExpanded ? " oai-activity-detail-expanded" : ""}${
+        isFileChange ? " oai-file-change-detail" : ""
+      }`}
+      data-oai-activity-detail="tool"
+      data-oai-tool-detail
+      data-oai-activity-detail-expanded={isExpanded ? "true" : "false"}
+      data-tool-type={item.toolType}
+      data-openai-activity-item-type={item.itemType ?? item.toolType}
+      data-auto-review-interruption-warning={item.itemType === "auto-review-interruption-warning" ? "true" : undefined}
+      data-automation-update={item.itemType === "automation-update" ? "true" : undefined}
+      data-automatic-approval-review={item.itemType === "automatic-approval-review" ? "true" : undefined}
+      data-exec={item.itemType === "exec" ? "true" : undefined}
+      data-forked-from-conversation={item.itemType === "forked-from-conversation" ? "true" : undefined}
+      data-hook={item.itemType === "hook" ? "true" : undefined}
+      data-permission-request={item.itemType === "permission-request" ? "true" : undefined}
+      data-mcp-server-elicitation={item.itemType === "mcp-server-elicitation" ? "true" : undefined}
+      data-mcp-tool-call={item.itemType === "mcp-tool-call" ? "true" : undefined}
+      data-dynamic-tool-call={item.itemType === "dynamic-tool-call" ? "true" : undefined}
+      data-context-compaction={item.itemType === "context-compaction" ? "true" : undefined}
+      data-todo-list={item.itemType === "todo-list" ? "true" : undefined}
+      data-generated-image={item.itemType === "generated-image" ? "true" : undefined}
+      data-model-rerouted={item.itemType === "model-rerouted" ? "true" : undefined}
+      data-multi-agent-action={item.itemType === "multi-agent-action" ? "true" : undefined}
+      data-patch={item.itemType === "patch" ? "true" : undefined}
+      data-personality-changed={item.itemType === "personality-changed" ? "true" : undefined}
+      data-plan-implementation={item.itemType === "plan-implementation" ? "true" : undefined}
+      data-proposed-plan={item.itemType === "proposed-plan" ? "true" : undefined}
+      data-stream-error={item.itemType === "stream-error" ? "true" : undefined}
+      data-system-error={item.itemType === "system-error" ? "true" : undefined}
+      data-remote-task-created={item.itemType === "remote-task-created" ? "true" : undefined}
+      data-model-changed={item.itemType === "model-changed" ? "true" : undefined}
+      data-steered={item.itemType === "steered" ? "true" : undefined}
+      data-turn-diff={item.itemType === "turn-diff" ? "true" : undefined}
+      data-user-input-response={item.itemType === "user-input-response" ? "true" : undefined}
+      data-web-search={item.itemType === "web-search" ? "true" : undefined}
+      data-worked-for={item.itemType === "worked-for" ? "true" : undefined}
+      data-mcp-app-expanded={isMcpApp && mcpAppExpanded ? "true" : undefined}
+    >
+      <div
+        className="w-full min-w-0 oai-activity-detail-offset"
+        data-oai-activity-detail-offset
+      >
+        <div
+          className="flex w-full min-w-0 flex-col oai-activity-detail-stack"
+          data-oai-activity-detail-stack
         >
-          <ToolIcon className={`tool-inline-icon ${tone}`} size={14} aria-hidden />
-          {summaryLabel && (
-            <span className="tool-inline-label">{summaryLabel}:</span>
-          )}
-          {summaryValue && (
-            <span
-              className={`tool-inline-value ${isCommand ? "tool-inline-command" : ""} ${
-                isCommand && isExpanded ? "tool-inline-command-full" : ""
-              }`}
-            >
-              {isCommand ? (
-                <span
-                  className={`tool-inline-command-text ${
-                    shouldFadeCommand ? "tool-inline-command-fade" : ""
-                  }`}
-                >
-                  {summaryValue}
-                </span>
-              ) : (
-                summaryValue
-              )}
-            </span>
-          )}
-          {inlineStatus && (
-            <span className="tool-inline-status">{inlineStatus}</span>
-          )}
-        </button>
-        {isExpanded && summary.detail && !isFileChange && (
-          <div className="tool-inline-detail">{summary.detail}</div>
-        )}
-        {isExpanded && isCommand && item.detail && (
-          <div className="tool-inline-detail tool-inline-muted">
-            cwd: {item.detail}
-          </div>
-        )}
-        {isExpanded && isFileChange && hasChanges && (
-          <div className="tool-inline-change-list">
-            {fileChanges.map((change, index) => {
-              const changeKey = `${change.path}-${index}`;
-              const { additions, deletions } = countDiffStats(change.diff);
-              return (
-                <div
-                  key={changeKey}
-                  className="message-file-diff-card"
-                >
-                  <div className="message-file-diff-header">
-                    <span className="message-file-diff-name" title={change.path}>
-                      {basename(change.path)}
-                    </span>
-                    {additions > 0 && (
-                      <span className="message-file-diff-stat message-file-diff-stat-add">
-                        +{additions}
-                      </span>
-                    )}
-                    {deletions > 0 && (
-                      <span className="message-file-diff-stat message-file-diff-stat-del">
-                        -{deletions}
-                      </span>
-                    )}
-                    {change.diff && (
-                      <button
-                        type="button"
-                        className="message-file-diff-copy"
-                        onClick={(event) => handleCopyFileDiff(event, changeKey, change.diff ?? "")}
-                        aria-label={`Copy ${basename(change.path)} diff`}
-                        title="Copy diff"
-                      >
-                        {copiedChangeKey === changeKey ? (
-                          <Check size={12} aria-hidden />
-                        ) : (
-                          <Copy size={12} aria-hidden />
-                        )}
-                      </button>
-                    )}
-                  </div>
-                  {change.diff && (
-                    <div className="message-file-diff-body">
-                      <PierreDiffBlock diff={change.diff} displayPath={change.path} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {isExpanded && isFileChange && !hasChanges && item.detail && (
-          <Markdown
-            value={item.detail}
-            className="item-text markdown"
-            showFilePath={showMessageFilePath}
-            workspacePath={workspacePath}
-            onOpenFileLink={onOpenFileLink}
-            onOpenFileLinkMenu={onOpenFileLinkMenu}
-            onOpenThreadLink={onOpenThreadLink}
-          />
-        )}
-        {showCommandOutput && <CommandOutput output={summary.output ?? ""} />}
-        {showToolOutput && summary.output && !isCommand && (
-          <Markdown
-            value={summary.output}
-            className="tool-inline-output markdown"
-            codeBlock={item.toolType !== "plan"}
-            showFilePath={showMessageFilePath}
-            workspacePath={workspacePath}
-            onOpenFileLink={onOpenFileLink}
-            onOpenFileLinkMenu={onOpenFileLinkMenu}
-            onOpenThreadLink={onOpenThreadLink}
-          />
-        )}
-        {showToolOutput && isPlan && (summary.output ?? "").trim() && (
-          <div className="tool-inline-actions">
+          {!isFileChange && (
             <button
               type="button"
-              className="ghost tool-inline-action"
-              onClick={handlePlanExport}
-              disabled={isExportingPlan}
+              className="oai-activity-detail-gutter"
+              onClick={() => onToggle(item.id)}
+              aria-expanded={isExpanded}
+              aria-label="Toggle tool details"
+            />
+          )}
+          <div
+            className="oai-activity-detail-content"
+            data-oai-activity-detail-content
+          >
+            <button
+              type="button"
+              className={`oai-activity-detail-summary oai-activity-detail-toggle${
+                isFileChange ? " file-change-inline-summary" : ""
+              }`}
+              onClick={() => onToggle(item.id)}
+              aria-expanded={isExpanded}
+              aria-label={
+                isFileChange && summaryValue
+                  ? `${summaryLabel}: ${summaryValue}`
+                  : undefined
+              }
+              data-oai-activity-detail-summary
             >
-              {isExportingPlan ? "Exporting..." : "Export .md"}
+              <ToolIcon className={`oai-activity-detail-icon ${tone}`} size={14} aria-hidden />
+              {summaryLabel && (
+                <span className="oai-activity-detail-label">{summaryLabel}:</span>
+              )}
+              {summaryValue && (
+                <span
+                  className={`oai-activity-detail-value ${isCommand ? "oai-activity-detail-command" : ""} ${
+                    isCommand && isExpanded ? "oai-activity-detail-command-full" : ""
+                  }`}
+                >
+                  {isCommand ? (
+                    <span
+                      className={`oai-activity-detail-command-text ${
+                        shouldFadeCommand ? "oai-activity-detail-command-fade" : ""
+                      }`}
+                    >
+                      {summaryValue}
+                    </span>
+                  ) : (
+                    summaryValue
+                  )}
+                </span>
+              )}
+              {inlineStatus && (
+                <span className="oai-activity-detail-status">{inlineStatus}</span>
+              )}
+              {openAIItemTypeLabel && (
+                <span className="oai-activity-detail-status oai-activity-detail-openai-type">
+                  {openAIItemTypeLabel}
+                </span>
+              )}
             </button>
+            {hasToolDetailBody && (
+              <div
+                className={`oai-activity-detail-body${isMcpApp ? " pending-mcp-tool-calls-body" : ""}`}
+                data-pending-mcp-tool-calls-body={isMcpApp ? "true" : undefined}
+                data-oai-activity-detail-body
+              >
+                {isExpanded && summary.detail && !isFileChange && (
+                  <div className="oai-activity-detail-meta">{summary.detail}</div>
+                )}
+                {isExpanded && isCommand && item.detail && (
+                  <div className="oai-activity-detail-meta oai-activity-detail-muted">
+                    cwd: {item.detail}
+                  </div>
+                )}
+                {openAIItemTypeLabel && (
+                  <div
+                    className="oai-activity-detail-meta oai-openai-activity-item"
+                    data-openai-activity-item
+                    data-openai-activity-item-type={item.itemType}
+                  >
+                    {openAIItemTypeLabel}
+                  </div>
+                )}
+                {item.generatedImage && (
+                  <div className="oai-generated-image" data-generated-image>
+                    <img src={item.generatedImage} alt={summary.value || "Generated image"} />
+                  </div>
+                )}
+                {item.artifact && (
+                  <div
+                    className="oai-message-artifact"
+                    data-message-artifact
+                    data-artifact-id={item.artifact.id}
+                    data-artifact-kind={item.artifact.kind ?? "artifact"}
+                  >
+                    <Sparkles size={13} aria-hidden />
+                    <span className="oai-message-artifact-title">
+                      {item.artifact.title ?? item.artifact.id}
+                    </span>
+                    {item.artifact.description ? (
+                      <span className="oai-message-artifact-description">
+                        {item.artifact.description}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+                {isMcpApp && (
+                  <div
+                    className="group/mcp-app oai-mcp-app"
+                    data-mcp-app
+                    data-mcp-app-instance={mcpAppId}
+                    data-mcp-app-expanded={mcpAppExpanded ? "true" : "false"}
+                    data-mcp-app-portal-target="true"
+                    data-mcp-app-loading={/pending|running|progress/.test(normalizedStatus) ? "true" : "false"}
+                  >
+                    <div
+                      className={`oai-mcp-app-frame${
+                        /pending|running|progress/.test(normalizedStatus) ? " mcp-app-loading-pulse" : ""
+                      }`}
+                      data-mcp-app-frame="true"
+                      data-mcp-app-frame-loading={/pending|running|progress/.test(normalizedStatus) ? "true" : "false"}
+                    >
+                      <div className="oai-mcp-app-header">
+                        <span className="oai-mcp-app-title">{mcpAppTitle}</span>
+                        <span className="oai-mcp-app-kind">mcp-app</span>
+                      </div>
+                      {item.mcpApp?.url ? (
+                        <div className="oai-mcp-app-url">{item.mcpApp.url}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+                {showMultiAgentAction && (
+                  <div className="oai-multi-agent-action" data-multi-agent-action>
+                    <div className="multi-agent-action-header" data-multi-agent-action-header>
+                      <Users size={13} aria-hidden />
+                      <span>{summary.value || "Multi-agent action"}</span>
+                    </div>
+                    <div className="multi-agent-action-rows" data-multi-agent-action-rows>
+                      {(multiAgentRows.length ? multiAgentRows : [{ id: item.id, label: item.detail || item.title, status: item.status ?? null }]).map((row) => (
+                        <div
+                          key={row.id}
+                          className="oai-multi-agent-action-row"
+                          data-multi-agent-action-row
+                          data-agent-status={row.status ?? undefined}
+                        >
+                          <span className="oai-multi-agent-action-label">{row.label}</span>
+                          {row.detail ? <span className="oai-multi-agent-action-detail">{row.detail}</span> : null}
+                          {row.status ? <span className="oai-multi-agent-action-status">{row.status}</span> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {showTurnDiffRow && (
+                  <div className="oai-turn-diff" data-turn-diff-row>
+                    <div className="oai-turn-diff-header" data-turn-diff-row-header>
+                      <Diff size={13} aria-hidden />
+                      <span>{item.itemType === "turn-diff" ? "Turn diff" : "File changes"}</span>
+                    </div>
+                    <div className="oai-turn-diff-rows" data-turn-diff-row-list>
+                      {(turnDiffRows.length ? turnDiffRows : [{ id: item.id, label: summary.value || item.title }]).map((row) => (
+                        <div key={row.id} className="oai-turn-diff-row" data-turn-diff-row-item>
+                          <span className="oai-turn-diff-label">{row.label}</span>
+                          {typeof row.additions === "number" ? (
+                            <span className="oai-turn-diff-add">+{row.additions}</span>
+                          ) : null}
+                          {typeof row.deletions === "number" ? (
+                            <span className="oai-turn-diff-del">-{row.deletions}</span>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {showFileChangeDetails && (
+                  <div className="oai-activity-detail-change-list">
+                    {fileChanges.map((change, index) => {
+                      const changeKey = `${change.path}-${index}`;
+                      return (
+                        <FileDiffCard
+                          key={changeKey}
+                          change={change}
+                          changeKey={changeKey}
+                          copiedChangeKey={copiedChangeKey}
+                          onCopyFileDiff={handleCopyFileDiff}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+                {isExpanded && isFileChange && !hasChanges && item.detail && (
+                  <Markdown
+                    value={item.detail}
+                    className="oai-activity-detail-output markdown"
+                    showFilePath={showMessageFilePath}
+                    workspacePath={workspacePath}
+                    onOpenFileLink={onOpenFileLink}
+                    onOpenFileLinkMenu={onOpenFileLinkMenu}
+                    onOpenThreadLink={onOpenThreadLink}
+                  />
+                )}
+                {showCommandOutput && <CommandOutput output={summary.output ?? ""} />}
+                {showToolOutput && summary.output && !isCommand && (
+                  <Markdown
+                    value={summary.output}
+                    className="oai-activity-detail-output markdown"
+                    codeBlock={item.toolType !== "plan"}
+                    showFilePath={showMessageFilePath}
+                    workspacePath={workspacePath}
+                    onOpenFileLink={onOpenFileLink}
+                    onOpenFileLinkMenu={onOpenFileLinkMenu}
+                    onOpenThreadLink={onOpenThreadLink}
+                  />
+                )}
+                {showToolOutput && isPlan && (summary.output ?? "").trim() && (
+                  <div className="oai-activity-detail-actions">
+                    <button
+                      type="button"
+                      className="ghost oai-activity-detail-action"
+                      onClick={handlePlanExport}
+                      disabled={isExportingPlan}
+                    >
+                      {isExportingPlan ? "Exporting..." : "Export .md"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -983,16 +2230,20 @@ export const ToolRow = memo(function ToolRow({
 
 export const ExploreRow = memo(function ExploreRow({ item }: ExploreRowProps) {
   return (
-    <div className="tool-inline explore-inline">
-      <div className="tool-inline-bar-toggle" aria-hidden />
-      <div className="tool-inline-content">
-        <div className="explore-inline-list">
+    <div
+      className="flex w-full min-w-0 oai-activity-detail oai-explore-detail"
+      data-oai-activity-detail="explore"
+      data-oai-explore-detail
+    >
+      <div className="oai-activity-detail-gutter" aria-hidden />
+      <div className="oai-activity-detail-content">
+        <div className="oai-explore-list">
           {item.entries.map((entry, index) => (
-            <div key={`${entry.kind}-${entry.label}-${index}`} className="explore-inline-item">
-              <span className="explore-inline-kind">{exploreKindLabel(entry.kind)}</span>
-              <span className="explore-inline-label">{entry.label}</span>
+            <div key={`${entry.kind}-${entry.label}-${index}`} className="oai-explore-item">
+              <span className="oai-explore-kind">{exploreKindLabel(entry.kind)}</span>
+              <span className="oai-explore-label">{entry.label}</span>
               {entry.detail && entry.detail !== entry.label && (
-                <span className="explore-inline-detail">{entry.detail}</span>
+                <span className="oai-explore-extra">{entry.detail}</span>
               )}
             </div>
           ))}

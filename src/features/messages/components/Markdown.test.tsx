@@ -444,7 +444,7 @@ describe("Markdown file-like href behavior", () => {
       />,
     );
 
-    expect(container.querySelector(".message-file-link")).toBeNull();
+    expect(container.querySelector(".oai-message-file-link")).toBeNull();
     expect(container.textContent).toContain("/workspace/settings#L12");
   });
 
@@ -456,7 +456,7 @@ describe("Markdown file-like href behavior", () => {
       />,
     );
 
-    expect(container.querySelector(".message-file-link")).toBeNull();
+    expect(container.querySelector(".oai-message-file-link")).toBeNull();
     expect(container.textContent).toContain("vscode://file/C:/repo/src/App.tsx:12");
   });
 
@@ -469,7 +469,7 @@ describe("Markdown file-like href behavior", () => {
       />,
     );
 
-    expect(container.querySelector(".message-file-link")).toBeNull();
+    expect(container.querySelector(".oai-message-file-link")).toBeNull();
     expect(container.querySelector("code")?.textContent).toBe("/workspace/reviews#L9");
   });
 

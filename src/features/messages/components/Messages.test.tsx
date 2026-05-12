@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import { expectOpenedFileTarget } from "../test/fileLinkAssertions";
+import { FileChangeSummaryCard } from "./MessageRows";
 import { Messages } from "./Messages";
 
 const useFileLinkOpenerMock = vi.fn(
@@ -36,6 +37,16 @@ vi.mock("@services/tauri", async () => {
   };
 });
 
+vi.mock("../../git/components/PierreDiffBlock", () => ({
+  PierreDiffBlock: ({ diff, displayPath }: { diff: string; displayPath: string }) => (
+    <pre data-testid="mock-pierre-diff-block">
+      {displayPath}
+      {"\n"}
+      {diff}
+    </pre>
+  ),
+}));
+
 describe("Messages", () => {
   beforeAll(() => {
     if (!HTMLElement.prototype.scrollIntoView) {
@@ -54,7 +65,7 @@ describe("Messages", () => {
     exportMarkdownFileMock.mockReset();
   });
 
-  it("renders image grid above message text and opens lightbox", () => {
+  it("renders user attachments above the bubble and opens image lightbox", () => {
     const items: ConversationItem[] = [
       {
         id: "msg-1",
@@ -76,18 +87,363 @@ describe("Messages", () => {
       />,
     );
 
-    const bubble = container.querySelector(".message-bubble");
-    const grid = container.querySelector(".message-image-grid");
+    const attachments = container.querySelector("[data-user-message-attachments]");
+    const bubble = container.querySelector('[data-message-author-role="user"] > [data-message-part="content"]');
+    const grid = container.querySelector(".oai-message-image-grid");
     const markdown = container.querySelector(".markdown");
+    expect(attachments).toBeTruthy();
     expect(bubble).toBeTruthy();
     expect(grid).toBeTruthy();
     expect(markdown).toBeTruthy();
-    if (grid && markdown) {
-      expect(bubble?.firstChild).toBe(grid);
-    }
+    expect(attachments?.contains(grid)).toBe(true);
+    expect(bubble?.contains(grid)).toBe(false);
+    expect(bubble?.querySelector(".oai-message-content")?.contains(markdown)).toBe(true);
     const openButton = screen.getByRole("button", { name: "Open image 1" });
     fireEvent.click(openButton);
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("groups user prompt and agent response into conversation turn slots", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "Inspect the renderer",
+      },
+      {
+        id: "tool-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: rg renderer",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "Renderer inspected.",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const turn = container.querySelector("[data-turn-key]");
+    expect(turn).toBeTruthy();
+    expect(container.querySelectorAll("[data-turn-key]").length).toBe(1);
+    expect(container.querySelector(".conversation-turn")).toBeNull();
+    expect(container.querySelector(".message.user")).toBeNull();
+    expect(container.querySelector(".message.assistant")).toBeNull();
+    expect(container.querySelector('[data-thread-find-target="conversation"]')).toBeTruthy();
+    expect(container.querySelector(".oai-conversation-thread")).toBeTruthy();
+    expect(turn?.getAttribute("data-turn-key")).toBe("user:user-1");
+    expect(turn?.getAttribute("data-content-search-turn-key")).toBe("user:user-1");
+    expect(turn?.getAttribute("data-content-search-assistant-turn-key")).toBe(
+      "assistant:assistant-turn-tool-1-assistant-1",
+    );
+    expect(turn?.getAttribute("data-turn-orphan")).toBe("false");
+    expect(
+      turn?.querySelector('[data-turn-slot="user"].oai-user-turn-slot[data-content-search-unit-key] [data-message-author-role="user"]'),
+    ).toBeTruthy();
+    expect(
+      turn?.querySelector('[data-turn-slot="agent"].oai-agent-turn-slot [data-content-search-unit-key].oai-content-search-unit [data-assistant-turn]'),
+    ).toBeTruthy();
+    expect(
+      turn?.querySelectorAll("[data-content-search-unit-key]").length,
+    ).toBeGreaterThanOrEqual(2);
+    const userMessage = turn?.querySelector('[data-turn-slot="user"] [data-message-author-role="user"]');
+    expect(userMessage?.classList.contains("oai-user-message-group")).toBe(true);
+    expect(userMessage?.classList.contains("group")).toBe(true);
+    expect(userMessage?.classList.contains("items-end")).toBe(true);
+    expect(userMessage?.classList.contains("justify-end")).toBe(true);
+    const userMetadata = userMessage?.children.item(0);
+    const userBubble = userMessage?.children.item(1);
+    const userActions = userMessage?.children.item(2);
+    expect(userMetadata?.getAttribute("data-user-message-metadata")).toBe("");
+    expect(userMetadata?.classList.contains("ms-1")).toBe(true);
+    expect(userMetadata?.classList.contains("mr-1")).toBe(true);
+    expect(userBubble?.getAttribute("data-message-part")).toBe("content");
+    expect(userBubble?.classList.contains("max-w-[77%]")).toBe(true);
+    expect(userBubble?.classList.contains("rounded-2xl")).toBe(true);
+    expect(userBubble?.classList.contains("message-bubble")).toBe(false);
+    expect(
+      userMessage?.querySelector(".oai-message-content")?.classList.contains("contain-inline-size"),
+    ).toBe(true);
+    expect(userActions?.getAttribute("data-message-part")).toBe("actions");
+    expect(userActions?.classList.contains("flex-row-reverse")).toBe(true);
+    expect(userMessage?.querySelector("[data-message-actions-controls]")).toBeTruthy();
+    expect(userActions?.classList.contains("message-actions")).toBe(false);
+    const userActionRow = userMessage?.querySelector("[data-message-actions-row]");
+    expect(userActionRow?.classList.contains("mr-1")).toBe(true);
+    expect(userActionRow?.classList.contains("ms-1")).toBe(true);
+    expect(userMessage?.querySelector('[data-message-action="copy"]')).toBeTruthy();
+    const assistantTurn = turn?.querySelector('[data-turn-slot="agent"] [data-assistant-turn]');
+    expect(assistantTurn?.classList.contains("oai-assistant-turn")).toBe(true);
+    expect(assistantTurn?.querySelector("[data-assistant-turn-body]")).toBeTruthy();
+    const assistantMessage = assistantTurn?.querySelector('[data-message-author-role="assistant"]');
+    expect(assistantMessage?.querySelector('[data-message-part="actions"]')).toBeNull();
+    const assistantBody = assistantTurn?.querySelector("[data-assistant-turn-body]");
+    expect(assistantBody?.querySelector("[data-assistant-turn-body-motion]")).toBeTruthy();
+    expect(assistantBody?.querySelector("[data-assistant-turn-body-stack]")).toBeTruthy();
+    const assistantFooter = assistantTurn?.querySelector("[data-assistant-turn-footer]");
+    expect(assistantFooter).toBeTruthy();
+    expect(
+      assistantFooter?.children.item(0)?.classList.contains("oai-assistant-actions"),
+    ).toBe(true);
+    expect(
+      assistantFooter?.children.item(0)?.classList.contains("message-actions"),
+    ).toBe(false);
+    const assistantActionRow = assistantFooter?.querySelector("[data-message-actions-row]");
+    expect(assistantActionRow?.classList.contains("mr-1")).toBe(true);
+    expect(assistantActionRow?.classList.contains("ms-1")).toBe(true);
+    expect(assistantActionRow?.querySelector("[data-message-action-metadata]")).toBeTruthy();
+    expect(assistantActionRow?.querySelector('[data-message-action="copy"]')).toBeTruthy();
+    expect(turn?.getAttribute("data-content-search-turn-index")).toBe("0");
+    expect(turn?.getAttribute("data-scroll-to-key")).toBe("user:user-1");
+    expect(
+      turn
+        ?.querySelector('[data-content-search-unit-kind="assistant-turn"]')
+        ?.getAttribute("data-scroll-to-key"),
+    ).toContain("assistant");
+    expect(turn?.querySelector('[data-message-role="user"]')?.textContent ?? "").toContain(
+      "Inspect the renderer",
+    );
+    expect(turn?.querySelector('[data-message-role="assistant"]')?.textContent ?? "").toContain(
+      "Renderer inspected.",
+    );
+  });
+
+  it("renders empty user messages with the OpenAI no-content fallback", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "empty-user",
+        kind: "message",
+        role: "user",
+        text: "",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const fallback = container.querySelector("[data-message-empty-content]");
+    expect(fallback?.textContent).toBe("(No content)");
+    expect(fallback?.classList.contains("text-size-chat")).toBe(true);
+    expect(fallback?.classList.contains("mb-px")).toBe(true);
+    expect(
+      fallback?.classList.contains("text-token-description-foreground"),
+    ).toBe(true);
+  });
+
+  it("renders assistant sibling turn selector contract when alternates exist", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-sibling",
+        kind: "message",
+        role: "assistant",
+        text: "Alternative response.",
+        siblingTurnCount: 3,
+        selectedTurnIndex: 1,
+        selectedTurnId: "assistant-turn-selected",
+        hasAppliedCodeLocally: true,
+        forkTurnId: "turn-fork-1",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const selector = container.querySelector("[data-assistant-turn-selector]");
+    expect(selector).toBeTruthy();
+    expect(selector?.getAttribute("data-selected-turn")).toBe("1");
+    expect(selector?.getAttribute("data-selected-turn-id")).toBe("assistant-turn-selected");
+    expect(selector?.getAttribute("data-has-applied-code-locally")).toBe("true");
+    expect(selector?.getAttribute("data-sibling-turn-count")).toBe("3");
+    expect(selector?.getAttribute("data-on-fork-turn")).toBe("turn-fork-1");
+    expect(selector?.textContent ?? "").toContain("2 / 3");
+    fireEvent.click(screen.getByRole("button", { name: "Previous assistant response" }));
+    expect(selector?.getAttribute("data-selected-turn")).toBe("0");
+    expect(screen.getByRole("button", { name: "Fork assistant response" })).toBeTruthy();
+  });
+
+  it("renders the OpenAI user metadata slot and derived chips", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "metadata-user",
+        kind: "message",
+        role: "user",
+        text: "Use prior conversation context and review mode.",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const metadata = container.querySelector("[data-user-message-metadata]");
+    expect(metadata?.classList.contains("ms-1")).toBe(true);
+    expect(metadata?.classList.contains("mr-1")).toBe(true);
+    expect(container.querySelectorAll("[data-user-message-metadata-chip]").length).toBe(2);
+    expect(
+      container.querySelector('[data-user-message-metadata-kind="prior-conversation"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-user-message-metadata-kind="review-mode"]'),
+    ).toBeTruthy();
+    expect(metadata?.textContent ?? "").toContain("References prior conversation");
+    expect(metadata?.textContent ?? "").toContain("Review mode");
+  });
+
+  it("renders explicit OpenAI user metadata and file attachment structure", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "rich-user",
+        kind: "message",
+        role: "user",
+        text: "Review this patch",
+        attachments: [{ path: "/repo/src/App.tsx", kind: "file" }],
+        codexDelegation: { sourceThreadId: "thread-source" },
+        heartbeatTrigger: { automationId: "automation-1" },
+        forkedFromConversation: { sourceConversationId: "fork-source" },
+        referencesPriorConversation: true,
+        reviewMode: true,
+        pullRequestFixMode: true,
+        autoResolveSync: true,
+        commentCount: 2,
+        browserCommentCount: 3,
+        diffCommentCount: 4,
+        selectedTextAttachmentCount: 5,
+        pullRequestCheckCount: 1,
+        messageStatus: "Steered conversation",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const attachments = container.querySelector("[data-user-message-attachments]");
+    expect(attachments).toBeTruthy();
+    expect(attachments?.textContent ?? "").toContain("App.tsx");
+    expect(
+      attachments?.querySelector('[data-user-message-attachment][data-attachment-kind="file"]'),
+    ).toBeTruthy();
+    expect(attachments?.querySelector('[class~="group/file-attachment"]')).toBeTruthy();
+    expect(attachments?.querySelector('[data-attachment-kind="codexDelegation"]')).toBeTruthy();
+    expect(attachments?.querySelector('[data-attachment-kind="heartbeatTrigger"]')).toBeTruthy();
+    expect(attachments?.querySelector('[data-attachment-kind="forkedFromConversation"]')).toBeTruthy();
+    expect(attachments?.querySelector('[data-attachment-kind="browserCommentCount"]')?.textContent).toContain("3 browser comments");
+    expect(attachments?.querySelector('[data-attachment-kind="diffCommentCount"]')?.textContent).toContain("4 diff comments");
+    expect(attachments?.querySelector('[data-attachment-kind="selectedTextAttachmentCount"]')?.textContent).toContain("5 selected text");
+    expect(container.querySelector('[data-user-message-metadata-kind="pull-request-fix"]')).toBeTruthy();
+    expect(container.querySelector('[data-user-message-metadata-kind="auto-resolve-sync"]')).toBeTruthy();
+    expect(container.querySelector('[data-user-message-metadata-kind="comments"]')?.textContent).toContain("2 comments");
+    expect(container.querySelector('[data-user-message-metadata-kind="browser-comments"]')?.textContent).toContain("3 browser comments");
+    expect(container.querySelector('[data-user-message-metadata-kind="diff-comments"]')?.textContent).toContain("4 diff comments");
+    expect(container.querySelector('[data-user-message-metadata-kind="selected-text-attachments"]')?.textContent).toContain("5 selected text attachments");
+    expect(container.querySelector('[data-user-message-metadata-kind="pull-request-checks"]')?.textContent).toContain("1 PR check");
+    expect(container.querySelector('[data-user-message-metadata-kind="message-status"]')?.textContent).toContain("Steered conversation");
+    expect(
+      container
+        .querySelector('[data-message-author-role="user"] > [data-message-part="content"]')
+        ?.getAttribute("data-message-has-attachments"),
+    ).toBe("true");
+  });
+
+  it("renders OpenAI parent context, user collapse, and edit structure", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "rich-user-openai-contract",
+        kind: "message",
+        role: "user",
+        text: Array.from({ length: 6 }, (_, index) => `Line ${index + 1}`).join("\n"),
+        collapsedLineCount: 2,
+        canEdit: true,
+        parentContext: {
+          sourceConversationId: "parent-thread-1",
+          label: "Parent chat",
+          kind: "parent-context",
+        },
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const parentContext = container.querySelector("[data-parent-context]");
+    expect(parentContext).toBeTruthy();
+    expect(parentContext?.getAttribute("data-source-conversation-id")).toBe("parent-thread-1");
+    expect(parentContext?.getAttribute("data-attachment-kind")).toBe("parent-context");
+    const userText = container.querySelector("[data-user-message-text]");
+    expect(userText?.getAttribute("data-user-message-collapsed")).toBe("true");
+    const collapseToggle = screen.getByRole("button", { name: "Show more" });
+    fireEvent.click(collapseToggle);
+    expect(container.querySelector("[data-user-message-text]")?.getAttribute("data-user-message-collapsed")).toBe("false");
+    expect(screen.getByRole("button", { name: "Show less" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit message" }));
+    expect(container.querySelector("[data-user-message-edit-form]")).toBeTruthy();
+    expect(container.querySelector("[data-user-message-edit-textarea]")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
+    expect(container.querySelector(".oai-user-message-edit-submit")?.getAttribute("data-send-edited-message")).toBe("sendEditedMessage");
+    expect(container.querySelector(".oai-user-message-edit-cancel")?.getAttribute("data-cancel-edit-message")).toBe("cancelEditMessage");
+    expect(
+      container.querySelector('[data-message-author-role="user"] [data-editing-message-id]')?.getAttribute("data-editing-message-id"),
+    ).toBe("rich-user-openai-contract");
+    fireEvent.change(container.querySelector("[data-user-message-edit-textarea]")!, {
+      target: { value: "Edited OpenAI-style user message" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(screen.getByText("Edited OpenAI-style user message")).toBeTruthy();
   });
 
   it("preserves newlines when images are attached", () => {
@@ -170,7 +526,8 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".message-bubble-table-only")).toBeTruthy();
+    expect(container.querySelector(".oai-assistant-table-only")).toBeTruthy();
+    expect(container.querySelector(".message-bubble-table-only")).toBeNull();
     expect(container.querySelector(".markdown-table-wrap")).toBeTruthy();
   });
 
@@ -294,11 +651,13 @@ describe("Messages", () => {
     const fileLinkName = screen.getByText("DocumentListView.swift");
     const fileLinkLine = screen.getByText("L111");
     const fileLinkPath = screen.getByText("iosApp/src/views/DocumentsList");
-    const fileLink = container.querySelector(".message-file-link");
+    const fileLink = container.querySelector(".oai-message-file-link");
     expect(fileLinkName).toBeTruthy();
     expect(fileLinkLine).toBeTruthy();
     expect(fileLinkPath).toBeTruthy();
     expect(fileLink).toBeTruthy();
+    expect(fileLink?.classList.contains("group/inline-mention")).toBe(true);
+    expect(fileLink?.classList.contains("group/file-diff")).toBe(true);
 
     fireEvent.click(fileLink as Element);
     expectOpenedFileTarget(
@@ -633,11 +992,11 @@ describe("Messages", () => {
       />,
     );
 
-    const fileName = container.querySelector(".message-file-link-name");
-    const lineLabel = container.querySelector(".message-file-link-line");
+    const fileName = container.querySelector(".oai-message-file-link-name");
+    const lineLabel = container.querySelector(".oai-message-file-link-line");
     expect(fileName?.textContent).toBe("DocumentListView.swift");
     expect(lineLabel?.textContent).toBe("L111");
-    expect(container.querySelector(".message-file-link-path")).toBeNull();
+    expect(container.querySelector(".oai-message-file-link-path")).toBeNull();
   });
 
   it("renders absolute file references as workspace-relative paths", () => {
@@ -669,7 +1028,7 @@ describe("Messages", () => {
     expect(screen.getByText("L244")).toBeTruthy();
     expect(screen.getByText("src/features/messages/components")).toBeTruthy();
 
-    const fileLink = container.querySelector(".message-file-link");
+    const fileLink = container.querySelector(".oai-message-file-link");
     expect(fileLink).toBeTruthy();
     fireEvent.click(fileLink as Element);
     expectOpenedFileTarget(
@@ -707,7 +1066,7 @@ describe("Messages", () => {
     expect(screen.getByText("L123")).toBeTruthy();
     expect(screen.getByText("../../Other/IceCubesApp")).toBeTruthy();
 
-    const fileLink = container.querySelector(".message-file-link");
+    const fileLink = container.querySelector(".oai-message-file-link");
     expect(fileLink).toBeTruthy();
     fireEvent.click(fileLink as Element);
     expectOpenedFileTarget(
@@ -783,9 +1142,10 @@ describe("Messages", () => {
       />,
     );
 
-    const workingText = container.querySelector(".working-text");
+    const workingText = container.querySelector("[data-oai-thinking-shimmer-label]");
     expect(workingText?.textContent ?? "").toContain("Scanning repository");
-    expect(container.querySelector(".reasoning-inline")).toBeNull();
+    expect(container.querySelector("[data-oai-reasoning-detail]")).toBeNull();
+    expect(container.querySelector(".working-text")).toBeNull();
   });
 
   it("renders reasoning rows when there is reasoning body content", () => {
@@ -810,10 +1170,10 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    expect(container.querySelector("[data-oai-reasoning-detail]")).toBeTruthy();
+    const reasoningDetail = container.querySelector(".oai-reasoning-detail-body");
     expect(reasoningDetail?.textContent ?? "").toContain("Looking for entry points");
-    const workingText = container.querySelector(".working-text");
+    const workingText = container.querySelector("[data-oai-thinking-shimmer-label]");
     expect(workingText?.textContent ?? "").toContain("Scanning repository");
   });
 
@@ -839,9 +1199,9 @@ describe("Messages", () => {
       />,
     );
 
-    const workingText = container.querySelector(".working-text");
+    const workingText = container.querySelector("[data-oai-thinking-shimmer-label]");
     expect(workingText?.textContent ?? "").toContain("Plan from content");
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".oai-reasoning-detail-body");
     expect(reasoningDetail?.textContent ?? "").toContain("More detail here");
     expect(reasoningDetail?.textContent ?? "").not.toContain("Plan from content");
   });
@@ -874,7 +1234,7 @@ describe("Messages", () => {
       />,
     );
 
-    const workingText = container.querySelector(".working-text");
+    const workingText = container.querySelector("[data-oai-thinking-shimmer-label]");
     expect(workingText?.textContent ?? "").toContain("Working");
     expect(workingText?.textContent ?? "").not.toContain("Old reasoning title");
   });
@@ -910,9 +1270,9 @@ describe("Messages", () => {
       />,
     );
 
-    const workingText = container.querySelector(".working-text");
+    const workingText = container.querySelector("[data-oai-thinking-shimmer-label]");
     expect(workingText?.textContent ?? "").toContain("Indexing workspace");
-    expect(container.querySelector(".reasoning-inline")).toBeNull();
+    expect(container.querySelector("[data-oai-reasoning-detail]")).toBeNull();
   });
 
   it("shows polling fetch countdown text instead of done duration when requested", () => {
@@ -1048,12 +1408,13 @@ describe("Messages", () => {
     );
 
     await waitFor(() => {
-      expect(container.querySelector(".explore-inline")).toBeTruthy();
+      expect(container.querySelector("[data-oai-explore-detail]")).toBeTruthy();
     });
     expect(screen.queryByText(/tool calls/i)).toBeNull();
-    const exploreItems = container.querySelectorAll(".explore-inline-item");
+    const exploreItems = container.querySelectorAll(".oai-explore-item");
     expect(exploreItems.length).toBe(2);
     expect(container.querySelector(".explore-inline-title")).toBeNull();
+    expect(container.querySelector(".explore-inline-item")).toBeNull();
     expect(screen.getByText("Find routes")).toBeTruthy();
     expect(screen.getByText("routes.ts")).toBeTruthy();
   });
@@ -1086,9 +1447,10 @@ describe("Messages", () => {
     );
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".explore-inline").length).toBe(1);
+      expect(container.querySelectorAll("[data-oai-explore-detail]").length).toBe(1);
     });
     expect(container.querySelector(".explore-inline-title")).toBeNull();
+    expect(container.querySelector(".explore-inline-item")).toBeNull();
     expect(screen.getByText("starting")).toBeTruthy();
     expect(screen.getByText("finished")).toBeTruthy();
   });
@@ -1130,10 +1492,10 @@ describe("Messages", () => {
     );
 
     await waitFor(() => {
-      const exploreBlocks = container.querySelectorAll(".explore-inline");
+      const exploreBlocks = container.querySelectorAll("[data-oai-explore-detail]");
       expect(exploreBlocks.length).toBe(2);
     });
-    const exploreItems = container.querySelectorAll(".explore-inline-item");
+    const exploreItems = container.querySelectorAll(".oai-explore-item");
     expect(exploreItems.length).toBe(2);
     expect(screen.getByText(/rg reducers/i)).toBeTruthy();
   });
@@ -1172,10 +1534,10 @@ describe("Messages", () => {
     );
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".explore-inline").length).toBe(2);
+      expect(container.querySelectorAll("[data-oai-explore-detail]").length).toBe(2);
     });
-    const exploreBlocks = Array.from(container.querySelectorAll(".explore-inline"));
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const exploreBlocks = Array.from(container.querySelectorAll("[data-oai-explore-detail]"));
+    const reasoningDetail = container.querySelector(".oai-reasoning-detail-body");
     expect(exploreBlocks.length).toBe(2);
     expect(reasoningDetail).toBeTruthy();
     const [firstExploreBlock, secondExploreBlock] = exploreBlocks;
@@ -1225,16 +1587,264 @@ describe("Messages", () => {
     await waitFor(() => {
       expect(screen.getByText("A message between explore blocks")).toBeTruthy();
     });
-    expect(screen.getByRole("button", { name: /已处理/i })).toBeTruthy();
-    expect(container.querySelectorAll(".explore-inline").length).toBe(0);
+    expect(screen.getAllByRole("button", { name: /已处理/i }).length).toBe(1);
+    expect(container.querySelectorAll("[data-oai-explore-detail]").length).toBe(0);
 
-    fireEvent.click(screen.getByRole("button", { name: /已处理/i }));
+    container
+      .querySelectorAll("[data-collapsed-tool-activity-summary]")
+      .forEach((button) => fireEvent.click(button));
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".explore-inline-item").length).toBe(2);
+      expect(container.querySelectorAll("[data-collapsed-tool-activity-item]").length).toBe(2);
+    });
+    expect(screen.getByRole("button", { name: /已探索 1 次搜索/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /已探索 1 个文件/i })).toBeTruthy();
+    expect(container.querySelectorAll(".oai-explore-item").length).toBe(0);
+    expect(container.querySelectorAll(".explore-inline-item").length).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /已探索 1 次搜索/i }));
+    fireEvent.click(screen.getByRole("button", { name: /已探索 1 个文件/i }));
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".oai-explore-item").length).toBe(2);
     });
     expect(screen.getByText("before message")).toBeTruthy();
     expect(screen.getByText("after message")).toBeTruthy();
+  });
+
+  it("keeps edited file details folded until each summary is expanded", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-file-change",
+        kind: "message",
+        role: "user",
+        text: "Update the message renderer",
+      },
+      {
+        id: "tool-file-change",
+        kind: "tool",
+        toolType: "fileChange",
+        title: "File changes",
+        detail: "",
+        status: "completed",
+        changes: [
+          {
+            path: "src/features/messages/components/Messages.tsx",
+            repositorySource: "cloud",
+            reviewSummarySource: "cloud-review",
+            generatedPathsReady: true,
+            diff: [
+              "diff --git a/src/features/messages/components/Messages.tsx b/src/features/messages/components/Messages.tsx",
+              "@@ -1,2 +1,3 @@",
+              "-old line",
+              "+new line",
+              "+extra line",
+            ].join("\n"),
+          },
+        ],
+      },
+      {
+        id: "assistant-file-change",
+        kind: "message",
+        role: "assistant",
+        text: "已改好。",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /已处理 1 个操作/i })).toBeTruthy();
+    });
+    const activitySummary = screen.getByRole("button", { name: /已处理 1 个操作/i });
+    const activityBlock = activitySummary.closest("[data-collapsed-tool-activity]");
+    expect(activityBlock).toBeTruthy();
+    expect(activityBlock?.getAttribute("data-collapsed-tool-activity-expanded")).toBe("false");
+    expect(activityBlock?.getAttribute("data-collapsed-tool-activity-type")).toBe("patch");
+    expect(activityBlock?.getAttribute("data-conversation-detail-level")).toBe("STEPS_PROSE");
+    expect(activityBlock?.getAttribute("data-is-activity-slice-closed")).toBe("true");
+    expect(activityBlock?.getAttribute("data-should-auto-expand-mcp-apps")).toBe("false");
+    expect(activityBlock?.getAttribute("data-mcp-server-statuses")).toBe("{}");
+    expect(activitySummary.closest("[data-collapsed-tool-activity-offset]")).toBeTruthy();
+    expect(activitySummary.closest(".oai-collapsed-tool-activity-offset")).toBeTruthy();
+    expect(activitySummary.closest(".oai-collapsed-tool-activity-stack")).toBeTruthy();
+    const assistantBody = container.querySelector("[data-assistant-turn-body]");
+    expect(container.querySelector("[data-conversation-tool-assistant-gap]")).toBeTruthy();
+    expect(assistantBody?.getAttribute("data-assistant-turn-body-has-activity")).toBe("true");
+    expect(assistantBody?.getAttribute("data-assistant-turn-body-expanded")).toBe("false");
+    expect(container.querySelector("[data-assistant-turn-body-stack]")).toBeTruthy();
+    expect(activitySummary.classList.contains("oai-collapsed-tool-activity-summary")).toBe(
+      true,
+    );
+    expect(activitySummary.classList.contains("text-size-chat")).toBe(true);
+    expect(activitySummary.classList.contains("hover:bg-token-bg-subtle")).toBe(true);
+    const dividerShell = activitySummary.nextElementSibling;
+    expect(dividerShell?.classList.contains("oai-collapsed-tool-activity-divider-shell")).toBe(
+      true,
+    );
+    expect(dividerShell?.classList.contains("pt-1")).toBe(true);
+    expect(
+      dividerShell?.firstElementChild?.classList.contains("oai-collapsed-tool-activity-divider"),
+    ).toBe(true);
+    expect(dividerShell?.firstElementChild?.classList.contains("border-token-border-light")).toBe(true);
+    expect(activitySummary.hasAttribute("data-collapsed-tool-activity-summary")).toBe(true);
+    const activityText = activitySummary.querySelector(".oai-collapsed-tool-activity-text");
+    expect(activityText?.classList.contains("shrink")).toBe(true);
+    expect(activityText?.classList.contains("pr-1")).toBe(true);
+    const activityChevron = activitySummary.querySelector(".oai-collapsed-tool-activity-chevron");
+    expect(activityChevron).toBeTruthy();
+    expect(activityChevron?.classList.contains("inline-chevron")).toBe(true);
+    expect(activityChevron?.classList.contains("group-hover/summary:opacity-100")).toBe(true);
+    expect(activityChevron?.classList.contains("rotate-0")).toBe(true);
+    expect(container.querySelector("[data-codex-review-diff-summary]")).toBeTruthy();
+    expect(container.querySelector(".oai-review-diff-summary-card")).toBeTruthy();
+    expect(
+      container.querySelector(
+        '[data-assistant-turn-footer] [data-diffs][data-diffs-mode="summary"]',
+      ),
+    ).toBeTruthy();
+    expect(container.querySelector('[data-diffs-header="summary"]')).toBeTruthy();
+    expect(container.querySelector('[data-diffs-header="summary"]')?.classList.contains("group/custom-section-header")).toBe(true);
+    expect(screen.getByRole("button", { name: /1 个文件已更改/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Messages\.tsx \+2 -1/i })).toBeTruthy();
+    expect(container.querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)).toBeNull();
+    expect(container.querySelector(".oai-file-diff-card")).toBeNull();
+
+    fireEvent.click(activitySummary);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /已编辑 1 个文件/i })).toBeTruthy();
+    });
+    expect(activityBlock?.getAttribute("data-collapsed-tool-activity-expanded")).toBe("true");
+    expect(assistantBody?.getAttribute("data-assistant-turn-body-expanded")).toBe("true");
+    expect(container.querySelector("[data-collapsed-tool-activity-item].oai-tool-activity-row")).toBeTruthy();
+    expect(
+      container
+        .querySelector("[data-collapsed-tool-activity-item].oai-tool-activity-row")
+        ?.getAttribute("data-oai-tool-activity-kind"),
+    ).toBe("patch");
+    expect(
+      container
+        .querySelector("[data-collapsed-tool-activity-item].oai-tool-activity-row")
+        ?.getAttribute("data-conversation-detail-level"),
+    ).toBe("STEPS_PROSE");
+    expect(container.querySelector("[data-oai-tool-activity-offset]")).toBeTruthy();
+    expect(container.querySelector("[data-oai-tool-activity-summary]")).toBeTruthy();
+    expect(container.querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Toggle tool details" })).toBeNull();
+    expect(container.querySelector(".oai-file-diff-card")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /已编辑 1 个文件/i }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "edited: Messages.tsx +2 -1" }),
+      ).toBeTruthy();
+    });
+    expect(container.querySelector("[data-collapsed-tool-activity-body]")).toBeTruthy();
+    expect(container.querySelector("[data-oai-tool-activity-body]")).toBeTruthy();
+    expect(container.querySelector(".oai-tool-activity-body-stack")).toBeTruthy();
+    expect(container.querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)).toBeTruthy();
+    expect(container.querySelector("[data-oai-activity-detail-offset]")).toBeTruthy();
+    expect(container.querySelector("[data-oai-activity-detail-stack]")).toBeTruthy();
+    expect(container.querySelector("[data-oai-activity-detail-content]")).toBeTruthy();
+    expect(container.querySelector(".tool-inline")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "edited: Messages.tsx +2 -1" }));
+    await waitFor(() => {
+      expect(container.querySelector(".oai-file-diff-card")).toBeTruthy();
+    });
+    expect(container.querySelector("[data-oai-activity-detail-body]")).toBeTruthy();
+    expect(container.querySelector(".codex-review-diff-card")).toBeTruthy();
+    expect(container.querySelector("[data-codex-review-diff-card]")).toBeTruthy();
+    expect(container.querySelector("[data-diffs-card]")).toBeTruthy();
+    expect(
+      container.querySelector('[data-diffs][data-diffs-mode="file"]'),
+    ).toBeTruthy();
+    expect(container.querySelector("[data-diffs-file-body-content]")).toBeTruthy();
+    expect(container.querySelector("[data-file-body-content]")).toBeTruthy();
+    expect(container.querySelector(".oai-file-diff-card[data-diff][data-file]")).toBeTruthy();
+    expect(container.querySelector("[data-thread-diff-virtualized]")).toBeTruthy();
+    expect(container.querySelector("[data-file-blame-gutter]")).toBeNull();
+    expect(container.querySelector("[data-file-blame-trigger]")).toBeNull();
+    expect(container.querySelector("[data-file-change-gutter]")).toBeNull();
+    expect(container.querySelector("[data-file-change-gutter-marker]")).toBeNull();
+    expect(container.querySelector(".oai-file-diff-card")?.getAttribute("data-review-path")).toBe(
+      "src/features/messages/components/Messages.tsx",
+    );
+    expect(container.querySelector(".oai-file-diff-card")?.getAttribute("data-repository-source")).toBe("cloud");
+    expect(container.querySelector(".oai-file-diff-card")?.getAttribute("data-review-summary-source")).toBe("cloud-review");
+    expect(container.querySelector(".oai-file-diff-card")?.getAttribute("data-generated-paths-ready")).toBe("true");
+    expect(container.querySelector("[data-app-action-review-file]")).toBeTruthy();
+    expect(container.querySelector(".oai-file-diff-card [data-utility-button]")).toBeTruthy();
+    expect(container.querySelector(".oai-file-diff-card [data-change-icon]")).toBeTruthy();
+    expect(container.querySelector(".oai-file-diff-card [data-diffs-file-header-meta]")).toBeTruthy();
+    expect(container.querySelector(".oai-file-diff-card [data-diffs-file-header-controls]")).toBeTruthy();
+    expect(container.querySelector("[data-diffs-summary-meta]")).toBeTruthy();
+    expect(container.querySelector("[data-diffs-file-meta]")).toBeTruthy();
+    const fileDiffHeader = container.querySelector(
+      '.oai-file-diff-card [data-diffs-header="file"]',
+    );
+    expect(fileDiffHeader?.textContent ?? "").toContain(
+      "Messages.tsx",
+    );
+    expect(fileDiffHeader?.textContent ?? "").toContain(
+      "+2",
+    );
+    expect(fileDiffHeader?.textContent ?? "").toContain(
+      "-1",
+    );
+    expect(container.querySelector(".message-file-diff-card")).toBeNull();
+    expect(container.querySelector(".message-file-diff-header")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /已处理 1 个操作/i }));
+    await waitFor(() => {
+      expect(container.querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)).toBeNull();
+      expect(container.querySelector("[data-collapsed-tool-activity-item]")).toBeNull();
+    });
+  });
+
+  it("deduplicates repeated file-change entries in the footer review summary", async () => {
+    const { container } = render(
+      <FileChangeSummaryCard
+        workspacePath="/Users/xihe0000/workspace/coChat"
+        changes={[
+          {
+            path: "/Users/xihe0000/workspace/coChat/src/features/messages/components/MessageRows.tsx",
+            diff: ["@@ -1,1 +1,2 @@", " old", "+new"].join("\n"),
+          },
+          {
+            path: "/Users/xihe0000/workspace/coChat/src/features/messages/components/MessageRows.tsx",
+            diff: ["@@ -10,1 +11,1 @@", "-removed", "+added"].join("\n"),
+          },
+        ]}
+      />,
+    );
+
+    await screen.findByRole("button", { name: /1 个文件已更改/i });
+
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-diffs-file-row]").length).toBe(1);
+    });
+    expect(container.querySelector("[data-diffs-file-row]")?.getAttribute("data-review-path")).toBe(
+      "src/features/messages/components/MessageRows.tsx",
+    );
+    expect(container.querySelector("[data-diffs-file-row]")?.textContent ?? "").toContain(
+      "src/features/messages/components/MessageRows.tsx",
+    );
+    expect(container.querySelector("[data-diffs-file-row]")?.textContent ?? "").toContain("+2");
+    expect(container.querySelector("[data-diffs-file-row]")?.textContent ?? "").toContain("-1");
+    fireEvent.click(screen.getByRole("button", { name: /MessageRows\.tsx \+2 -1/i }));
+    await waitFor(() => {
+      expect(container.querySelector("[data-diffs-file-panel]")).toBeTruthy();
+    });
   });
 
   it("keeps one assistant reading flow when tools are interleaved between messages", async () => {
@@ -1252,7 +1862,7 @@ describe("Messages", () => {
         title: "Command: rg content_id",
         detail: "/repo",
         status: "completed",
-        output: "",
+        output: "content_id",
         durationMs: 2_000,
       },
       {
@@ -1287,32 +1897,52 @@ describe("Messages", () => {
     );
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".assistant-turn").length).toBe(1);
+      expect(container.querySelectorAll("[data-assistant-turn]").length).toBe(1);
     });
     const turnBlocks = Array.from(
-      container.querySelectorAll(".assistant-turn > .message, .assistant-turn-activity-block"),
+      container.querySelectorAll(
+        "[data-assistant-turn] > [data-collapsed-tool-activity], [data-assistant-turn-body-stack] > [data-message-author-role='assistant'], [data-assistant-turn-body-stack] > [data-collapsed-tool-activity-item]",
+      ),
     );
-    expect(turnBlocks.length).toBe(5);
-    expect(turnBlocks[0].textContent ?? "").toContain("First paragraph.");
-    expect(turnBlocks[1].textContent ?? "").toContain("已运行 1 条命令");
+    expect(turnBlocks.length).toBe(4);
+    expect(turnBlocks[0].textContent ?? "").toContain("已处理 2s");
+    expect(turnBlocks[1].textContent ?? "").toContain("First paragraph.");
     expect(turnBlocks[2].textContent ?? "").toContain("Second paragraph.");
-    expect(turnBlocks[3].textContent ?? "").toContain("已探索 1 个文件");
-    expect(turnBlocks[4].textContent ?? "").toContain("Final paragraph.");
-    expect(screen.getByRole("button", { name: /已处理 0:02/i })).toBeTruthy();
+    expect(turnBlocks[3].textContent ?? "").toContain("Final paragraph.");
+    expect(screen.getAllByRole("button", { name: /已处理/i }).length).toBe(1);
     expect(screen.queryByText(/rg content_id/i)).toBeNull();
+    expect(screen.queryByText("routes.ts")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /已处理 2s/i }));
+
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-collapsed-tool-activity-item]").length).toBe(2);
+    });
+    const expandedTurnBlocks = Array.from(
+      container.querySelectorAll(
+        "[data-assistant-turn] > [data-collapsed-tool-activity], [data-assistant-turn-body-stack] > [data-message-author-role='assistant'], [data-assistant-turn-body-stack] > [data-collapsed-tool-activity-item]",
+      ),
+    );
+    expect(expandedTurnBlocks.length).toBe(6);
+    expect(expandedTurnBlocks[0].textContent ?? "").toContain("已处理 2s");
+    expect(expandedTurnBlocks[1].textContent ?? "").toContain("First paragraph.");
+    expect(expandedTurnBlocks[2].textContent ?? "").toContain("已运行 1 条命令");
+    expect(expandedTurnBlocks[3].textContent ?? "").toContain("Second paragraph.");
+    expect(expandedTurnBlocks[4].textContent ?? "").toContain("已探索 1 个文件");
+    expect(expandedTurnBlocks[5].textContent ?? "").toContain("Final paragraph.");
+    expect(screen.queryByText(/rg content_id/i)).toBeNull();
+    expect(screen.queryByText("routes.ts")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /已运行 1 条命令/i }));
+    fireEvent.click(screen.getByRole("button", { name: /已探索 1 个文件/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/rg content_id/i)).toBeTruthy();
     });
-    expect(screen.queryByText("routes.ts")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /已探索 1 个文件/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText("routes.ts")).toBeTruthy();
-    });
+    expect(container.querySelector("[data-oai-tool-terminal]")).toBeTruthy();
+    expect(container.querySelector("[data-oai-tool-terminal-line]")).toBeTruthy();
+    expect(container.querySelector(".tool-inline-terminal")).toBeNull();
+    expect(screen.getByText("routes.ts")).toBeTruthy();
   });
 
   it("counts explore entry steps in the tool group summary", async () => {
@@ -1352,7 +1982,7 @@ describe("Messages", () => {
       },
     ];
 
-    render(
+    const { container } = render(
       <Messages
         items={items}
         threadId="thread-1"
@@ -1366,6 +1996,10 @@ describe("Messages", () => {
     await waitFor(() => {
       expect(screen.getByText("5 tool calls")).toBeTruthy();
     });
+    expect(container.querySelector("[data-oai-tool-group]")).toBeTruthy();
+    expect(container.querySelector("[data-oai-tool-activity-stack]")).toBeTruthy();
+    expect(container.querySelector(".tool-group")).toBeNull();
+    expect(container.querySelector(".tool-group-body")).toBeNull();
   });
 
   it("re-pins to bottom on thread switch even when previous thread was scrolled up", () => {
@@ -1451,7 +2085,29 @@ describe("Messages", () => {
       />,
     );
 
-    expect(screen.getByText("Plan ready")).toBeTruthy();
+    const planReadyTitle = screen.getByText("Plan ready");
+    expect(planReadyTitle).toBeTruthy();
+    const followupMessage = planReadyTitle.closest("[data-oai-followup-message]");
+    expect(followupMessage).toBeTruthy();
+    expect(followupMessage?.hasAttribute("data-oai-request-input-message")).toBe(true);
+    expect(followupMessage?.querySelector("[data-oai-request-input-panel]")).toBeTruthy();
+    expect(followupMessage?.querySelector(".oai-request-input-panel__header")).toBeTruthy();
+    expect(
+      followupMessage?.querySelector("[data-oai-request-input-freeform-shell]"),
+    ).toBeTruthy();
+    expect(
+      followupMessage?.querySelector("[data-oai-request-input-freeform]"),
+    ).toBeTruthy();
+    const planTextarea = followupMessage?.querySelector<HTMLTextAreaElement>(
+      "[data-oai-request-input-freeform]",
+    );
+    expect(planTextarea?.getAttribute("data-autoresize")).toBe("");
+    expect(planTextarea?.getAttribute("rows")).toBe("1");
+    expect(planTextarea?.classList.contains("bg-transparent")).toBe(true);
+    expect(planTextarea?.classList.contains("resize-none")).toBe(true);
+    expect(followupMessage?.classList.contains("message")).toBe(false);
+    expect(followupMessage?.querySelector(".bubble.request-user-input-card")).toBeNull();
+    expect(followupMessage?.querySelector(".request-user-input-card")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Implement this plan" }),
     ).toBeTruthy();
@@ -1740,7 +2396,14 @@ describe("Messages", () => {
               thread_id: "thread-1",
               turn_id: "turn-1",
               item_id: "item-1",
-              questions: [],
+              questions: [
+                {
+                  id: "q-1",
+                  header: "Details",
+                  question: "Need anything else?",
+                  options: [],
+                },
+              ],
             },
           },
         ]}
@@ -1751,7 +2414,425 @@ describe("Messages", () => {
     );
 
     expect(screen.getByText("Input requested")).toBeTruthy();
+    expect(
+      screen.getByText("Input requested").closest("[data-oai-request-input-panel]"),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText("Input requested")
+        .closest("[data-oai-request-input-message]")
+        ?.querySelector("[data-oai-request-input-freeform-shell]"),
+    ).toBeTruthy();
+    const requestTextarea = screen
+      .getByText("Input requested")
+      .closest("[data-oai-request-input-message]")
+      ?.querySelector<HTMLTextAreaElement>("[data-oai-request-input-freeform]");
+    expect(requestTextarea?.getAttribute("data-autoresize")).toBe("");
+    expect(requestTextarea?.getAttribute("rows")).toBe("1");
+    expect(screen.getByRole("button", { name: /Dismiss\s*ESC/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
     expect(screen.queryByText("Plan ready")).toBeNull();
+  });
+
+  it("renders OpenAI request input option index and escape dismiss behavior", () => {
+    render(
+      <Messages
+        items={[]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        userInputRequests={[
+          {
+            workspace_id: "ws-1",
+            request_id: 2,
+            params: {
+              thread_id: "thread-1",
+              turn_id: "turn-1",
+              item_id: "item-1",
+              questions: [
+                {
+                  id: "q-1",
+                  header: "Choice",
+                  question: "Pick one",
+                  options: [
+                    { label: "First", description: "A" },
+                    { label: "Second", description: "B" },
+                  ],
+                },
+              ],
+            },
+          },
+        ]}
+        onUserInputSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("1.")).toBeTruthy();
+    expect(screen.getByText("2.")).toBeTruthy();
+    expect(screen.getByText("3.")).toBeTruthy();
+    const textarea = screen.getByPlaceholderText("Add notes (optional)");
+    expect(textarea.closest("[data-oai-request-input-freeform-shell]")).toBeTruthy();
+    expect(textarea.closest("[data-oai-request-input-freeform-shell]")?.textContent).toContain("3.");
+    expect(textarea.closest("[data-oai-request-input-freeform-shell]")?.querySelector("[data-i18n-id='requestInputPanel.optionIndex']")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Dismiss\s*ESC/i }).getAttribute("data-i18n-id")).toBe("requestInputPanel.dismiss");
+    expect(screen.getByText("ESC").getAttribute("data-i18n-id")).toBe("requestInputPanel.escapeKey");
+    expect(screen.getByRole("button", { name: "Skip" }).getAttribute("data-i18n-id")).toBe("requestInputPanel.skip");
+    fireEvent.keyDown(textarea, { key: "Escape" });
+    expect(screen.queryByText("Input requested")).toBeNull();
+  });
+
+  it("renders OpenAI activity item type branches and generated image artifacts", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "generated-image-tool",
+        kind: "tool",
+        toolType: "imageGeneration",
+        itemType: "generated-image",
+        title: "Generated image",
+        detail: "done",
+        status: "completed",
+        generatedImage: "data:image/png;base64,AAA",
+        artifact: {
+          id: "artifact-1",
+          title: "Image artifact",
+          kind: "image",
+          description: "Generated preview",
+        },
+      },
+      {
+        id: "permission-tool",
+        kind: "tool",
+        toolType: "permission",
+        itemType: "permission-request",
+        title: "Permission request",
+        detail: "needs approval",
+        status: "completed",
+      },
+      {
+        id: "mcp-tool",
+        kind: "tool",
+        toolType: "mcp",
+        itemType: "mcp-server-elicitation",
+        title: "MCP elicitation",
+        detail: "input",
+        status: "completed",
+        mcpApp: {
+          id: "mcp-app-1",
+          title: "MCP app",
+          expanded: true,
+          url: "https://mcp.example.test",
+        },
+      },
+      {
+        id: "dynamic-tool",
+        kind: "tool",
+        toolType: "dynamic",
+        itemType: "dynamic-tool-call",
+        title: "Dynamic tool",
+        detail: "call",
+        status: "completed",
+      },
+      {
+        id: "compact-tool",
+        kind: "tool",
+        toolType: "context",
+        itemType: "context-compaction",
+        title: "Context compaction",
+        detail: "compact",
+        status: "completed",
+      },
+      {
+        id: "todo-tool",
+        kind: "tool",
+        toolType: "todo",
+        itemType: "todo-list",
+        title: "Todo list",
+        detail: "todo",
+        status: "completed",
+      },
+      {
+        id: "stream-error-tool",
+        kind: "tool",
+        toolType: "error",
+        itemType: "stream-error",
+        title: "Stream error",
+        detail: "error",
+        status: "failed",
+      },
+      {
+        id: "system-error-tool",
+        kind: "tool",
+        toolType: "error",
+        itemType: "system-error",
+        title: "System error",
+        detail: "error",
+        status: "failed",
+      },
+      {
+        id: "remote-task-tool",
+        kind: "tool",
+        toolType: "remote",
+        itemType: "remote-task-created",
+        title: "Remote task",
+        detail: "created",
+        status: "completed",
+      },
+      {
+        id: "model-changed-tool",
+        kind: "tool",
+        toolType: "model",
+        itemType: "model-changed",
+        title: "Model changed",
+        detail: "changed",
+        status: "completed",
+      },
+      {
+        id: "auto-review-warning-tool",
+        kind: "tool",
+        toolType: "auto-review-interruption-warning",
+        itemType: "auto-review-interruption-warning",
+        title: "Auto-review interruption warning",
+        detail: "interrupted",
+        status: "completed",
+      },
+      {
+        id: "automation-update-tool",
+        kind: "tool",
+        toolType: "automation-update",
+        itemType: "automation-update",
+        title: "Automation update",
+        detail: "updated",
+        status: "completed",
+      },
+      {
+        id: "automatic-approval-review-tool",
+        kind: "tool",
+        toolType: "automatic-approval-review",
+        itemType: "automatic-approval-review",
+        title: "Automatic approval review",
+        detail: "reviewed",
+        status: "completed",
+      },
+      {
+        id: "forked-from-conversation-tool",
+        kind: "tool",
+        toolType: "forked-from-conversation",
+        itemType: "forked-from-conversation",
+        title: "Forked from conversation",
+        detail: "source conversation",
+        status: "completed",
+      },
+      {
+        id: "model-rerouted-tool",
+        kind: "tool",
+        toolType: "model-rerouted",
+        itemType: "model-rerouted",
+        title: "Model rerouted",
+        detail: "rerouted",
+        status: "completed",
+      },
+      {
+        id: "multi-agent-action-tool",
+        kind: "tool",
+        toolType: "multi-agent-action",
+        itemType: "multi-agent-action",
+        title: "Multi-agent action",
+        detail: "agent action",
+        status: "completed",
+        multiAgentRows: [
+          {
+            id: "agent-1",
+            label: "Explorer",
+            status: "completed",
+            detail: "explorer",
+          },
+        ],
+      },
+      {
+        id: "personality-changed-tool",
+        kind: "tool",
+        toolType: "personality-changed",
+        itemType: "personality-changed",
+        title: "Personality changed",
+        detail: "changed",
+        status: "completed",
+      },
+      {
+        id: "plan-implementation-tool",
+        kind: "tool",
+        toolType: "plan-implementation",
+        itemType: "plan-implementation",
+        title: "Plan implementation",
+        detail: "implemented",
+        status: "completed",
+      },
+      {
+        id: "proposed-plan-tool",
+        kind: "tool",
+        toolType: "proposed-plan",
+        itemType: "proposed-plan",
+        title: "Proposed plan",
+        detail: "planned",
+        status: "completed",
+      },
+      {
+        id: "steered-tool",
+        kind: "tool",
+        toolType: "steered",
+        itemType: "steered",
+        title: "Steered",
+        detail: "steered",
+        status: "completed",
+      },
+      {
+        id: "turn-diff-tool",
+        kind: "tool",
+        toolType: "turn-diff",
+        itemType: "turn-diff",
+        title: "Turn diff",
+        detail: "diff",
+        status: "completed",
+        turnDiffRows: [
+          {
+            id: "diff-1",
+            label: "src/messages.tsx",
+            additions: 2,
+            deletions: 1,
+          },
+        ],
+      },
+      {
+        id: "user-input-response-tool",
+        kind: "tool",
+        toolType: "user-input-response",
+        itemType: "user-input-response",
+        title: "User input response",
+        detail: "answered",
+        status: "completed",
+      },
+      {
+        id: "worked-for-tool",
+        kind: "tool",
+        toolType: "worked-for",
+        itemType: "worked-for",
+        title: "Worked for",
+        detail: "elapsed",
+        status: "completed",
+      },
+      {
+        id: "assistant-message-contract",
+        kind: "message",
+        role: "assistant",
+        itemType: "assistant-message",
+        text: "Assistant message branch",
+      },
+      {
+        id: "user-message-contract",
+        kind: "message",
+        role: "user",
+        itemType: "user-message",
+        text: "User message branch",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const openAIActivityItemTypes = [
+      "permission-request",
+      "mcp-server-elicitation",
+      "dynamic-tool-call",
+      "context-compaction",
+      "todo-list",
+      "generated-image",
+      "stream-error",
+      "system-error",
+      "remote-task-created",
+      "model-changed",
+      "auto-review-interruption-warning",
+      "automation-update",
+      "automatic-approval-review",
+      "forked-from-conversation",
+      "model-rerouted",
+      "multi-agent-action",
+      "personality-changed",
+      "plan-implementation",
+      "proposed-plan",
+      "steered",
+      "turn-diff",
+      "user-input-response",
+      "worked-for",
+    ];
+    expect(
+      openAIActivityItemTypes.filter(
+        (kind) => !container.querySelector(`[data-openai-activity-item-type="${kind}"]`),
+      ),
+    ).toEqual([]);
+    expect(container.querySelector("[data-oai-inline-group]")).toBeTruthy();
+    expect(container.querySelector("[data-oai-section-toggle]")).toBeTruthy();
+    fireEvent.click(container.querySelector("[data-collapsed-tool-activity-summary]") as Element);
+    container.querySelectorAll("[data-oai-tool-activity-summary]").forEach((button) => {
+      fireEvent.click(button);
+    });
+    expect(container.querySelector("[data-pending-mcp-tool-calls-body]")).toBeTruthy();
+    expect(container.querySelector('[data-mcp-app][data-mcp-app-instance="mcp-app-1"]')).toBeTruthy();
+    expect(container.querySelector('[data-mcp-app-expanded="true"]')).toBeTruthy();
+    expect(container.querySelector('[data-mcp-app-frame="true"]')).toBeTruthy();
+    expect(container.querySelector('[data-mcp-app-frame-loading="false"]')).toBeTruthy();
+    expect(container.querySelector("[data-multi-agent-action-header]")).toBeTruthy();
+    expect(container.querySelector("[data-multi-agent-action-rows]")).toBeTruthy();
+    expect(container.querySelector("[data-turn-diff-row]")).toBeTruthy();
+    expect(container.querySelector("[data-end-resource]")).toBeTruthy();
+    expect(container.querySelector("[data-generated-image] img")).toBeTruthy();
+    expect(container.querySelector('[data-message-artifact][data-artifact-id="artifact-1"]')).toBeTruthy();
+    expect(container.querySelector('[data-openai-message-item-type="assistant-message"]')).toBeTruthy();
+    expect(container.querySelector('[data-openai-message-item-type="user-message"]')).toBeTruthy();
+  });
+
+  it("renders OpenAI markdown behavior contract and assistant artifacts", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-markdown-contract",
+        kind: "message",
+        role: "assistant",
+        text: "Here is code:\n\n```ts\nconst x = 1\n```",
+        automationCitations: [{ automationId: "automation-1", index: 1 }],
+        renderCodeBlocksAsWritingBlocks: true,
+        forceCodeBlockWordWrap: true,
+        hasArtifacts: true,
+        artifacts: [{ id: "artifact-md", title: "Patch artifact", kind: "patch" }],
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        onQuoteMessage={vi.fn()}
+      />,
+    );
+
+    const content = container.querySelector(".oai-message-content");
+    expect(content?.getAttribute("data-automation-citations")).toBe("true");
+    expect(content?.getAttribute("data-render-code-blocks-as-writing-blocks")).toBe("true");
+    expect(content?.getAttribute("data-force-code-block-word-wrap")).toBe("true");
+    expect(content?.getAttribute("data-on-add-selected-text-to-chat-handler")).toBe("onAddSelectedTextToChat");
+    expect(container.querySelector("[data-message-artifacts]")).toBeTruthy();
+    expect(container.querySelector('[data-message-artifact][data-artifact-id="artifact-md"]')).toBeTruthy();
   });
 
   it("renders hook rows through the standard tool renderer", () => {
@@ -1768,7 +2849,7 @@ describe("Messages", () => {
       },
     ];
 
-    render(
+    const { container } = render(
       <Messages
         items={items}
         threadId="thread-1"
@@ -1788,5 +2869,7 @@ describe("Messages", () => {
       screen.getByText("command • sync • thread • session-start.sh • Preparing"),
     ).toBeTruthy();
     expect(screen.getByText("[error] Missing config")).toBeTruthy();
+    expect(container.querySelector(".oai-activity-detail-output")).toBeTruthy();
+    expect(container.querySelector(".tool-inline-terminal")).toBeNull();
   });
 });

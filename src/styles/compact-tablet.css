@@ -100,12 +100,16 @@
   min-height: 0;
 }
 
+.app.layout-tablet {
+  --chat-content-side-padding: 20px;
+}
+
 .app.layout-tablet .messages-full {
-  padding: 12px 20px calc(16px + var(--composer-overlay-height, 0px));
+  padding: 12px var(--chat-content-side-padding, 20px) calc(16px + var(--composer-overlay-height, 0px));
 }
 
 .app.layout-tablet .composer {
-  padding: 12px 20px 18px;
+  padding: 12px var(--chat-content-side-padding, 20px) 18px;
 }
 
 .tablet-git {

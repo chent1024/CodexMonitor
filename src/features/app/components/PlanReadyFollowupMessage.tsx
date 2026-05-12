@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { OaiInlineFreeform } from "./OaiInlineFreeform";
 
 type PlanReadyFollowupMessageProps = {
   onAccept: () => void;
@@ -13,33 +14,36 @@ export function PlanReadyFollowupMessage({
   const trimmed = useMemo(() => changes.trim(), [changes]);
 
   return (
-    <div className="message request-user-input-message">
+    <div
+      className="flex w-full min-w-0 flex-col oai-followup-message oai-request-input-message"
+      data-oai-followup-message
+      data-oai-request-input-message
+    >
       <div
-        className="bubble request-user-input-card"
+        className="oai-followup-card oai-request-input-panel"
         role="group"
         aria-label="Plan ready"
+        data-oai-request-input-panel
       >
-        <div className="request-user-input-header">
-          <div className="request-user-input-title">Plan ready</div>
+        <div className="oai-request-input-panel__header">
+          <div className="oai-request-input-panel__title">Plan ready</div>
         </div>
-        <div className="request-user-input-body">
-          <section className="request-user-input-question">
-            <div className="request-user-input-question-text">
+        <div className="oai-request-input-panel__body">
+          <section className="oai-request-input-panel__question">
+            <div className="oai-request-input-panel__question-text">
               Start building from this plan, or describe changes to the plan.
             </div>
-            <textarea
-              className="request-user-input-notes"
+            <OaiInlineFreeform
               placeholder="Describe what you want to change in the plan..."
               value={changes}
-              onChange={(event) => setChanges(event.target.value)}
-              rows={3}
+              onChange={setChanges}
             />
           </section>
         </div>
-        <div className="request-user-input-actions">
+        <div className="oai-request-input-panel__actions">
           <button
             type="button"
-            className="plan-ready-followup-change"
+            className="oai-request-input-panel__secondary-action"
             onClick={() => {
               if (!trimmed) {
                 return;

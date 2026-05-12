@@ -3,6 +3,7 @@ import type {
   RequestUserInputRequest,
   RequestUserInputResponse,
 } from "../../../types";
+import { OaiInlineFreeform } from "./OaiInlineFreeform";
 
 type RequestUserInputMessageProps = {
   requests: RequestUserInputRequest[];
@@ -42,6 +43,7 @@ export function RequestUserInputMessage({
   const activeRequest = activeRequests[0];
   const [selections, setSelections] = useState<SelectionState>({});
   const [notes, setNotes] = useState<NotesState>({});
+  const [dismissedRequestId, setDismissedRequestId] = useState<string | number | null>(null);
 
   useEffect(() => {
     if (!activeRequest) {
@@ -61,6 +63,9 @@ export function RequestUserInputMessage({
   }, [activeRequest]);
 
   if (!activeRequest) {
+    return null;
+  }
+  if (dismissedRequestId === activeRequest.request_id) {
     return null;
   }
 
@@ -110,23 +115,31 @@ export function RequestUserInputMessage({
   const handleSubmit = () => {
     onSubmit(activeRequest, { answers: buildAnswers() });
   };
+  const handleDismiss = () => {
+    setDismissedRequestId(activeRequest.request_id);
+  };
 
   return (
-    <div className="message request-user-input-message">
+    <div
+      className="flex w-full min-w-0 flex-col oai-followup-message oai-request-input-message"
+      data-oai-followup-message
+      data-oai-request-input-message
+    >
       <div
-        className="bubble request-user-input-card"
+        className="oai-followup-card oai-request-input-panel"
         role="group"
         aria-label="User input requested"
+        data-oai-request-input-panel
       >
-        <div className="request-user-input-header">
-          <div className="request-user-input-title">Input requested</div>
+        <div className="oai-request-input-panel__header">
+          <div className="oai-request-input-panel__title">Input requested</div>
           {totalRequests > 1 ? (
-            <div className="request-user-input-queue">
+            <div className="oai-request-input-panel__queue">
               {`Request 1 of ${totalRequests}`}
             </div>
           ) : null}
         </div>
-        <div className="request-user-input-body">
+        <div className="oai-request-input-panel__body">
           {questions.length ? (
             questions.map((question, index) => {
               const questionId = question.id || `question-${index}`;
@@ -138,31 +151,35 @@ export function RequestUserInputMessage({
                 ? "Add notes (optional)"
                 : "Type your answer (optional)";
               return (
-                <section key={questionId} className="request-user-input-question">
+                <section key={questionId} className="oai-request-input-panel__question">
                   {question.header ? (
-                    <div className="request-user-input-question-header">
+                    <div className="oai-request-input-panel__question-header">
                       {question.header}
                     </div>
                   ) : null}
-                  <div className="request-user-input-question-text">
+                  <div className="oai-request-input-panel__question-text">
                     {question.question}
                   </div>
                   {options.length ? (
-                    <div className="request-user-input-options">
+                    <div className="oai-request-input-panel__options">
                       {options.map((option, optionIndex) => (
                         <button
                           key={`${questionId}-${optionIndex}`}
                           type="button"
-                          className={`request-user-input-option${
+                          className={`oai-request-input-panel__option${
                             selectedIndex === optionIndex ? " is-selected" : ""
                           }`}
                           onClick={() => handleSelect(questionId, optionIndex)}
                         >
-                          <div className="request-user-input-option-label">
+                          <span className="oai-request-input-panel__option-index">
+                            <span hidden>requestInputPanel.optionIndex</span>
+                            {optionIndex + 1}.
+                          </span>
+                          <div className="oai-request-input-panel__option-label">
                             {option.label}
                           </div>
                           {option.description ? (
-                            <div className="request-user-input-option-description">
+                            <div className="oai-request-input-panel__option-description">
                               {option.description}
                             </div>
                           ) : null}
@@ -170,25 +187,60 @@ export function RequestUserInputMessage({
                       ))}
                     </div>
                   ) : null}
-                  <textarea
-                    className="request-user-input-notes"
+                  <OaiInlineFreeform
                     placeholder={notePlaceholder}
                     value={notes[questionId] ?? ""}
-                    onChange={(event) =>
-                      handleNotesChange(questionId, event.target.value)
+                    onChange={(value) => handleNotesChange(questionId, value)}
+                    leading={
+                      options.length ? (
+                        <span
+                          data-request-input-option-index
+                          data-i18n-id="requestInputPanel.optionIndex"
+                        >
+                          {options.length + 1}.
+                        </span>
+                      ) : null
                     }
-                    rows={2}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        handleDismiss();
+                      }
+                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                        event.preventDefault();
+                        handleSubmit();
+                      }
+                    }}
                   />
                 </section>
               );
             })
           ) : (
-            <div className="request-user-input-empty">
+            <div className="oai-request-input-panel__empty">
               No questions provided.
             </div>
           )}
         </div>
-        <div className="request-user-input-actions">
+        <div className="oai-request-input-panel__actions">
+          <button
+            type="button"
+            className="oai-request-input-panel__dismiss"
+            data-request-input-dismiss
+            data-i18n-id="requestInputPanel.dismiss"
+            onClick={handleDismiss}
+          >
+            <span>Dismiss</span>
+            <kbd data-i18n-id="requestInputPanel.escapeKey">ESC</kbd>
+          </button>
+          <button
+            type="button"
+            className="oai-request-input-panel__skip"
+            data-request-input-skip
+            data-i18n-id="requestInputPanel.skip"
+            onClick={handleSubmit}
+          >
+            Skip
+          </button>
           <button className="primary" onClick={handleSubmit}>
             Submit
           </button>

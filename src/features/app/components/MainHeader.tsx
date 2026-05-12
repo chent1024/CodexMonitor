@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Check from "lucide-react/dist/esm/icons/check";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { BranchInfo, OpenAppTarget, WorkspaceInfo } from "../../../types";
 import type { ReactNode } from "react";
@@ -17,6 +19,14 @@ import { OpenAppMenu } from "./OpenAppMenu";
 import { LaunchScriptEntryButton } from "./LaunchScriptEntryButton";
 import type { WorkspaceLaunchScriptsState } from "../hooks/useWorkspaceLaunchScripts";
 import { useMenuController } from "../hooks/useMenuController";
+
+function currentWindowSafe() {
+  try {
+    return getCurrentWindow();
+  } catch {
+    return null;
+  }
+}
 
 type MainHeaderProps = {
   workspace: WorkspaceInfo;
@@ -173,6 +183,17 @@ export function MainHeader({
     } catch {
       // Errors are handled upstream in the copy handler.
     }
+  };
+
+  const handleHeaderBlankDoubleClick = () => {
+    if (!isTauri()) {
+      return;
+    }
+    const windowHandle = currentWindowSafe();
+    if (!windowHandle) {
+      return;
+    }
+    void windowHandle.toggleMaximize();
   };
 
   return (
@@ -466,6 +487,12 @@ export function MainHeader({
             </div>
           )}
         </div>
+        <div
+          className="workspace-header-blank-region"
+          data-tauri-drag-region="false"
+          data-testid="main-header-blank-region"
+          onDoubleClick={handleHeaderBlankDoubleClick}
+        />
       </div>
       <div className="main-header-actions">
         {showWorkspaceTools && launchScriptsState?.launchScripts.length ? (
