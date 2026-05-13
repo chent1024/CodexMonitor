@@ -68,15 +68,23 @@ subscriptions.
 - `item/commandExecution/outputDelta`
 - `item/commandExecution/terminalInteraction`
 - `item/completed`
+- `item/autoApprovalReview/completed`
+- `item/autoApprovalReview/started`
 - `item/fileChange/outputDelta`
+- `item/mcpToolCall/progress`
 - `item/plan/delta`
 - `item/reasoning/summaryPartAdded`
 - `item/reasoning/summaryTextDelta`
 - `item/reasoning/textDelta`
 - `item/started`
+- `item/tool/call`
+- `item/tool/requestUserInput`
+- `mcpServer/elicitation/request`
+- `serverRequest/resolved`
 - `thread/archived`
 - `thread/closed`
 - `thread/name/updated`
+- `thread/realtime/error`
 - `thread/started`
 - `thread/status/changed`
 - `thread/tokenUsage/updated`
@@ -96,9 +104,11 @@ These arrive on the same frontend event stream but are not Codex v2
   `item/fileChange/requestApproval`, and
   `item/permissions/requestApproval`, via suffix match in
   `isApprovalRequestMethod(method)`
-- `item/tool/requestUserInput` (a Codex v2 server request, not a notification)
+- `item/tool/requestUserInput`, `item/tool/call`, and `mcpServer/elicitation/request` (Codex v2 server requests, not notifications)
+- `serverRequest/resolved` (request lifecycle cleanup for approval and user-input queues)
 - `codex/backgroundThread` (CodexMonitor synthetic bridge event)
 - `codex/connected` (CodexMonitor synthetic bridge event)
+- `codex/stderr` (CodexMonitor synthetic bridge event; routed to the active thread as a `system-error` item)
 - `codex/event/skills_update_available` (handled via
   `isSkillsUpdateAvailableEvent(...)` in `useSkills.ts`)
 
@@ -125,18 +135,13 @@ events are currently not routed:
 - `deprecationNotice`
 - `fuzzyFileSearch/sessionCompleted`
 - `fuzzyFileSearch/sessionUpdated`
-- `item/mcpToolCall/progress`
-- `item/autoApprovalReview/completed`
-- `item/autoApprovalReview/started`
 - `mcpServer/oauthLogin/completed`
 - `mcpServer/startupStatus/updated`
 - `model/rerouted`
 - `rawResponseItem/completed`
-- `serverRequest/resolved`
 - `skills/changed`
 - `thread/compacted` (deprecated; intentionally not routed)
 - `thread/realtime/closed`
-- `thread/realtime/error`
 - `thread/realtime/itemAdded`
 - `thread/realtime/outputAudio/delta`
 - `thread/realtime/started`
@@ -230,13 +235,13 @@ Supported server requests:
 - `item/commandExecution/requestApproval`
 - `item/fileChange/requestApproval`
 - `item/permissions/requestApproval`
+- `item/tool/call`
 - `item/tool/requestUserInput`
+- `mcpServer/elicitation/request`
 
 Missing server requests:
 
-- `item/tool/call`
 - `account/chatgptAuthTokens/refresh`
-- `mcpServer/elicitation/request`
 
 ## Where To Look In ../Codex
 

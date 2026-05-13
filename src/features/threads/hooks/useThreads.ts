@@ -194,10 +194,23 @@ export function useThreads({
   });
 
   const pushThreadErrorMessage = useCallback(
-    (threadId: string, message: string) => {
+    (
+      threadId: string,
+      message: string,
+      options?: {
+        itemType?: "stream-error" | "system-error";
+        title?: string;
+        detail?: string;
+        status?: string;
+      },
+    ) => {
       dispatch({
-        type: "addAssistantMessage",
+        type: "addErrorItem",
         threadId,
+        itemType: options?.itemType,
+        title: options?.title,
+        detail: options?.detail,
+        status: options?.status,
         text: message,
       });
       if (threadId !== activeThreadId) {
@@ -918,6 +931,7 @@ export function useThreads({
     pinnedThreadsVersion,
     refreshAccountRateLimits,
     refreshAccountInfo,
+    pushThreadErrorMessage,
     interruptTurn,
     removeThread,
     pinThread,

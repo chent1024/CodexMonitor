@@ -818,6 +818,12 @@ describe("useThreadTurnEvents", () => {
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
       "thread-1",
       "Turn failed: boom",
+      {
+        itemType: "stream-error",
+        title: "Turn failed",
+        detail: "app-server",
+        status: "failed",
+      },
     );
     expect(safeMessageActivity).toHaveBeenCalled();
   });
@@ -880,7 +886,12 @@ describe("useThreadTurnEvents", () => {
     expect(markProcessing).toHaveBeenLastCalledWith("thread-1", false);
     expect(markReviewing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenLastCalledWith("thread-1", null);
-    expect(pushThreadErrorMessage).toHaveBeenCalledWith("thread-1", "Turn failed: boom");
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith("thread-1", "Turn failed: boom", {
+      itemType: "stream-error",
+      title: "Turn failed",
+      detail: "app-server",
+      status: "failed",
+    });
   });
 
   it("handles errors after reducer active turn changes externally", () => {
@@ -914,11 +925,16 @@ describe("useThreadTurnEvents", () => {
     expect(markReviewing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenNthCalledWith(1, "thread-1", "turn-local");
     expect(setActiveTurnId).toHaveBeenNthCalledWith(2, "thread-1", null);
-    expect(pushThreadErrorMessage).toHaveBeenCalledWith("thread-1", "Turn failed: boom");
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith("thread-1", "Turn failed: boom", {
+      itemType: "stream-error",
+      title: "Turn failed",
+      detail: "app-server",
+      status: "failed",
+    });
   });
 
-  it("ignores turn errors that will retry", () => {
-    const { result, dispatch, markProcessing } = makeOptions();
+  it("shows turn errors that will retry without stopping processing", () => {
+    const { result, dispatch, markProcessing, pushThreadErrorMessage } = makeOptions();
 
     act(() => {
       result.current.onTurnError("ws-1", "thread-1", "turn-1", {
@@ -927,6 +943,16 @@ describe("useThreadTurnEvents", () => {
       });
     });
 
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "Turn error, retrying: boom",
+      {
+        itemType: "stream-error",
+        title: "Turn error, retrying",
+        detail: "app-server",
+        status: "retrying",
+      },
+    );
     expect(dispatch).not.toHaveBeenCalled();
     expect(markProcessing).not.toHaveBeenCalled();
   });

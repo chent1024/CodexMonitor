@@ -26,6 +26,40 @@ describe("useThreadStatus", () => {
     });
   });
 
+  it("skips duplicate consecutive processing states per thread", () => {
+    const dispatch = vi.fn();
+    vi.spyOn(Date, "now").mockReturnValue(1234);
+    const { result } = renderHook(() => useThreadStatus({ dispatch }));
+
+    act(() => {
+      result.current.markProcessing("thread-1", true);
+      result.current.markProcessing("thread-1", true);
+      result.current.markProcessing("thread-2", true);
+      result.current.markProcessing("thread-1", false);
+      result.current.markProcessing("thread-1", false);
+    });
+
+    expect(dispatch).toHaveBeenCalledTimes(3);
+    expect(dispatch).toHaveBeenNthCalledWith(1, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: true,
+      timestamp: 1234,
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(2, {
+      type: "markProcessing",
+      threadId: "thread-2",
+      isProcessing: true,
+      timestamp: 1234,
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(3, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: false,
+      timestamp: 1234,
+    });
+  });
+
   it("dispatches markReviewing", () => {
     const dispatch = vi.fn();
     const { result } = renderHook(() => useThreadStatus({ dispatch }));

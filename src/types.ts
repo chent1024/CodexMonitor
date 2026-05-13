@@ -159,6 +159,7 @@ export type ConversationItem =
       } | null;
       sentAtMs?: number | null;
       messageStatus?: string | null;
+      steeringStatus?: string | null;
       referencesPriorConversation?: boolean;
       reviewMode?: boolean;
       pullRequestFixMode?: boolean;
@@ -192,7 +193,16 @@ export type ConversationItem =
         answers: string[];
       }[];
     }
-  | { id: string; kind: "reasoning"; summary: string; content: string }
+  | {
+      id: string;
+      kind: "reasoning";
+      summary: string;
+      content: string;
+      status?: string | null;
+      durationMs?: number | null;
+      startedAtMs?: number | null;
+      completedAtMs?: number | null;
+    }
   | { id: string; kind: "diff"; title: string; diff: string; status?: string }
   | { id: string; kind: "review"; state: "started" | "completed"; text: string }
   | {

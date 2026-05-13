@@ -70,6 +70,29 @@ describe("threadReducer", () => {
     expect(next.threadsByWorkspace["ws-1"]?.[0]?.name).toBe("Assistant note");
   });
 
+  it("adds app-server errors as tool activity items", () => {
+    const next = threadReducer(initialState, {
+      type: "addErrorItem",
+      threadId: "thread-1",
+      text: "Reconnect failed",
+      itemType: "stream-error",
+      title: "Live reconnect failed",
+      detail: "reconnect",
+      status: "failed",
+    });
+    const items = next.itemsByThread["thread-1"] ?? [];
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: "tool",
+      toolType: "error",
+      itemType: "stream-error",
+      title: "Live reconnect failed",
+      detail: "reconnect",
+      status: "failed",
+      output: "Reconnect failed",
+    });
+  });
+
   it("updates thread timestamp when newer activity arrives", () => {
     const threads: ThreadSummary[] = [
       { id: "thread-1", name: "Agent 1", updatedAt: 1000 },

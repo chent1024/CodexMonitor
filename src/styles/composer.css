@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: 8px;
   -webkit-app-region: no-drag;
-  padding: 8px var(--chat-content-side-padding, 28px) 14px;
+  padding: 8px var(--chat-content-side-padding, 36px) 14px;
   border-top: none;
   background: var(--surface-messages);
   backdrop-filter: none;
@@ -14,7 +14,8 @@
 
 .composer > * {
   width: 100%;
-  margin-inline: 0;
+  max-width: var(--chat-column-max-width, 924px);
+  margin-inline: auto;
 }
 
 .app.reduced-transparency .composer {
@@ -150,7 +151,7 @@
   border: 1px solid var(--cm-border-heavy);
   background: var(--surface-messages);
   border-radius: 8px;
-  padding: 8px 10px 8px 9px;
+  padding: 10px 14px 10px 13px;
   box-shadow:
     0 8px 20px color-mix(in srgb, var(--shadow-soft, rgba(15, 23, 42, 0.16)) 42%, transparent),
     0 1px 2px color-mix(in srgb, var(--shadow-soft, rgba(15, 23, 42, 0.16)) 18%, transparent);

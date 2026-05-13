@@ -51,9 +51,9 @@ describe("useAppSettings", () => {
     expect(result.current.settings.uiScale).toBe(UI_SCALE_MAX);
     expect(result.current.settings.theme).toBe("system");
     expect(result.current.settings.uiFontFamily).toContain("system-ui");
-    expect(result.current.settings.uiFontSize).toBe(16);
+    expect(result.current.settings.uiFontSize).toBe(24);
     expect(result.current.settings.codeFontFamily).toContain("ui-monospace");
-    expect(result.current.settings.codeFontSize).toBe(16);
+    expect(result.current.settings.codeFontSize).toBe(24);
     expect(result.current.settings.personality).toBe("friendly");
     expect(result.current.settings.backendMode).toBe("remote");
     expect(result.current.settings.remoteBackendHost).toBe("example:1234");
@@ -114,9 +114,9 @@ describe("useAppSettings", () => {
         theme: "system",
         uiScale: 0.1,
         uiFontFamily: expect.stringContaining("system-ui"),
-        uiFontSize: 11,
+        uiFontSize: 8,
         codeFontFamily: expect.stringContaining("ui-monospace"),
-        codeFontSize: 9,
+        codeFontSize: 8,
         notificationSoundsEnabled: false,
       }),
     );

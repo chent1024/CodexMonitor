@@ -76,4 +76,18 @@ describe("MainHeader", () => {
 
     expect(toggleMaximize).not.toHaveBeenCalled();
   });
+
+  it("keeps the title line focused on the thread title by default", () => {
+    render(
+      <MainHeader
+        {...buildProps()}
+        threadTitle="评估VSCode插件兼容"
+        branchName="feat/vscode-message-renderer-compat"
+      />,
+    );
+
+    expect(screen.getByText("评估VSCode插件兼容")).toBeTruthy();
+    expect(screen.queryByText("feat/vscode-message-renderer-compat")).toBeNull();
+    expect(document.querySelector(".workspace-separator")).toBeNull();
+  });
 });

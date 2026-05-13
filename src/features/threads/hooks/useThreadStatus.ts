@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { Dispatch } from "react";
 import type { ThreadAction } from "./useThreadsReducer";
 
@@ -7,8 +7,14 @@ type UseThreadStatusOptions = {
 };
 
 export function useThreadStatus({ dispatch }: UseThreadStatusOptions) {
+  const processingStateRef = useRef<Map<string, boolean>>(new Map());
+
   const markProcessing = useCallback(
     (threadId: string, isProcessing: boolean) => {
+      if (processingStateRef.current.get(threadId) === isProcessing) {
+        return;
+      }
+      processingStateRef.current.set(threadId, isProcessing);
       dispatch({
         type: "markProcessing",
         threadId,

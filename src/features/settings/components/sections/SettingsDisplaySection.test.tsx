@@ -21,7 +21,7 @@ describe("SettingsDisplaySection", () => {
             threadTitleAutogenerationEnabled: false,
             uiFontFamily: "",
             codeFontFamily: "",
-            codeFontSize: 11,
+            codeFontSize: 14,
             notificationSoundsEnabled: true,
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
@@ -31,9 +31,9 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutText=""
         scaleDraft="100%"
         uiFontDraft=""
-        uiFontSizeDraft={13}
+        uiFontSizeDraft={14}
         codeFontDraft=""
-        codeFontSizeDraft={11}
+        codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
         onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
@@ -78,7 +78,7 @@ describe("SettingsDisplaySection", () => {
             threadTitleAutogenerationEnabled: false,
             uiFontFamily: "",
             codeFontFamily: "",
-            codeFontSize: 11,
+            codeFontSize: 14,
             notificationSoundsEnabled: true,
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
@@ -88,9 +88,9 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutText=""
         scaleDraft="100%"
         uiFontDraft=""
-        uiFontSizeDraft={13}
+        uiFontSizeDraft={14}
         codeFontDraft=""
-        codeFontSizeDraft={11}
+        codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
         onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
@@ -134,7 +134,7 @@ describe("SettingsDisplaySection", () => {
             threadTitleAutogenerationEnabled: false,
             uiFontFamily: "",
             codeFontFamily: "",
-            codeFontSize: 11,
+            codeFontSize: 14,
             notificationSoundsEnabled: true,
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
@@ -144,9 +144,9 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutText=""
         scaleDraft="100%"
         uiFontDraft=""
-        uiFontSizeDraft={13}
+        uiFontSizeDraft={14}
         codeFontDraft=""
-        codeFontSizeDraft={11}
+        codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
         onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
@@ -196,7 +196,7 @@ describe("SettingsDisplaySection", () => {
             threadTitleAutogenerationEnabled: false,
             uiFontFamily: "",
             codeFontFamily: "",
-            codeFontSize: 11,
+            codeFontSize: 14,
             notificationSoundsEnabled: true,
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
@@ -206,9 +206,9 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutText=""
         scaleDraft="100%"
         uiFontDraft=""
-        uiFontSizeDraft={13}
+        uiFontSizeDraft={14}
         codeFontDraft=""
-        codeFontSizeDraft={11}
+        codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
         onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
@@ -249,7 +249,7 @@ describe("SettingsDisplaySection", () => {
             threadTitleAutogenerationEnabled: false,
             uiFontFamily: "",
             codeFontFamily: "",
-            codeFontSize: 11,
+            codeFontSize: 14,
             notificationSoundsEnabled: true,
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
@@ -259,9 +259,9 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutText=""
         scaleDraft="100%"
         uiFontDraft=""
-        uiFontSizeDraft={13}
+        uiFontSizeDraft={14}
         codeFontDraft=""
-        codeFontSizeDraft={11}
+        codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
         onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
@@ -312,7 +312,7 @@ describe("SettingsDisplaySection", () => {
             threadTitleAutogenerationEnabled: false,
             uiFontFamily: "",
             codeFontFamily: "",
-            codeFontSize: 11,
+            codeFontSize: 14,
             notificationSoundsEnabled: true,
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
@@ -322,9 +322,9 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutText=""
         scaleDraft="100%"
         uiFontDraft=""
-        uiFontSizeDraft={13}
+        uiFontSizeDraft={14}
         codeFontDraft=""
-        codeFontSizeDraft={11}
+        codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
         onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}

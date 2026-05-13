@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import BadgeCheck from "lucide-react/dist/esm/icons/badge-check";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import Check from "lucide-react/dist/esm/icons/check";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Diff from "lucide-react/dist/esm/icons/diff";
@@ -178,6 +179,9 @@ function buildUserMessageMetadata(item: Extract<ConversationItem, { kind: "messa
   if (item.messageStatus) {
     chips.push({ kind: "message-status", label: item.messageStatus });
   }
+  if (item.steeringStatus) {
+    chips.push({ kind: "steering-status", label: item.steeringStatus });
+  }
   if (item.sentAtMs) {
     chips.push({
       kind: "sent-at",
@@ -247,6 +251,18 @@ function userMessageIsCollapsible(text: string, collapsedLineCount: number) {
   }
   const lineCount = text.split(/\r?\n/).length;
   return lineCount > collapsedLineCount || text.length > collapsedLineCount * 96;
+}
+
+const USER_MESSAGE_FALLBACK_FONT_SIZE_PX = 13;
+const USER_MESSAGE_LINE_HEIGHT_RATIO = 1.5;
+const USER_MESSAGE_COLLAPSE_EPSILON_PX = 1;
+
+function getUserMessageLineHeightPx(element: HTMLElement) {
+  const style = window.getComputedStyle(element);
+  const fontSize = Number.parseFloat(style.fontSize);
+  const resolvedFontSize = Number.isFinite(fontSize) ? fontSize : USER_MESSAGE_FALLBACK_FONT_SIZE_PX;
+  const lineHeight = Number.parseFloat(style.lineHeight);
+  return Number.isFinite(lineHeight) ? lineHeight : resolvedFontSize * USER_MESSAGE_LINE_HEIGHT_RATIO;
 }
 
 const MessageImageGrid = memo(function MessageImageGrid({
@@ -447,8 +463,54 @@ const UserMessageText = memo(function UserMessageText({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [textMeasurement, setTextMeasurement] = useState<{
+    collapsedHeightPx: number | null;
+    contentHeightPx: number;
+    lineHeightPx: number;
+    maxWidthPx: number;
+  } | null>(null);
   const collapsedLineCount = Math.max(1, item.collapsedLineCount ?? 20);
-  const isCollapsible = userMessageIsCollapsible(displayText, collapsedLineCount);
+  const fallbackIsCollapsible = userMessageIsCollapsible(displayText, collapsedLineCount);
+  const isMeasuredCollapsible =
+    textMeasurement?.collapsedHeightPx != null
+      ? textMeasurement.contentHeightPx >
+        textMeasurement.collapsedHeightPx + USER_MESSAGE_COLLAPSE_EPSILON_PX
+      : fallbackIsCollapsible;
+  const isCollapsible = isMeasuredCollapsible;
+
+  const setTextContentMeasurementRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (!element || typeof ResizeObserver === "undefined") {
+        return;
+      }
+      const measure = () => {
+        const maxWidthPx = Math.floor(element.getBoundingClientRect().width);
+        if (maxWidthPx <= 0) {
+          return;
+        }
+        const lineHeightPx = getUserMessageLineHeightPx(element);
+        const next = {
+          collapsedHeightPx: Math.ceil(lineHeightPx * collapsedLineCount),
+          contentHeightPx: Math.ceil(element.scrollHeight),
+          lineHeightPx,
+          maxWidthPx,
+        };
+        setTextMeasurement((current) =>
+          current?.collapsedHeightPx === next.collapsedHeightPx &&
+          current.contentHeightPx === next.contentHeightPx &&
+          current.lineHeightPx === next.lineHeightPx &&
+          current.maxWidthPx === next.maxWidthPx
+            ? current
+            : next,
+        );
+      };
+      measure();
+      const observer = new ResizeObserver(measure);
+      observer.observe(element);
+      return () => observer.disconnect();
+    },
+    [collapsedLineCount],
+  );
 
   useEffect(() => {
     if (!isEditing || !textareaRef.current) {
@@ -501,17 +563,25 @@ const UserMessageText = memo(function UserMessageText({
   return (
     <>
       <div
+        ref={setTextContentMeasurementRef}
         className="oai-user-message-text-shell"
         data-user-message-text
         data-user-message-collapsed={
           isCollapsible && !isExpanded ? "true" : "false"
         }
+        data-user-message-collapse-state={
+          isCollapsible ? (isExpanded ? "expanded" : "collapsed") : "uncollapsible"
+        }
+        data-user-message-collapsed-line-count={String(collapsedLineCount)}
+        data-user-message-measured={textMeasurement ? "true" : "false"}
         style={
           isCollapsible && !isExpanded
             ? {
+                display: "-webkit-box",
+                overflow: "hidden",
+                maxHeight: `${collapsedLineCount}lh`,
                 WebkitBoxOrient: "vertical",
                 WebkitLineClamp: collapsedLineCount,
-                maxHeight: `${collapsedLineCount}lh`,
               }
             : undefined
         }
@@ -536,7 +606,12 @@ const UserMessageText = memo(function UserMessageText({
           aria-expanded={isExpanded}
           onClick={() => setIsExpanded((current) => !current)}
         >
-          {isExpanded ? "Show less" : "Show more"}
+          <span>{isExpanded ? "Show less" : "Show more"}</span>
+          <ChevronDown
+            className={isExpanded ? "icon-2xs rotate-180" : "icon-2xs"}
+            size={12}
+            aria-hidden
+          />
         </button>
       ) : null}
     </>
@@ -939,6 +1014,43 @@ function formatFileChangeSummary(
     deletions > 0 ? `-${deletions}` : "",
   ].filter(Boolean);
   return [basename(change.path), ...stats].filter(Boolean).join(" ");
+}
+
+function FileChangeSummaryText({
+  changes,
+}: {
+  changes: NonNullable<Extract<ConversationItem, { kind: "tool" }>["changes"]>;
+}) {
+  if (changes.length === 0) {
+    return <span>changes</span>;
+  }
+  if (changes.length > 1) {
+    const totals = changes.reduce(
+      (summary, change) => {
+        const stats = countDiffStats(change.diff);
+        summary.additions += stats.additions;
+        summary.deletions += stats.deletions;
+        return summary;
+      },
+      { additions: 0, deletions: 0 },
+    );
+    return (
+      <span className="oai-file-change-summary-value">
+        <span>{changes.length} files</span>
+        <span className="oai-inline-diff-stat oai-inline-diff-stat-add">+{totals.additions}</span>
+        <span className="oai-inline-diff-stat oai-inline-diff-stat-del">-{totals.deletions}</span>
+      </span>
+    );
+  }
+  const change = changes[0];
+  const { additions, deletions } = countDiffStats(change.diff);
+  return (
+    <span className="oai-file-change-summary-value">
+      <span>{basename(change.path)}</span>
+      <span className="oai-inline-diff-stat oai-inline-diff-stat-add">+{additions}</span>
+      <span className="oai-inline-diff-stat oai-inline-diff-stat-del">-{deletions}</span>
+    </span>
+  );
 }
 
 export const WorkingIndicator = memo(function WorkingIndicator({
@@ -2039,7 +2151,7 @@ export const ToolRow = memo(function ToolRow({
                       {summaryValue}
                     </span>
                   ) : (
-                    summaryValue
+                    isFileChange ? <FileChangeSummaryText changes={fileChanges} /> : summaryValue
                   )}
                 </span>
               )}

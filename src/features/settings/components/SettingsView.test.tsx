@@ -116,10 +116,10 @@ const baseSettings: AppSettings = {
   automaticAppUpdateChecksEnabled: false,
   uiFontFamily:
     'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-  uiFontSize: 13,
+  uiFontSize: 14,
   codeFontFamily:
     'ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-  codeFontSize: 11,
+  codeFontSize: 14,
   notificationSoundsEnabled: true,
   systemNotificationsEnabled: true,
   subagentSystemNotificationsEnabled: true,
@@ -669,26 +669,28 @@ describe("SettingsView Display", () => {
     });
   });
 
-  it("updates code font size from the slider", async () => {
+  it("updates code font size from the number input", async () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const slider = screen.getByLabelText("代码字号");
-    fireEvent.change(slider, { target: { value: "14" } });
+    const input = screen.getByLabelText("代码字号");
+    fireEvent.change(input, { target: { value: "15" } });
+    fireEvent.blur(input);
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ codeFontSize: 14 }),
+        expect.objectContaining({ codeFontSize: 15 }),
       );
     });
   });
 
-  it("updates UI font size from the slider", async () => {
+  it("updates UI font size from the number input", async () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const slider = screen.getByLabelText("界面字号");
-    fireEvent.change(slider, { target: { value: "15" } });
+    const input = screen.getByLabelText("界面字号");
+    fireEvent.change(input, { target: { value: "15" } });
+    fireEvent.blur(input);
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(

@@ -85,32 +85,35 @@ export function RightPanelExpandButton({
   );
 }
 
-export function TitlebarExpandControls({
+export function SidebarTitlebarControls({
   isCompact,
   sidebarCollapsed,
+  onCollapseSidebar,
   onExpandSidebar,
 }: SidebarToggleProps) {
-  if (isCompact || !sidebarCollapsed) {
+  if (isCompact) {
     return null;
   }
+  const Icon = sidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
+  const label = sidebarCollapsed ? "显示线程侧栏" : "隐藏线程侧栏";
+  const onClick = sidebarCollapsed ? onExpandSidebar : onCollapseSidebar;
+
   return (
     <div className="titlebar-controls">
-      {sidebarCollapsed && (
-        <div className="titlebar-toggle titlebar-toggle-left">
-          <button
-            type="button"
-            className="ghost main-header-action ds-tooltip-trigger"
-            onClick={onExpandSidebar}
-            data-tauri-drag-region="false"
-            aria-label="Show threads sidebar"
-            title="Show threads sidebar"
-            data-tooltip="Show threads sidebar"
-            data-tooltip-placement="bottom"
-          >
-            <PanelLeftOpen size={14} aria-hidden />
-          </button>
-        </div>
-      )}
+      <div className="titlebar-toggle titlebar-toggle-left">
+        <button
+          type="button"
+          className="ghost main-header-action titlebar-sidebar-toggle-button ds-tooltip-trigger"
+          onClick={onClick}
+          data-tauri-drag-region="false"
+          aria-label={label}
+          title={label}
+          data-tooltip={label}
+          data-tooltip-placement="bottom"
+        >
+          <Icon size={14} aria-hidden />
+        </button>
+      </div>
     </div>
   );
 }

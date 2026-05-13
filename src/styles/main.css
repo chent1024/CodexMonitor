@@ -12,6 +12,7 @@
   --conversation-side-padding: 44px;
   --chat-content-side-padding: 28px;
   --main-topbar-side-padding: calc(var(--conversation-side-padding) / 2);
+  --main-topbar-left-padding: 12px;
   --main-ui-font-size: var(--ui-font-size, 13px);
   --main-font-size-xs: calc(var(--main-ui-font-size) * 0.77);
   --main-font-size-sm: calc(var(--main-ui-font-size) * 0.85);
@@ -406,7 +407,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px var(--main-topbar-side-padding);
+  padding: 4px var(--main-topbar-side-padding) 4px var(--main-topbar-left-padding);
   border-bottom: 1px solid var(--cm-border-default);
   background: var(--surface-messages);
   -webkit-app-region: drag;
@@ -423,21 +424,17 @@
 
 .app.sidebar-collapsed .main-topbar {
   padding-left: calc(
-    var(--main-topbar-side-padding)
-    + var(--titlebar-inset-left, 0px)
-    + var(--titlebar-collapsed-left-extra, 0px)
-    + var(--titlebar-toggle-size, 28px)
-    + var(--titlebar-toggle-title-offset, -6px)
+    var(--titlebar-sidebar-toggle-left, 0px)
+    + var(--titlebar-sidebar-toggle-size, 24px)
+    + var(--titlebar-sidebar-toggle-gap, 12px)
   );
 }
 
 .app.layout-compact.sidebar-collapsed .main-topbar {
   padding-left: calc(
-    var(--topbar-compact-padding, 16px)
-    + var(--titlebar-inset-left, 0px)
-    + var(--titlebar-collapsed-left-extra, 0px)
-    + var(--titlebar-toggle-size, 28px)
-    + var(--titlebar-toggle-title-offset, -6px)
+    var(--titlebar-sidebar-toggle-left, 0px)
+    + var(--titlebar-sidebar-toggle-size, 24px)
+    + var(--titlebar-sidebar-toggle-gap, 12px)
   );
 }
 
@@ -523,6 +520,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 24px;
   min-width: 0;
   white-space: nowrap;
   flex: 1;
@@ -530,6 +528,7 @@
 
 .workspace-title {
   font-size: var(--main-font-size-lg);
+  line-height: 24px;
   font-weight: 600;
   letter-spacing: 0.01em;
   max-width: min(32vw, 420px);

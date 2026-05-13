@@ -376,6 +376,45 @@ describe("useRemoteThreadLiveConnection", () => {
     expect(threadLiveUnsubscribeMock).toHaveBeenCalledWith("ws-1", "thread-1");
   });
 
+  it("reports reconnect failures to the caller", async () => {
+    const reconnectError = new Error("socket unavailable");
+    threadLiveSubscribeMock.mockRejectedValueOnce(reconnectError);
+    const onReconnectError = vi.fn();
+    const refreshThread = vi.fn().mockResolvedValue(undefined);
+
+    const { result } = renderHook(() =>
+      useRemoteThreadLiveConnection({
+        backendMode: "remote",
+        activeWorkspace: {
+          id: "ws-1",
+          name: "Workspace",
+          path: "/tmp/ws-1",
+          connected: true,
+          settings: { sidebarCollapsed: false },
+        },
+        activeThreadId: null,
+        refreshThread,
+        onReconnectError,
+      }),
+    );
+
+    let reconnectPromise: Promise<boolean> = Promise.resolve(true);
+    await act(async () => {
+      reconnectPromise = result.current.reconnectLive("ws-1", "thread-1", {
+        runResume: false,
+        reason: "detached-recovery",
+      });
+      await expect(reconnectPromise).resolves.toBe(false);
+    });
+
+    expect(onReconnectError).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "socket unavailable",
+      "detached-recovery",
+    );
+  });
+
   it("starts a fresh reconnect after blur cancels same-key in-flight attempt", async () => {
     let resolveFirstSubscribe: (() => void) | null = null;
     const firstSubscribe = new Promise<void>((resolve) => {

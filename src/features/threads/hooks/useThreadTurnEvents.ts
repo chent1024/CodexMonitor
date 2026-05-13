@@ -35,7 +35,16 @@ type UseThreadTurnEventsOptions = {
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
   getActiveTurnId: (threadId: string) => string | null;
   pendingInterruptsRef: MutableRefObject<Set<string>>;
-  pushThreadErrorMessage: (threadId: string, message: string) => void;
+  pushThreadErrorMessage: (
+    threadId: string,
+    message: string,
+    options?: {
+      itemType?: "stream-error" | "system-error";
+      title?: string;
+      detail?: string;
+      status?: string;
+    },
+  ) => void;
   safeMessageActivity: () => void;
   recordThreadActivity: (workspaceId: string, threadId: string, timestamp?: number) => void;
 };
@@ -416,6 +425,16 @@ export function useThreadTurnEvents({
       payload: { message: string; willRetry: boolean },
     ) => {
       if (payload.willRetry) {
+        const retryMessage = payload.message
+          ? `Turn error, retrying: ${payload.message}`
+          : "Turn error, retrying.";
+        pushThreadErrorMessage(threadId, retryMessage, {
+          itemType: "stream-error",
+          title: "Turn error, retrying",
+          detail: "app-server",
+          status: "retrying",
+        });
+        safeMessageActivity();
         return;
       }
       const activeTurnId = getLatestKnownActiveTurnId(threadId);
@@ -437,7 +456,12 @@ export function useThreadTurnEvents({
       const message = payload.message
         ? `Turn failed: ${payload.message}`
         : "Turn failed.";
-      pushThreadErrorMessage(threadId, message);
+      pushThreadErrorMessage(threadId, message, {
+        itemType: "stream-error",
+        title: "Turn failed",
+        detail: "app-server",
+        status: "failed",
+      });
       safeMessageActivity();
     },
     [

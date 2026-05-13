@@ -64,6 +64,15 @@ export type ThreadAction =
   | { type: "markReviewing"; threadId: string; isReviewing: boolean }
   | { type: "markUnread"; threadId: string; hasUnread: boolean }
   | { type: "addAssistantMessage"; threadId: string; text: string }
+  | {
+      type: "addErrorItem";
+      threadId: string;
+      text: string;
+      itemType?: "stream-error" | "system-error";
+      title?: string;
+      detail?: string;
+      status?: string;
+    }
   | { type: "setThreadName"; workspaceId: string; threadId: string; name: string }
   | {
       type: "mergeThreadSummary";

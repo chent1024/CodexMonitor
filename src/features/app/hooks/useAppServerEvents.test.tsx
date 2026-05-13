@@ -56,13 +56,17 @@ describe("useAppServerEvents", () => {
       onThreadArchived: vi.fn(),
       onThreadUnarchived: vi.fn(),
       onBackgroundThreadAction: vi.fn(),
+      onThreadStreamError: vi.fn(),
+      onWorkspaceStderr: vi.fn(),
       onAgentMessageDelta: vi.fn(),
       onReasoningSummaryBoundary: vi.fn(),
       onPlanDelta: vi.fn(),
       onApprovalRequest: vi.fn(),
       onRequestUserInput: vi.fn(),
+      onItemStarted: vi.fn(),
       onItemCompleted: vi.fn(),
       onAgentMessageCompleted: vi.fn(),
+      onServerRequestResolved: vi.fn(),
       onAccountRateLimitsUpdated: vi.fn(),
       onAccountUpdated: vi.fn(),
       onAccountLoginCompleted: vi.fn(),
@@ -75,6 +79,17 @@ describe("useAppServerEvents", () => {
       listener?.({ workspace_id: "ws-1", message: { method: "codex/connected" } });
     });
     expect(handlers.onWorkspaceConnected).toHaveBeenCalledWith("ws-1");
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "codex/stderr",
+          params: { message: "reconnect failed" },
+        },
+      });
+    });
+    expect(handlers.onWorkspaceStderr).toHaveBeenCalledWith("ws-1", "reconnect failed");
 
     act(() => {
       listener?.({
@@ -121,6 +136,26 @@ describe("useAppServerEvents", () => {
       "thread-1",
       "plan-1",
       "- Step 1",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "thread/realtime/error",
+          params: {
+            threadId: "thread-1",
+            error: { message: "socket closed" },
+            willRetry: true,
+          },
+        },
+      });
+    });
+    expect(handlers.onThreadStreamError).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "socket closed",
+      { willRetry: true },
     );
 
     act(() => {
@@ -321,6 +356,41 @@ describe("useAppServerEvents", () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
+          method: "mcpServer/elicitation/request",
+          id: "mcp-request-1",
+          params: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            itemId: "mcp-elicit-1",
+            title: "MCP needs input",
+            message: "Pick a resource",
+          },
+        },
+      });
+    });
+    expect(handlers.onRequestUserInput).toHaveBeenCalledWith({
+      workspace_id: "ws-1",
+      request_id: "mcp-request-1",
+      params: {
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        item_id: "mcp-elicit-1",
+        questions: [
+          {
+            id: "mcp-elicit-1",
+            header: "MCP needs input",
+            question: "Pick a resource",
+            isOther: false,
+            options: undefined,
+          },
+        ],
+      },
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
           method: "item/completed",
           params: {
             threadId: "thread-1",
@@ -340,6 +410,83 @@ describe("useAppServerEvents", () => {
       itemId: "item-2",
       text: "Done",
     });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/autoApprovalReview/started",
+          params: { threadId: "thread-1", itemId: "review-1", title: "Auto review" },
+        },
+      });
+    });
+    expect(handlers.onItemStarted).toHaveBeenCalledWith("ws-1", "thread-1", {
+      threadId: "thread-1",
+      itemId: "review-1",
+      id: "review-1",
+      type: "autoApprovalReview",
+      status: "inProgress",
+      title: "Auto review",
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/mcpToolCall/progress",
+          params: {
+            threadId: "thread-1",
+            itemId: "mcp-1",
+            status: "running",
+            message: "Reading file",
+          },
+        },
+      });
+    });
+    expect(handlers.onItemStarted).toHaveBeenCalledWith("ws-1", "thread-1", {
+      threadId: "thread-1",
+      itemId: "mcp-1",
+      status: "running",
+      message: "Reading file",
+      id: "mcp-1",
+      type: "mcpToolCall",
+      output: "Reading file",
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/tool/call",
+          id: "tool-request-1",
+          params: {
+            threadId: "thread-1",
+            itemId: "dynamic-tool-1",
+            toolName: "fetchDocs",
+          },
+        },
+      });
+    });
+    expect(handlers.onItemStarted).toHaveBeenCalledWith("ws-1", "thread-1", {
+      threadId: "thread-1",
+      itemId: "dynamic-tool-1",
+      toolName: "fetchDocs",
+      id: "dynamic-tool-1",
+      type: "dynamicToolCall",
+      title: "fetchDocs",
+      status: "pending",
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "serverRequest/resolved",
+          params: { requestId: 11 },
+        },
+      });
+    });
+    expect(handlers.onServerRequestResolved).toHaveBeenCalledWith("ws-1", 11);
 
     act(() => {
       listener?.({
@@ -534,6 +681,182 @@ describe("useAppServerEvents", () => {
       "thread-1",
       { type: "idle" },
     );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("routes realistic item and request payload fixtures without dropping message-output fields", async () => {
+    const handlers: Handlers = {
+      onItemStarted: vi.fn(),
+      onItemCompleted: vi.fn(),
+      onRequestUserInput: vi.fn(),
+      onServerRequestResolved: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-real",
+        message: {
+          method: "item/mcpToolCall/progress",
+          params: {
+            item: {
+              id: "mcp-real-1",
+              thread_id: "thread-real",
+              type: "mcpToolCall",
+              server: "filesystem",
+              tool: "read_file",
+              status: "in_progress",
+              message: "Reading package.json",
+            },
+          },
+        },
+      });
+    });
+    expect(handlers.onItemStarted).toHaveBeenCalledWith("ws-real", "thread-real", {
+      id: "mcp-real-1",
+      thread_id: "thread-real",
+      type: "mcpToolCall",
+      server: "filesystem",
+      tool: "read_file",
+      status: "in_progress",
+      message: "Reading package.json",
+      output: "Reading package.json",
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-real",
+        message: {
+          method: "item/autoApprovalReview/started",
+          params: {
+            item: {
+              id: "review-real-1",
+              threadId: "thread-real",
+              title: "Review command",
+              detail: "npm test",
+            },
+          },
+        },
+      });
+    });
+    expect(handlers.onItemStarted).toHaveBeenCalledWith("ws-real", "thread-real", {
+      id: "review-real-1",
+      threadId: "thread-real",
+      title: "Review command",
+      detail: "npm test",
+      type: "autoApprovalReview",
+      status: "inProgress",
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-real",
+        message: {
+          method: "item/autoApprovalReview/completed",
+          params: {
+            review: {
+              id: "review-real-1",
+              thread_id: "thread-real",
+              title: "Review command",
+              status: "completed",
+              result: "approved",
+            },
+          },
+        },
+      });
+    });
+    expect(handlers.onItemCompleted).toHaveBeenCalledWith("ws-real", "thread-real", {
+      id: "review-real-1",
+      thread_id: "thread-real",
+      title: "Review command",
+      status: "completed",
+      result: "approved",
+      type: "autoApprovalReview",
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-real",
+        message: {
+          method: "item/tool/call",
+          id: "tool-request-real",
+          params: {
+            toolCall: {
+              id: "dynamic-real-1",
+              thread_id: "thread-real",
+              name: "fetchDocs",
+              arguments: { query: "collapse behavior" },
+            },
+          },
+        },
+      });
+    });
+    expect(handlers.onItemStarted).toHaveBeenCalledWith("ws-real", "thread-real", {
+      id: "dynamic-real-1",
+      thread_id: "thread-real",
+      name: "fetchDocs",
+      arguments: { query: "collapse behavior" },
+      type: "dynamicToolCall",
+      title: "fetchDocs",
+      status: "pending",
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-real",
+        message: {
+          method: "mcpServer/elicitation/request",
+          id: "mcp-elicit-real",
+          params: {
+            params: {
+              thread_id: "thread-real",
+              turn_id: "turn-real",
+              item_id: "mcp-elicit-item",
+              questions: [
+                {
+                  id: "resource",
+                  header: "Resource",
+                  question: "Choose resource",
+                  options: [{ label: "repo", description: "Use repository" }],
+                },
+              ],
+            },
+          },
+        },
+      });
+    });
+    expect(handlers.onRequestUserInput).toHaveBeenCalledWith({
+      workspace_id: "ws-real",
+      request_id: "mcp-elicit-real",
+      params: {
+        thread_id: "thread-real",
+        turn_id: "turn-real",
+        item_id: "mcp-elicit-item",
+        questions: [
+          {
+            id: "resource",
+            header: "Resource",
+            question: "Choose resource",
+            isOther: false,
+            options: [{ label: "repo", description: "Use repository" }],
+          },
+        ],
+      },
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-real",
+        message: {
+          method: "serverRequest/resolved",
+          params: { request_id: "mcp-elicit-real" },
+        },
+      });
+    });
+    expect(handlers.onServerRequestResolved).toHaveBeenCalledWith("ws-real", "mcp-elicit-real");
 
     await act(async () => {
       root.unmount();

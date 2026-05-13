@@ -1,8 +1,6 @@
-import { useCallback } from "react";
-import type { MouseEvent } from "react";
-import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as Sentry from "@sentry/react";
 import { openWorkspaceIn } from "../../../services/tauri";
@@ -27,6 +25,19 @@ type OpenTarget = {
   kind: OpenAppTarget["kind"];
   command?: string | null;
   args: string[];
+};
+
+type FileLinkMenuItem = {
+  id: string;
+  text: string;
+  enabled?: boolean;
+  action?: () => void | Promise<void>;
+};
+
+type FileLinkMenuState = {
+  x: number;
+  y: number;
+  items: FileLinkMenuItem[];
 };
 
 const DEFAULT_OPEN_TARGET: OpenTarget = {
@@ -97,6 +108,42 @@ export function useFileLinkOpener(
   openTargets: OpenAppTarget[],
   selectedOpenAppId: string,
 ) {
+  const [fileLinkMenuState, setFileLinkMenuState] = useState<FileLinkMenuState | null>(null);
+
+  const closeFileLinkMenu = useCallback(() => {
+    setFileLinkMenuState(null);
+  }, []);
+
+  useEffect(() => {
+    if (!fileLinkMenuState) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[data-file-link-context-menu]")) {
+        return;
+      }
+      closeFileLinkMenu();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeFileLinkMenu();
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("blur", closeFileLinkMenu);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("blur", closeFileLinkMenu);
+    };
+  }, [closeFileLinkMenu, fileLinkMenuState]);
+
   const reportOpenError = useCallback(
     (error: unknown, context: Record<string, string | null>) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -198,18 +245,20 @@ export function useFileLinkOpener(
             : appName
               ? `Open in ${appName}`
               : "Set app name in Settings";
-      const items = [
-        await MenuItem.new({
+      const items: FileLinkMenuItem[] = [
+        {
+          id: "open",
           text: openLabel,
           enabled: canOpen,
           action: async () => {
             await openFileLink(fileLocation);
           },
-        }),
+        },
         ...(target.kind === "finder"
           ? []
           : [
-              await MenuItem.new({
+              {
+                id: "reveal",
                 text: revealInFileManagerLabel(),
                 action: async () => {
                   try {
@@ -226,13 +275,15 @@ export function useFileLinkOpener(
                     });
                   }
                 },
-              }),
+              },
             ]),
-        await MenuItem.new({
+        {
+          id: "download",
           text: "Download Linked File",
           enabled: false,
-        }),
-        await MenuItem.new({
+        },
+        {
+          id: "copy-link",
           text: "Copy Link",
           action: async () => {
             const link = toFileUrl(resolvedPath, fileLocation.line, fileLocation.column);
@@ -242,18 +293,59 @@ export function useFileLinkOpener(
               // Clipboard failures are non-fatal here.
             }
           },
-        }),
-        await PredefinedMenuItem.new({ item: "Separator" }),
-        await PredefinedMenuItem.new({ item: "Services" }),
+        },
       ];
 
-      const menu = await Menu.new({ items });
-      const window = getCurrentWindow();
-      const position = new LogicalPosition(event.clientX, event.clientY);
-      await menu.popup(position, window);
+      const viewportWidth = typeof window !== "undefined" ? window.innerWidth : event.clientX;
+      const viewportHeight = typeof window !== "undefined" ? window.innerHeight : event.clientY;
+      const menuX = Math.max(8, Math.min(event.clientX, viewportWidth - 228));
+      const menuY = Math.max(8, Math.min(event.clientY, viewportHeight - 132));
+
+      setFileLinkMenuState({
+        x: menuX,
+        y: menuY,
+        items,
+      });
     },
     [openFileLink, openTargets, reportOpenError, selectedOpenAppId, workspacePath],
   );
 
-  return { openFileLink, showFileLinkMenu };
+  const fileLinkMenu = useMemo<ReactNode>(() => {
+    if (!fileLinkMenuState || typeof document === "undefined") {
+      return null;
+    }
+
+    const menu = (
+      <div
+        className="oai-file-link-context-menu ds-popover"
+        data-file-link-context-menu
+        role="menu"
+        style={{ left: fileLinkMenuState.x, top: fileLinkMenuState.y }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      >
+        {fileLinkMenuState.items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className="oai-file-link-context-menu-item"
+            role="menuitem"
+            disabled={item.enabled === false}
+            onClick={async () => {
+              closeFileLinkMenu();
+              await item.action?.();
+            }}
+          >
+            {item.text}
+          </button>
+        ))}
+      </div>
+    );
+
+    return createPortal(menu, document.body);
+  }, [closeFileLinkMenu, fileLinkMenuState]);
+
+  return { openFileLink, showFileLinkMenu, fileLinkMenu };
 }

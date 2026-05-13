@@ -3,6 +3,7 @@ import type { ConversationItem } from "../types";
 import {
   buildConversationItem,
   buildConversationItemFromThreadItem,
+  buildItemsFromThread,
   getThreadCreatedTimestamp,
   getThreadTimestamp,
   mergeThreadItems,
@@ -12,6 +13,220 @@ import {
 } from "./threadItems";
 
 describe("threadItems", () => {
+  it("hydrates raw response function calls into command activity items", () => {
+    const items = buildItemsFromThread({
+      turns: [
+        {
+          items: [
+            {
+              type: "response_item",
+              payload: {
+                type: "message",
+                role: "user",
+                content: [{ type: "input_text", text: "分析当前前端代码" }],
+              },
+            },
+            {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "我先检查代码。" }],
+            },
+            {
+              type: "function_call",
+              name: "exec_command",
+              call_id: "call_exec_1",
+              arguments: JSON.stringify({
+                cmd: "npm run typecheck",
+                workdir: "/Users/xihe0000/workspace/coChat",
+              }),
+            },
+            {
+              type: "function_call_output",
+              call_id: "call_exec_1",
+              output:
+                "Chunk ID: abc\nWall time: 1.001 seconds\nProcess running with session ID 42\nOutput:\n",
+            },
+            {
+              type: "function_call",
+              name: "write_stdin",
+              call_id: "call_poll_1",
+              arguments: JSON.stringify({ session_id: 42, chars: "" }),
+            },
+            {
+              type: "function_call_output",
+              call_id: "call_poll_1",
+              output:
+                "Chunk ID: def\nWall time: 2.500 seconds\nProcess exited with code 0\nOutput:\ntypecheck passed\n",
+            },
+            {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "验证完成。" }],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(items.map((item) => item.kind)).toEqual([
+      "message",
+      "message",
+      "tool",
+      "message",
+    ]);
+    expect(items[0]).toMatchObject({
+      id: "thread-item-0-0",
+      kind: "message",
+      role: "user",
+      text: "分析当前前端代码",
+      itemType: "user-message",
+    });
+    expect(items[1]).toMatchObject({
+      id: "thread-item-0-1",
+      kind: "message",
+      role: "assistant",
+      text: "我先检查代码。",
+      itemType: "assistant-message",
+    });
+    expect(items[2]).toMatchObject({
+      id: "call_exec_1",
+      kind: "tool",
+      toolType: "commandExecution",
+      itemType: "exec",
+      title: "Command: npm run typecheck",
+      detail: "/Users/xihe0000/workspace/coChat",
+      status: "completed",
+      output: "typecheck passed\n",
+      durationMs: 3501,
+    });
+    expect(items[3]).toMatchObject({
+      id: "thread-item-0-6",
+      kind: "message",
+      role: "assistant",
+      text: "验证完成。",
+    });
+  });
+
+  it("hydrates raw response custom tools and web search calls", () => {
+    const items = buildItemsFromThread({
+      turns: [
+        {
+          items: [
+            {
+              type: "custom_tool_call",
+              call_id: "call_patch_1",
+              name: "apply_patch",
+              input: "*** Begin Patch\n*** Add File: src/a.ts\n+export {}\n*** End Patch\n",
+            },
+            {
+              type: "custom_tool_call_output",
+              call_id: "call_patch_1",
+              output: JSON.stringify({
+                output: "Success. Updated the following files:\nA src/a.ts\n",
+                metadata: { exit_code: 0 },
+              }),
+            },
+            {
+              type: "function_call",
+              call_id: "call_plan_1",
+              name: "update_plan",
+              arguments: JSON.stringify({
+                plan: [
+                  { status: "completed", step: "Inspect adapter gaps" },
+                  { status: "in_progress", step: "Patch converter" },
+                ],
+              }),
+            },
+            {
+              type: "function_call",
+              call_id: "call_image_1",
+              name: "view_image",
+              arguments: JSON.stringify({ path: "/tmp/screenshot.png" }),
+            },
+            {
+              type: "web_search_call",
+              status: "completed",
+              action: {
+                type: "search",
+                query: "OpenAI Codex IDE extension",
+              },
+            },
+            {
+              type: "function_call",
+              call_id: "call_input_1",
+              name: "request_user_input",
+              arguments: JSON.stringify({
+                questions: [
+                  {
+                    header: "Scope",
+                    id: "scope",
+                    question: "Choose scope",
+                    options: [{ label: "Full" }, { label: "Partial" }],
+                  },
+                ],
+              }),
+            },
+            {
+              type: "image_generation_call",
+              id: "image-1",
+              status: "completed",
+              revised_prompt: "A clean UI screenshot",
+              result: "AAA",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(items).toHaveLength(6);
+    expect(items[0]).toMatchObject({
+      id: "call_patch_1",
+      kind: "tool",
+      toolType: "fileChange",
+      itemType: "patch",
+      status: "completed",
+      output: expect.stringContaining("Success. Updated the following files"),
+    });
+    expect(items[1]).toMatchObject({
+      id: "call_plan_1",
+      kind: "tool",
+      toolType: "plan",
+      itemType: "plan-implementation",
+      output: expect.stringContaining("completed: Inspect adapter gaps"),
+    });
+    expect(items[2]).toMatchObject({
+      id: "call_image_1",
+      kind: "tool",
+      toolType: "imageView",
+      detail: "/tmp/screenshot.png",
+      generatedImage: "/tmp/screenshot.png",
+    });
+    expect(items[3]).toMatchObject({
+      id: "thread-item-0-4",
+      kind: "tool",
+      toolType: "webSearch",
+      itemType: "web-search",
+      detail: "OpenAI Codex IDE extension",
+      status: "completed",
+    });
+    expect(items[4]).toMatchObject({
+      id: "call_input_1",
+      kind: "tool",
+      toolType: "requestUserInput",
+      itemType: "userInput",
+      title: "User input requested",
+      detail: expect.stringContaining("Choose scope"),
+    });
+    expect(items[5]).toMatchObject({
+      id: "image-1",
+      kind: "tool",
+      toolType: "generatedImage",
+      itemType: "generated-image",
+      generatedImage: "data:image/png;base64,AAA",
+      output: "A clean UI screenshot",
+    });
+  });
+
   it("truncates long message text in normalizeItem", () => {
     const text = "a".repeat(21000);
     const item: ConversationItem = {
@@ -889,7 +1104,7 @@ describe("threadItems", () => {
 
   it("builds context compaction items from thread history", () => {
     const item = buildConversationItemFromThreadItem({
-      type: "contextCompaction",
+      type: "context_compaction",
       id: "compact-2",
     });
     expect(item).not.toBeNull();
@@ -925,14 +1140,33 @@ describe("threadItems", () => {
       text: "User branch",
     });
 
+    const steeringUser = buildConversationItem({
+      type: "user-message",
+      id: "user-steering-1",
+      text: "Steer the next turn",
+      steeringStatus: "Steered conversation",
+      messageStatus: "Queued",
+    });
+    expect(steeringUser).toMatchObject({
+      kind: "message",
+      role: "user",
+      itemType: "user-message",
+      text: "Steer the next turn",
+      steeringStatus: "Steered conversation",
+      messageStatus: "Queued",
+    });
+
     [
       "auto-review-interruption-warning",
       "automation-update",
+      "autoApprovalReview",
       "automatic-approval-review",
       "dynamic-tool-call",
       "forked-from-conversation",
       "generated-image",
+      "imageGeneration",
       "model-rerouted",
+      "model_reroute",
       "multi-agent-action",
       "personality-changed",
       "plan-implementation",
@@ -942,6 +1176,14 @@ describe("threadItems", () => {
       "user-input-response",
       "worked-for",
     ].forEach((type) => {
+      const expectedItemType =
+        type === "autoApprovalReview"
+          ? "automatic-approval-review"
+          : type === "imageGeneration"
+            ? "generated-image"
+            : type === "model_reroute"
+              ? "model-rerouted"
+              : type;
       const item = buildConversationItem({
         type,
         id: `${type}-1`,
@@ -952,11 +1194,63 @@ describe("threadItems", () => {
       expect(item).not.toBeNull();
       expect(item).toMatchObject({
         kind: "tool",
-        itemType: type,
+        itemType: expectedItemType,
       });
       if (item?.kind === "tool" && type === "generated-image") {
         expect(item.generatedImage).toBe("data:image/png;base64,AAA");
       }
+      if (item?.kind === "tool" && type === "imageGeneration") {
+        expect(item.itemType).toBe("generated-image");
+        expect(item.generatedImage).toBe("data:image/png;base64,AAA");
+      }
+      if (item?.kind === "tool" && type === "autoApprovalReview") {
+        expect(item.itemType).toBe("automatic-approval-review");
+      }
+      if (item?.kind === "tool" && type === "model_reroute") {
+        expect(item.itemType).toBe("model-rerouted");
+      }
+    });
+  });
+
+  it("only adds MCP app descriptors when the item carries explicit app metadata", () => {
+    const generic = buildConversationItem({
+      type: "mcpToolCall",
+      id: "mcp-generic-1",
+      server: "filesystem",
+      tool: "read_file",
+      title: "Read file",
+      detail: "package.json",
+    });
+    expect(generic).toMatchObject({
+      kind: "tool",
+      itemType: "mcp-tool-call",
+    });
+    if (generic?.kind === "tool") {
+      expect(generic.mcpApp).toBeFalsy();
+    }
+
+    const app = buildConversationItem({
+      type: "mcpToolCall",
+      id: "mcp-app-1",
+      server: "browser",
+      tool: "open",
+      title: "Open browser app",
+      mcpApp: {
+        id: "browser-app",
+        title: "Browser",
+        expanded: true,
+        url: "https://mcp.example.test/app",
+      },
+    });
+    expect(app).toMatchObject({
+      kind: "tool",
+      itemType: "mcp-tool-call",
+      mcpApp: {
+        id: "browser-app",
+        title: "Browser",
+        expanded: true,
+        url: "https://mcp.example.test/app",
+      },
     });
   });
 

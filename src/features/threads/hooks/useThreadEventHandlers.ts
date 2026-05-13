@@ -40,7 +40,16 @@ type ThreadEventHandlersOptions = {
     threadId: string,
     text: string,
   ) => void | Promise<void>;
-  pushThreadErrorMessage: (threadId: string, message: string) => void;
+  pushThreadErrorMessage: (
+    threadId: string,
+    message: string,
+    options?: {
+      itemType?: "stream-error" | "system-error";
+      title?: string;
+      detail?: string;
+      status?: string;
+    },
+  ) => void;
   onDebug?: (entry: DebugEntry) => void;
   onWorkspaceConnected: (workspaceId: string) => void;
   applyCollabThreadLinks: (
@@ -195,6 +204,56 @@ export function useThreadEventHandlers({
     [dispatch],
   );
 
+  const onThreadStreamError = useCallback(
+    (
+      _workspaceId: string,
+      threadId: string,
+      message: string,
+      options?: { willRetry?: boolean },
+    ) => {
+      if (!threadId || !message.trim()) {
+        return;
+      }
+      pushThreadErrorMessage(
+        threadId,
+        options?.willRetry ? `Stream error, retrying: ${message}` : `Stream error: ${message}`,
+        {
+          itemType: "stream-error",
+          title: options?.willRetry ? "Stream error, retrying" : "Stream error",
+          detail: "app-server",
+          status: options?.willRetry ? "retrying" : "failed",
+        },
+      );
+      safeMessageActivity();
+    },
+    [pushThreadErrorMessage, safeMessageActivity],
+  );
+
+  const onWorkspaceStderr = useCallback(
+    (_workspaceId: string, message: string) => {
+      const threadId = activeThreadId;
+      if (!threadId || !message.trim()) {
+        return;
+      }
+      pushThreadErrorMessage(threadId, `Codex stderr: ${message}`, {
+        itemType: "system-error",
+        title: "Codex stderr",
+        detail: "stderr",
+        status: "failed",
+      });
+      safeMessageActivity();
+    },
+    [activeThreadId, pushThreadErrorMessage, safeMessageActivity],
+  );
+
+  const onServerRequestResolved = useCallback(
+    (workspaceId: string, requestId: string | number) => {
+      dispatch({ type: "removeApproval", workspaceId, requestId });
+      dispatch({ type: "removeUserInputRequest", workspaceId, requestId });
+    },
+    [dispatch],
+  );
+
   const onAppServerEvent = useCallback(
     (event: AppServerEvent) => {
       const method = getAppServerRawMethod(event) ?? "";
@@ -218,6 +277,9 @@ export function useThreadEventHandlers({
       onHookStarted,
       onHookCompleted,
       onBackgroundThreadAction,
+      onThreadStreamError,
+      onWorkspaceStderr,
+      onServerRequestResolved,
       onAppServerEvent,
       onAgentMessageDelta,
       onAgentMessageCompleted,
@@ -251,6 +313,9 @@ export function useThreadEventHandlers({
       onHookStarted,
       onHookCompleted,
       onBackgroundThreadAction,
+      onThreadStreamError,
+      onWorkspaceStderr,
+      onServerRequestResolved,
       onAppServerEvent,
       onAgentMessageDelta,
       onAgentMessageCompleted,

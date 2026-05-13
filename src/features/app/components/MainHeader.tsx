@@ -36,6 +36,7 @@ type MainHeaderProps = {
   disableBranchMenu?: boolean;
   parentPath?: string | null;
   worktreePath?: string | null;
+  showBranchContext?: boolean;
   openTargets: OpenAppTarget[];
   openAppIconById: Record<string, string>;
   selectedOpenAppId: string;
@@ -90,6 +91,7 @@ export function MainHeader({
   disableBranchMenu = false,
   parentPath = null,
   worktreePath = null,
+  showBranchContext = false,
   openTargets,
   openAppIconById,
   selectedOpenAppId,
@@ -203,288 +205,292 @@ export function MainHeader({
           <span className="workspace-title">
             {threadTitle ?? (parentName ?? workspace.name)}
           </span>
-          <span className="workspace-separator" aria-hidden>
-            ›
-          </span>
-          {disableBranchMenu ? (
-            <div className="workspace-branch-static-row" ref={infoRef}>
-              <MenuTrigger
-                isOpen={infoOpen}
-                popupRole="dialog"
-                className="workspace-branch-static-button"
-                onClick={infoMenu.toggle}
-                data-tauri-drag-region="false"
-                title="Worktree info"
-              >
-                {worktreeLabel || branchName}
-              </MenuTrigger>
-              {infoOpen && (
-                <PopoverSurface className="worktree-info-popover" role="dialog">
-                  {worktreeRename && (
-                    <div className="worktree-info-rename">
-                      <span className="worktree-info-label">Name</span>
-                      <div className="worktree-info-command">
-                        <input
-                          ref={renameInputRef}
-                          className="worktree-info-input"
-                          value={worktreeRename.name}
-                          onFocus={() => {
-                            worktreeRename.onFocus();
-                            renameInputRef.current?.select();
-                          }}
-                          onChange={(event) => worktreeRename.onChange(event.target.value)}
-                          onBlur={(event) => {
-                            const nextTarget = event.relatedTarget as Node | null;
-                            if (
-                              renameConfirmRef.current &&
-                              nextTarget &&
-                              renameConfirmRef.current.contains(nextTarget)
-                            ) {
-                              return;
-                            }
-                            if (!worktreeRename.isSubmitting && worktreeRename.isDirty) {
-                              worktreeRename.onCommit();
-                            }
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              if (!worktreeRename.isSubmitting) {
-                                worktreeRename.onCancel();
+          {showBranchContext && (
+            <>
+              <span className="workspace-separator" aria-hidden>
+                ›
+              </span>
+              {disableBranchMenu ? (
+                <div className="workspace-branch-static-row" ref={infoRef}>
+                  <MenuTrigger
+                    isOpen={infoOpen}
+                    popupRole="dialog"
+                    className="workspace-branch-static-button"
+                    onClick={infoMenu.toggle}
+                    data-tauri-drag-region="false"
+                    title="Worktree info"
+                  >
+                    {worktreeLabel || branchName}
+                  </MenuTrigger>
+                  {infoOpen && (
+                    <PopoverSurface className="worktree-info-popover" role="dialog">
+                      {worktreeRename && (
+                        <div className="worktree-info-rename">
+                          <span className="worktree-info-label">Name</span>
+                          <div className="worktree-info-command">
+                            <input
+                              ref={renameInputRef}
+                              className="worktree-info-input"
+                              value={worktreeRename.name}
+                              onFocus={() => {
+                                worktreeRename.onFocus();
+                                renameInputRef.current?.select();
+                              }}
+                              onChange={(event) => worktreeRename.onChange(event.target.value)}
+                              onBlur={(event) => {
+                                const nextTarget = event.relatedTarget as Node | null;
+                                if (
+                                  renameConfirmRef.current &&
+                                  nextTarget &&
+                                  renameConfirmRef.current.contains(nextTarget)
+                                ) {
+                                  return;
+                                }
+                                if (!worktreeRename.isSubmitting && worktreeRename.isDirty) {
+                                  worktreeRename.onCommit();
+                                }
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  if (!worktreeRename.isSubmitting) {
+                                    worktreeRename.onCancel();
+                                  }
+                                }
+                                if (event.key === "Enter" && !worktreeRename.isSubmitting) {
+                                  event.preventDefault();
+                                  worktreeRename.onCommit();
+                                }
+                              }}
+                              data-tauri-drag-region="false"
+                              disabled={worktreeRename.isSubmitting}
+                            />
+                            <button
+                              type="button"
+                              className="icon-button worktree-info-confirm"
+                              ref={renameConfirmRef}
+                              onClick={() => worktreeRename.onCommit()}
+                              disabled={
+                                worktreeRename.isSubmitting || !worktreeRename.isDirty
                               }
-                            }
-                            if (event.key === "Enter" && !worktreeRename.isSubmitting) {
-                              event.preventDefault();
-                              worktreeRename.onCommit();
-                            }
-                          }}
-                          data-tauri-drag-region="false"
-                          disabled={worktreeRename.isSubmitting}
-                        />
-                        <button
-                          type="button"
-                          className="icon-button worktree-info-confirm"
-                          ref={renameConfirmRef}
-                          onClick={() => worktreeRename.onCommit()}
-                          disabled={
-                            worktreeRename.isSubmitting || !worktreeRename.isDirty
-                          }
-                          aria-label="Confirm rename"
-                          title="Confirm rename"
-                        >
-                          <Check aria-hidden />
-                        </button>
-                      </div>
-                      {worktreeRename.error && (
-                        <div className="worktree-info-error">{worktreeRename.error}</div>
-                      )}
-                      {worktreeRename.notice && (
-                        <span className="worktree-info-subtle">
-                          {worktreeRename.notice}
-                        </span>
-                      )}
-                      {worktreeRename.upstream && (
-                        <div className="worktree-info-upstream">
-                          <span className="worktree-info-subtle">
-                            Do you want to update the upstream branch to{" "}
-                            <strong>{worktreeRename.upstream.newBranch}</strong>?
-                          </span>
-                          <button
-                            type="button"
-                            className="ghost worktree-info-upstream-button"
-                            onClick={worktreeRename.upstream.onConfirm}
-                            disabled={worktreeRename.upstream.isSubmitting}
-                          >
-                            Update upstream
-                          </button>
-                          {worktreeRename.upstream.error && (
-                            <div className="worktree-info-error">
-                              {worktreeRename.upstream.error}
+                              aria-label="Confirm rename"
+                              title="Confirm rename"
+                            >
+                              <Check aria-hidden />
+                            </button>
+                          </div>
+                          {worktreeRename.error && (
+                            <div className="worktree-info-error">{worktreeRename.error}</div>
+                          )}
+                          {worktreeRename.notice && (
+                            <span className="worktree-info-subtle">
+                              {worktreeRename.notice}
+                            </span>
+                          )}
+                          {worktreeRename.upstream && (
+                            <div className="worktree-info-upstream">
+                              <span className="worktree-info-subtle">
+                                Do you want to update the upstream branch to{" "}
+                                <strong>{worktreeRename.upstream.newBranch}</strong>?
+                              </span>
+                              <button
+                                type="button"
+                                className="ghost worktree-info-upstream-button"
+                                onClick={worktreeRename.upstream.onConfirm}
+                                disabled={worktreeRename.upstream.isSubmitting}
+                              >
+                                Update upstream
+                              </button>
+                              {worktreeRename.upstream.error && (
+                                <div className="worktree-info-error">
+                                  {worktreeRename.upstream.error}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
                       )}
-                    </div>
+                      <div className="worktree-info-title">Worktree</div>
+                      <div className="worktree-info-row">
+                        <span className="worktree-info-label">
+                          Terminal{parentPath ? " (repo root)" : ""}
+                        </span>
+                        <div className="worktree-info-command">
+                          <code className="worktree-info-code">
+                            {cdCommand}
+                          </code>
+                          <button
+                            type="button"
+                            className="worktree-info-copy"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(cdCommand);
+                            }}
+                            data-tauri-drag-region="false"
+                            aria-label="Copy command"
+                            title="Copy command"
+                          >
+                            <Copy aria-hidden />
+                          </button>
+                        </div>
+                        <span className="worktree-info-subtle">
+                          Open this worktree in your terminal.
+                        </span>
+                      </div>
+                      <div className="worktree-info-row">
+                        <span className="worktree-info-label">Reveal</span>
+                        <button
+                          type="button"
+                          className="worktree-info-reveal"
+                          onClick={async () => {
+                            await revealItemInDir(resolvedWorktreePath);
+                          }}
+                          data-tauri-drag-region="false"
+                        >
+                          {revealInFileManagerLabel()}
+                        </button>
+                      </div>
+                    </PopoverSurface>
                   )}
-                  <div className="worktree-info-title">Worktree</div>
-                  <div className="worktree-info-row">
-                    <span className="worktree-info-label">
-                      Terminal{parentPath ? " (repo root)" : ""}
+                </div>
+              ) : (
+                <div className="workspace-branch-menu" ref={menuRef}>
+                  <MenuTrigger
+                    isOpen={menuOpen}
+                    className="workspace-branch-button"
+                    onClick={branchMenu.toggle}
+                    data-tauri-drag-region="false"
+                  >
+                    <span className="workspace-branch">{branchName}</span>
+                    <span className="workspace-branch-caret" aria-hidden>
+                      ›
                     </span>
-                    <div className="worktree-info-command">
-                      <code className="worktree-info-code">
-                        {cdCommand}
-                      </code>
-                      <button
-                        type="button"
-                        className="worktree-info-copy"
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(cdCommand);
-                        }}
-                        data-tauri-drag-region="false"
-                        aria-label="Copy command"
-                        title="Copy command"
-                      >
-                        <Copy aria-hidden />
-                      </button>
-                    </div>
-                    <span className="worktree-info-subtle">
-                      Open this worktree in your terminal.
-                    </span>
-                  </div>
-                  <div className="worktree-info-row">
-                    <span className="worktree-info-label">Reveal</span>
-                    <button
-                      type="button"
-                      className="worktree-info-reveal"
-                      onClick={async () => {
-                        await revealItemInDir(resolvedWorktreePath);
-                      }}
+                  </MenuTrigger>
+                  {menuOpen && (
+                    <PopoverSurface
+                      className="workspace-branch-dropdown"
+                      role="menu"
                       data-tauri-drag-region="false"
                     >
-                      {revealInFileManagerLabel()}
-                    </button>
-                  </div>
-                </PopoverSurface>
-              )}
-            </div>
-          ) : (
-            <div className="workspace-branch-menu" ref={menuRef}>
-              <MenuTrigger
-                isOpen={menuOpen}
-                className="workspace-branch-button"
-                onClick={branchMenu.toggle}
-                data-tauri-drag-region="false"
-              >
-                <span className="workspace-branch">{branchName}</span>
-                <span className="workspace-branch-caret" aria-hidden>
-                  ›
-                </span>
-              </MenuTrigger>
-              {menuOpen && (
-                <PopoverSurface
-                  className="workspace-branch-dropdown"
-                  role="menu"
-                  data-tauri-drag-region="false"
-                >
-                  <div className="branch-actions">
-                    <div className="branch-search">
-                      <input
-                        value={branchQuery}
-                        onChange={(event) => {
-                          setBranchQuery(event.target.value);
-                          setError(null);
-                        }}
-                        onKeyDown={async (event) => {
-                          if (event.key !== "Enter") {
-                            return;
-                          }
-                          event.preventDefault();
-                          if (branchValidationMessage) {
-                            setError(branchValidationMessage);
-                            return;
-                          }
-                          if (canCreate) {
-                            try {
-                              await onCreateBranch(trimmedQuery);
-                              setMenuOpen(false);
-                              setBranchQuery("");
+                      <div className="branch-actions">
+                        <div className="branch-search">
+                          <input
+                            value={branchQuery}
+                            onChange={(event) => {
+                              setBranchQuery(event.target.value);
                               setError(null);
-                            } catch (err) {
-                              setError(
-                                err instanceof Error ? err.message : String(err),
-                              );
-                            }
-                            return;
-                          }
-                          if (exactMatch && exactMatch.name !== branchName) {
-                            try {
-                              await onCheckoutBranch(exactMatch.name);
-                              setMenuOpen(false);
-                              setBranchQuery("");
-                              setError(null);
-                            } catch (err) {
-                              setError(
-                                err instanceof Error ? err.message : String(err),
-                              );
-                            }
-                          }
-                        }}
-                        placeholder="Search or create branch"
-                        className="branch-input"
-                        autoCorrect="off"
-                        autoCapitalize="none"
-                        spellCheck={false}
-                        autoFocus
-                        data-tauri-drag-region="false"
-                        aria-label="Search branches"
-                      />
-                      <button
-                        type="button"
-                        className="branch-create-button"
-                        disabled={!canCreate || Boolean(branchValidationMessage)}
-                        onClick={async () => {
-                          if (branchValidationMessage) {
-                            setError(branchValidationMessage);
-                            return;
-                          }
-                          if (!canCreate) {
+                            }}
+                            onKeyDown={async (event) => {
+                              if (event.key !== "Enter") {
+                                return;
+                              }
+                              event.preventDefault();
+                              if (branchValidationMessage) {
+                                setError(branchValidationMessage);
+                                return;
+                              }
+                              if (canCreate) {
+                                try {
+                                  await onCreateBranch(trimmedQuery);
+                                  setMenuOpen(false);
+                                  setBranchQuery("");
+                                  setError(null);
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error ? err.message : String(err),
+                                  );
+                                }
+                                return;
+                              }
+                              if (exactMatch && exactMatch.name !== branchName) {
+                                try {
+                                  await onCheckoutBranch(exactMatch.name);
+                                  setMenuOpen(false);
+                                  setBranchQuery("");
+                                  setError(null);
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error ? err.message : String(err),
+                                  );
+                                }
+                              }
+                            }}
+                            placeholder="Search or create branch"
+                            className="branch-input"
+                            autoCorrect="off"
+                            autoCapitalize="none"
+                            spellCheck={false}
+                            autoFocus
+                            data-tauri-drag-region="false"
+                            aria-label="Search branches"
+                          />
+                          <button
+                            type="button"
+                            className="branch-create-button"
+                            disabled={!canCreate || Boolean(branchValidationMessage)}
+                            onClick={async () => {
+                              if (branchValidationMessage) {
+                                setError(branchValidationMessage);
+                                return;
+                              }
+                              if (!canCreate) {
+                                return;
+                              }
+                              try {
+                                await onCreateBranch(trimmedQuery);
+                                setMenuOpen(false);
+                                setBranchQuery("");
+                                setError(null);
+                              } catch (err) {
+                                setError(
+                                  err instanceof Error ? err.message : String(err),
+                                );
+                              }
+                            }}
+                            data-tauri-drag-region="false"
+                          >
+                            Create
+                          </button>
+                        </div>
+                        {branchValidationMessage && (
+                          <div className="branch-error">{branchValidationMessage}</div>
+                        )}
+                        {canCreate && !branchValidationMessage && (
+                          <div className="branch-create-hint">
+                            Create branch "{trimmedQuery}"
+                          </div>
+                        )}
+                      </div>
+                      <BranchList
+                        branches={filteredBranches}
+                        currentBranch={branchName}
+                        listClassName="branch-list"
+                        listRole="none"
+                        itemClassName="branch-item"
+                        currentItemClassName="is-active"
+                        itemRole="menuitem"
+                        itemDataTauriDragRegion="false"
+                        emptyClassName="branch-empty"
+                        emptyText="No branches found"
+                        onSelect={async (branch) => {
+                          if (branch.name === branchName) {
                             return;
                           }
                           try {
-                            await onCreateBranch(trimmedQuery);
+                            await onCheckoutBranch(branch.name);
                             setMenuOpen(false);
                             setBranchQuery("");
                             setError(null);
                           } catch (err) {
-                            setError(
-                              err instanceof Error ? err.message : String(err),
-                            );
+                            setError(err instanceof Error ? err.message : String(err));
                           }
                         }}
-                        data-tauri-drag-region="false"
-                      >
-                        Create
-                      </button>
-                    </div>
-                    {branchValidationMessage && (
-                      <div className="branch-error">{branchValidationMessage}</div>
-                    )}
-                    {canCreate && !branchValidationMessage && (
-                      <div className="branch-create-hint">
-                        Create branch “{trimmedQuery}”
-                      </div>
-                    )}
-                  </div>
-                  <BranchList
-                    branches={filteredBranches}
-                    currentBranch={branchName}
-                    listClassName="branch-list"
-                    listRole="none"
-                    itemClassName="branch-item"
-                    currentItemClassName="is-active"
-                    itemRole="menuitem"
-                    itemDataTauriDragRegion="false"
-                    emptyClassName="branch-empty"
-                    emptyText="No branches found"
-                    onSelect={async (branch) => {
-                      if (branch.name === branchName) {
-                        return;
-                      }
-                      try {
-                        await onCheckoutBranch(branch.name);
-                        setMenuOpen(false);
-                        setBranchQuery("");
-                        setError(null);
-                      } catch (err) {
-                        setError(err instanceof Error ? err.message : String(err));
-                      }
-                    }}
-                  />
-                  {error && <div className="branch-error">{error}</div>}
-                </PopoverSurface>
+                      />
+                      {error && <div className="branch-error">{error}</div>}
+                    </PopoverSurface>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
         </div>
         <div

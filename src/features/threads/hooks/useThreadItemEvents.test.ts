@@ -54,6 +54,21 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
   };
 };
 
+const flushStreamFrame = async () => {
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      if (
+        typeof window !== "undefined" &&
+        typeof window.requestAnimationFrame === "function"
+      ) {
+        window.requestAnimationFrame(() => resolve());
+        return;
+      }
+      setTimeout(resolve, 20);
+    });
+  });
+};
+
 describe("useThreadItemEvents", () => {
   const convertedItem = {
     id: "item-1",
@@ -213,7 +228,7 @@ describe("useThreadItemEvents", () => {
     );
   });
 
-  it("marks processing and appends agent deltas", () => {
+  it("marks processing and appends agent deltas", async () => {
     const { result, dispatch, markProcessing } = makeOptions();
 
     act(() => {
@@ -224,6 +239,7 @@ describe("useThreadItemEvents", () => {
         delta: "Hello",
       });
     });
+    await flushStreamFrame();
 
     expect(dispatch).toHaveBeenCalledWith({
       type: "ensureThread",
@@ -239,6 +255,40 @@ describe("useThreadItemEvents", () => {
       delta: "Hello",
       hasCustomName: false,
     });
+  });
+
+  it("batches stream deltas for the same agent item in one frame", async () => {
+    const { result, dispatch, markProcessing } = makeOptions();
+
+    act(() => {
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        delta: "Hel",
+      });
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        delta: "lo",
+      });
+    });
+    await flushStreamFrame();
+
+    const appendAgentDeltaCalls = dispatch.mock.calls.filter(
+      ([action]) => action.type === "appendAgentDelta",
+    );
+    expect(appendAgentDeltaCalls).toHaveLength(1);
+    expect(appendAgentDeltaCalls[0][0]).toEqual({
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-1",
+      delta: "Hello",
+      hasCustomName: false,
+    });
+    expect(markProcessing).toHaveBeenCalledTimes(1);
   });
 
   it("completes agent messages and updates thread activity", () => {
@@ -306,12 +356,39 @@ describe("useThreadItemEvents", () => {
     });
   });
 
-  it("dispatches plan deltas", () => {
+  it("flushes pending reasoning summary before boundaries", () => {
+    const { result, dispatch } = makeOptions();
+
+    act(() => {
+      result.current.onReasoningSummaryDelta(
+        "ws-1",
+        "thread-1",
+        "reasoning-1",
+        "First",
+      );
+      result.current.onReasoningSummaryBoundary("ws-1", "thread-1", "reasoning-1");
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "appendReasoningSummary",
+      threadId: "thread-1",
+      itemId: "reasoning-1",
+      delta: "First",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "appendReasoningSummaryBoundary",
+      threadId: "thread-1",
+      itemId: "reasoning-1",
+    });
+  });
+
+  it("dispatches plan deltas", async () => {
     const { result, dispatch } = makeOptions();
 
     act(() => {
       result.current.onPlanDelta("ws-1", "thread-1", "plan-1", "- Step 1");
     });
+    await flushStreamFrame();
 
     expect(dispatch).toHaveBeenCalledWith({
       type: "appendPlanDelta",

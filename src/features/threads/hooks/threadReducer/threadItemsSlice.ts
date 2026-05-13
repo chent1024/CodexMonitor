@@ -14,6 +14,19 @@ import {
   prefersUpdatedSort,
 } from "./common";
 
+const preparedThreadItems = (state: ThreadState, items: ConversationItem[]) =>
+  prepareThreadItems(items, { maxItemsPerThread: state.maxItemsPerThread });
+
+const replaceThreadItem = (
+  items: ConversationItem[],
+  index: number,
+  item: ConversationItem,
+) => {
+  const next = [...items];
+  next[index] = item;
+  return next;
+};
+
 export function reduceThreadItems(state: ThreadState, action: ThreadAction): ThreadState {
   switch (action.type) {
     case "addAssistantMessage": {
@@ -28,28 +41,52 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         ...state,
         itemsByThread: {
           ...state.itemsByThread,
-          [action.threadId]: prepareThreadItems([...list, message], { maxItemsPerThread: state.maxItemsPerThread }),
+          [action.threadId]: preparedThreadItems(state, [...list, message]),
+        },
+      };
+    }
+    case "addErrorItem": {
+      const list = state.itemsByThread[action.threadId] ?? [];
+      const itemType = action.itemType ?? "stream-error";
+      const message: ConversationItem = {
+        id: `${Date.now()}-${list.length}-${itemType}`,
+        kind: "tool",
+        toolType: "error",
+        itemType,
+        title: action.title ?? (itemType === "system-error" ? "System error" : "Stream error"),
+        detail: action.detail ?? "error",
+        status: action.status ?? "failed",
+        output: action.text,
+      };
+      return {
+        ...state,
+        itemsByThread: {
+          ...state.itemsByThread,
+          [action.threadId]: preparedThreadItems(state, [...list, message]),
         },
       };
     }
     case "appendAgentDelta": {
-      const list = [...(state.itemsByThread[action.threadId] ?? [])];
+      const list = state.itemsByThread[action.threadId] ?? [];
       const index = list.findIndex((msg) => msg.id === action.itemId);
+      let updatedItems: ConversationItem[];
       if (index >= 0 && list[index].kind === "message") {
         const existing = list[index];
-        list[index] = {
+        updatedItems = replaceThreadItem(list, index, {
           ...existing,
           text: mergeStreamingText(existing.text, action.delta),
-        };
-      } else {
-        list.push({
-          id: action.itemId,
-          kind: "message",
-          role: "assistant",
-          text: action.delta,
         });
+      } else {
+        updatedItems = preparedThreadItems(state, [
+          ...list,
+          {
+            id: action.itemId,
+            kind: "message",
+            role: "assistant",
+            text: action.delta,
+          },
+        ]);
       }
-      const updatedItems = prepareThreadItems(list, { maxItemsPerThread: state.maxItemsPerThread });
       const nextThreadsByWorkspace = maybeRenameThreadFromAgent({
         workspaceId: action.workspaceId,
         threadId: action.threadId,
@@ -84,7 +121,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
           text: action.text,
         });
       }
-      const updatedItems = prepareThreadItems(list, { maxItemsPerThread: state.maxItemsPerThread });
+      const updatedItems = preparedThreadItems(state, list);
       const nextThreadsByWorkspace = maybeRenameThreadFromAgent({
         workspaceId: action.workspaceId,
         threadId: action.threadId,
@@ -127,7 +164,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         }
       }
       const nextItem = ensureUniqueReviewId(list, item);
-      const updatedItems = prepareThreadItems(upsertItem(list, nextItem), { maxItemsPerThread: state.maxItemsPerThread });
+      const updatedItems = preparedThreadItems(state, upsertItem(list, nextItem));
       let nextThreadsByWorkspace = state.threadsByWorkspace;
       if (isUserMessage) {
         const threads = state.threadsByWorkspace[action.workspaceId] ?? [];
@@ -176,7 +213,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         ...state,
         itemsByThread: {
           ...state.itemsByThread,
-          [action.threadId]: prepareThreadItems(action.items, { maxItemsPerThread: state.maxItemsPerThread }),
+          [action.threadId]: preparedThreadItems(state, action.items),
         },
       };
     case "appendReasoningSummary": {
@@ -198,15 +235,15 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
           action.delta,
         ),
       } as ConversationItem;
-      const next = index >= 0 ? [...list] : [...list, updated];
-      if (index >= 0) {
-        next[index] = updated;
-      }
+      const next =
+        index >= 0
+          ? replaceThreadItem(list, index, updated)
+          : preparedThreadItems(state, [...list, updated]);
       return {
         ...state,
         itemsByThread: {
           ...state.itemsByThread,
-          [action.threadId]: prepareThreadItems(next, { maxItemsPerThread: state.maxItemsPerThread }),
+          [action.threadId]: next,
         },
       };
     }
@@ -226,15 +263,15 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         ...base,
         summary: addSummaryBoundary("summary" in base ? base.summary : ""),
       } as ConversationItem;
-      const next = index >= 0 ? [...list] : [...list, updated];
-      if (index >= 0) {
-        next[index] = updated;
-      }
+      const next =
+        index >= 0
+          ? replaceThreadItem(list, index, updated)
+          : preparedThreadItems(state, [...list, updated]);
       return {
         ...state,
         itemsByThread: {
           ...state.itemsByThread,
-          [action.threadId]: prepareThreadItems(next, { maxItemsPerThread: state.maxItemsPerThread }),
+          [action.threadId]: next,
         },
       };
     }
@@ -257,15 +294,15 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
           action.delta,
         ),
       } as ConversationItem;
-      const next = index >= 0 ? [...list] : [...list, updated];
-      if (index >= 0) {
-        next[index] = updated;
-      }
+      const next =
+        index >= 0
+          ? replaceThreadItem(list, index, updated)
+          : preparedThreadItems(state, [...list, updated]);
       return {
         ...state,
         itemsByThread: {
           ...state.itemsByThread,
-          [action.threadId]: prepareThreadItems(next, { maxItemsPerThread: state.maxItemsPerThread }),
+          [action.threadId]: next,
         },
       };
     }
@@ -294,15 +331,15 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         status: "in_progress",
         output: mergeStreamingText(existingOutput, action.delta),
       } as ConversationItem;
-      const next = index >= 0 ? [...list] : [...list, updated];
-      if (index >= 0) {
-        next[index] = updated;
-      }
+      const next =
+        index >= 0
+          ? replaceThreadItem(list, index, updated)
+          : preparedThreadItems(state, [...list, updated]);
       return {
         ...state,
         itemsByThread: {
           ...state.itemsByThread,
-          [action.threadId]: prepareThreadItems(next, { maxItemsPerThread: state.maxItemsPerThread }),
+          [action.threadId]: next,
         },
       };
     }
@@ -317,13 +354,12 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         ...existing,
         output: mergeStreamingText(existing.output ?? "", action.delta),
       } as ConversationItem;
-      const next = [...list];
-      next[index] = updated;
+      const next = replaceThreadItem(list, index, updated);
       return {
         ...state,
         itemsByThread: {
           ...state.itemsByThread,
-          [action.threadId]: prepareThreadItems(next, { maxItemsPerThread: state.maxItemsPerThread }),
+          [action.threadId]: next,
         },
       };
     }

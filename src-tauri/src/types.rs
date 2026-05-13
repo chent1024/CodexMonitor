@@ -722,7 +722,7 @@ fn default_ui_font_family() -> String {
 }
 
 fn default_ui_font_size() -> u8 {
-    13
+    14
 }
 
 fn default_code_font_family() -> String {
@@ -730,7 +730,7 @@ fn default_code_font_family() -> String {
 }
 
 fn default_code_font_size() -> u8 {
-    11
+    14
 }
 
 fn default_composer_model_shortcut() -> Option<String> {

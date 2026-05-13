@@ -47,6 +47,18 @@ vi.mock("../../git/components/PierreDiffBlock", () => ({
   ),
 }));
 
+function clickFirst(container: HTMLElement, selector: string) {
+  const element = container.querySelector(selector);
+  expect(element).toBeTruthy();
+  fireEvent.click(element as Element);
+}
+
+function clickAll(container: HTMLElement, selector: string) {
+  const elements = Array.from(container.querySelectorAll(selector));
+  expect(elements.length).toBeGreaterThan(0);
+  elements.forEach((element) => fireEvent.click(element));
+}
+
 describe("Messages", () => {
   beforeAll(() => {
     if (!HTMLElement.prototype.scrollIntoView) {
@@ -198,17 +210,9 @@ describe("Messages", () => {
     expect(assistantBody?.querySelector("[data-assistant-turn-body-stack]")).toBeTruthy();
     const assistantFooter = assistantTurn?.querySelector("[data-assistant-turn-footer]");
     expect(assistantFooter).toBeTruthy();
-    expect(
-      assistantFooter?.children.item(0)?.classList.contains("oai-assistant-actions"),
-    ).toBe(true);
-    expect(
-      assistantFooter?.children.item(0)?.classList.contains("message-actions"),
-    ).toBe(false);
-    const assistantActionRow = assistantFooter?.querySelector("[data-message-actions-row]");
-    expect(assistantActionRow?.classList.contains("mr-1")).toBe(true);
-    expect(assistantActionRow?.classList.contains("ms-1")).toBe(true);
-    expect(assistantActionRow?.querySelector("[data-message-action-metadata]")).toBeTruthy();
-    expect(assistantActionRow?.querySelector('[data-message-action="copy"]')).toBeTruthy();
+    expect(assistantFooter?.querySelector(".oai-assistant-actions")).toBeNull();
+    expect(assistantFooter?.querySelector('[data-message-action="copy"]')).toBeNull();
+    expect(assistantFooter?.querySelector('[data-message-action="quote"]')).toBeNull();
     expect(turn?.getAttribute("data-content-search-turn-index")).toBe("0");
     expect(turn?.getAttribute("data-scroll-to-key")).toBe("user:user-1");
     expect(
@@ -446,6 +450,133 @@ describe("Messages", () => {
     expect(screen.getByText("Edited OpenAI-style user message")).toBeTruthy();
   });
 
+  it("uses ResizeObserver measurement before the user-message collapse heuristic", async () => {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollHeight",
+    );
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      bottom: 0,
+      height: 0,
+      left: 0,
+      right: 240,
+      top: 0,
+      width: 240,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    const styleSpy = vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      fontSize: "13px",
+      lineHeight: "20px",
+    } as CSSStyleDeclaration);
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return this.hasAttribute("data-user-message-text") ? 41 : 0;
+      },
+    });
+
+    try {
+      const items: ConversationItem[] = [
+        {
+          id: "measured-long-user",
+          kind: "message",
+          role: "user",
+          text: Array.from({ length: 10 }, (_, index) => `Line ${index + 1}`).join("\n"),
+          collapsedLineCount: 2,
+        },
+      ];
+
+      const { container } = render(
+        <Messages
+          items={items}
+          threadId="thread-1"
+          workspaceId="ws-1"
+          isThinking={false}
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      await waitFor(() => {
+        expect(container.querySelector("[data-user-message-text]")?.getAttribute("data-user-message-measured")).toBe("true");
+      });
+      expect(container.querySelector("[data-user-message-text]")?.getAttribute("data-user-message-collapse-state")).toBe("uncollapsible");
+      expect(container.querySelector("[data-user-message-collapse-toggle]")).toBeNull();
+    } finally {
+      rectSpy.mockRestore();
+      styleSpy.mockRestore();
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
+      }
+    }
+  });
+
+  it("shows user-message collapse when measured height exceeds collapsed height", async () => {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollHeight",
+    );
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      bottom: 0,
+      height: 0,
+      left: 0,
+      right: 180,
+      top: 0,
+      width: 180,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    const styleSpy = vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      fontSize: "13px",
+      lineHeight: "20px",
+    } as CSSStyleDeclaration);
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return this.hasAttribute("data-user-message-text") ? 42 : 0;
+      },
+    });
+
+    try {
+      const items: ConversationItem[] = [
+        {
+          id: "measured-markdown-user",
+          kind: "message",
+          role: "user",
+          text: "Short markdown with `aVeryLongUnbrokenIdentifierThatWrapsInTheBubble`",
+          collapsedLineCount: 2,
+        },
+      ];
+
+      const { container } = render(
+        <Messages
+          items={items}
+          threadId="thread-1"
+          workspaceId="ws-1"
+          isThinking={false}
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      await waitFor(() => {
+        expect(container.querySelector("[data-user-message-collapse-toggle]")?.textContent).toBe("Show more");
+      });
+      expect(container.querySelector("[data-user-message-text]")?.getAttribute("data-user-message-collapse-state")).toBe("collapsed");
+      fireEvent.click(container.querySelector("[data-user-message-collapse-toggle]") as Element);
+      expect(container.querySelector("[data-user-message-text]")?.getAttribute("data-user-message-collapse-state")).toBe("expanded");
+    } finally {
+      rectSpy.mockRestore();
+      styleSpy.mockRestore();
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
+      }
+    }
+  });
+
   it("preserves newlines when images are attached", () => {
     const items: ConversationItem[] = [
       {
@@ -531,7 +662,7 @@ describe("Messages", () => {
     expect(container.querySelector(".markdown-table-wrap")).toBeTruthy();
   });
 
-  it("quotes a message into composer using markdown blockquote format", () => {
+  it("does not render quote or copy actions for assistant output messages", () => {
     const onQuoteMessage = vi.fn();
     const items: ConversationItem[] = [
       {
@@ -554,50 +685,9 @@ describe("Messages", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Quote message" }));
-    expect(onQuoteMessage).toHaveBeenCalledWith("> First line\n> Second line\n\n");
-  });
-
-  it("quotes selected message fragment when text is highlighted", () => {
-    const onQuoteMessage = vi.fn();
-    const items: ConversationItem[] = [
-      {
-        id: "msg-quote-selection-1",
-        kind: "message",
-        role: "assistant",
-        text: "Alpha beta gamma",
-      },
-    ];
-
-    render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-        onQuoteMessage={onQuoteMessage}
-      />,
-    );
-
-    const textNode = screen.getByText("Alpha beta gamma").firstChild;
-    if (!(textNode instanceof Text)) {
-      throw new Error("Expected message text node");
-    }
-    const range = document.createRange();
-    range.setStart(textNode, 6);
-    range.setEnd(textNode, 10);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-
-    const quoteButton = screen.getByRole("button", { name: "Quote message" });
-    fireEvent.mouseDown(quoteButton);
-    fireEvent.click(quoteButton);
-
-    expect(onQuoteMessage).toHaveBeenCalledWith("> beta\n\n");
-    selection?.removeAllRanges();
+    expect(screen.queryByRole("button", { name: "Quote message" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy message" })).toBeNull();
+    expect(onQuoteMessage).not.toHaveBeenCalled();
   });
 
   it("opens linked review thread when clicking thread link", () => {
@@ -1357,7 +1447,7 @@ describe("Messages", () => {
       },
     ];
 
-    render(
+    const { container } = render(
       <Messages
         items={items}
         threadId="thread-1"
@@ -1372,12 +1462,22 @@ describe("Messages", () => {
       screen.getByText(/Proceed with deployment\?: Yes \+1/),
     ).toBeTruthy();
     expect(screen.queryByText("user_note: after running tests")).toBeNull();
+    expect(
+      container
+        .querySelector("[data-oai-user-input-detail]")
+        ?.getAttribute("data-oai-activity-detail-expanded"),
+    ).toBe("false");
 
     fireEvent.click(
       screen.getByRole("button", { name: "Toggle answered input details" }),
     );
 
     expect(screen.getByText("user_note: after running tests")).toBeTruthy();
+    expect(
+      container
+        .querySelector("[data-oai-user-input-detail]")
+        ?.getAttribute("data-oai-activity-detail-expanded"),
+    ).toBe("true");
   });
 
   it("merges consecutive explore items under a single explored block", async () => {
@@ -1491,13 +1591,14 @@ describe("Messages", () => {
       />,
     );
 
+    clickFirst(container, "[data-oai-tool-group] [data-oai-section-toggle]");
     await waitFor(() => {
       const exploreBlocks = container.querySelectorAll("[data-oai-explore-detail]");
       expect(exploreBlocks.length).toBe(2);
     });
     const exploreItems = container.querySelectorAll(".oai-explore-item");
     expect(exploreItems.length).toBe(2);
-    expect(screen.getByText(/rg reducers/i)).toBeTruthy();
+    expect(screen.getAllByText(/rg reducers/i).length).toBeGreaterThan(0);
   });
 
   it("preserves chronology when reasoning with body appears between explore items", async () => {
@@ -1533,6 +1634,7 @@ describe("Messages", () => {
       />,
     );
 
+    clickFirst(container, "[data-oai-tool-group] [data-oai-section-toggle]");
     await waitFor(() => {
       expect(container.querySelectorAll("[data-oai-explore-detail]").length).toBe(2);
     });
@@ -1587,27 +1689,17 @@ describe("Messages", () => {
     await waitFor(() => {
       expect(screen.getByText("A message between explore blocks")).toBeTruthy();
     });
-    expect(screen.getAllByRole("button", { name: /已处理/i }).length).toBe(1);
-    expect(container.querySelectorAll("[data-oai-explore-detail]").length).toBe(0);
-
-    container
-      .querySelectorAll("[data-collapsed-tool-activity-summary]")
-      .forEach((button) => fireEvent.click(button));
-
-    await waitFor(() => {
-      expect(container.querySelectorAll("[data-collapsed-tool-activity-item]").length).toBe(2);
-    });
+    expect(container.querySelectorAll("[data-collapsed-tool-activity-summary]").length).toBe(0);
+    expect(container.querySelectorAll("[data-collapsed-tool-activity-item]").length).toBe(2);
     expect(screen.getByRole("button", { name: /已探索 1 次搜索/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /已探索 1 个文件/i })).toBeTruthy();
     expect(container.querySelectorAll(".oai-explore-item").length).toBe(0);
-    expect(container.querySelectorAll(".explore-inline-item").length).toBe(0);
-
-    fireEvent.click(screen.getByRole("button", { name: /已探索 1 次搜索/i }));
-    fireEvent.click(screen.getByRole("button", { name: /已探索 1 个文件/i }));
-
+    clickAll(container, "[data-oai-tool-activity-summary]");
     await waitFor(() => {
       expect(container.querySelectorAll(".oai-explore-item").length).toBe(2);
     });
+    expect(container.querySelectorAll(".oai-explore-item").length).toBe(2);
+    expect(container.querySelectorAll(".explore-inline-item").length).toBe(0);
     expect(screen.getByText("before message")).toBeTruthy();
     expect(screen.getByText("after message")).toBeTruthy();
   });
@@ -1663,48 +1755,15 @@ describe("Messages", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /已处理 1 个操作/i })).toBeTruthy();
+      expect(container.querySelector("[data-collapsed-tool-activity-item]")).toBeTruthy();
     });
-    const activitySummary = screen.getByRole("button", { name: /已处理 1 个操作/i });
-    const activityBlock = activitySummary.closest("[data-collapsed-tool-activity]");
-    expect(activityBlock).toBeTruthy();
-    expect(activityBlock?.getAttribute("data-collapsed-tool-activity-expanded")).toBe("false");
-    expect(activityBlock?.getAttribute("data-collapsed-tool-activity-type")).toBe("patch");
-    expect(activityBlock?.getAttribute("data-conversation-detail-level")).toBe("STEPS_PROSE");
-    expect(activityBlock?.getAttribute("data-is-activity-slice-closed")).toBe("true");
-    expect(activityBlock?.getAttribute("data-should-auto-expand-mcp-apps")).toBe("false");
-    expect(activityBlock?.getAttribute("data-mcp-server-statuses")).toBe("{}");
-    expect(activitySummary.closest("[data-collapsed-tool-activity-offset]")).toBeTruthy();
-    expect(activitySummary.closest(".oai-collapsed-tool-activity-offset")).toBeTruthy();
-    expect(activitySummary.closest(".oai-collapsed-tool-activity-stack")).toBeTruthy();
+    expect(container.querySelector("[data-collapsed-tool-activity-summary]")).toBeNull();
+    expect(container.querySelector("[data-collapsed-tool-activity]")).toBeNull();
     const assistantBody = container.querySelector("[data-assistant-turn-body]");
-    expect(container.querySelector("[data-conversation-tool-assistant-gap]")).toBeTruthy();
+    expect(container.querySelector("[data-conversation-tool-assistant-gap]")).toBeNull();
     expect(assistantBody?.getAttribute("data-assistant-turn-body-has-activity")).toBe("true");
-    expect(assistantBody?.getAttribute("data-assistant-turn-body-expanded")).toBe("false");
+    expect(assistantBody?.getAttribute("data-assistant-turn-body-expanded")).toBe("true");
     expect(container.querySelector("[data-assistant-turn-body-stack]")).toBeTruthy();
-    expect(activitySummary.classList.contains("oai-collapsed-tool-activity-summary")).toBe(
-      true,
-    );
-    expect(activitySummary.classList.contains("text-size-chat")).toBe(true);
-    expect(activitySummary.classList.contains("hover:bg-token-bg-subtle")).toBe(true);
-    const dividerShell = activitySummary.nextElementSibling;
-    expect(dividerShell?.classList.contains("oai-collapsed-tool-activity-divider-shell")).toBe(
-      true,
-    );
-    expect(dividerShell?.classList.contains("pt-1")).toBe(true);
-    expect(
-      dividerShell?.firstElementChild?.classList.contains("oai-collapsed-tool-activity-divider"),
-    ).toBe(true);
-    expect(dividerShell?.firstElementChild?.classList.contains("border-token-border-light")).toBe(true);
-    expect(activitySummary.hasAttribute("data-collapsed-tool-activity-summary")).toBe(true);
-    const activityText = activitySummary.querySelector(".oai-collapsed-tool-activity-text");
-    expect(activityText?.classList.contains("shrink")).toBe(true);
-    expect(activityText?.classList.contains("pr-1")).toBe(true);
-    const activityChevron = activitySummary.querySelector(".oai-collapsed-tool-activity-chevron");
-    expect(activityChevron).toBeTruthy();
-    expect(activityChevron?.classList.contains("inline-chevron")).toBe(true);
-    expect(activityChevron?.classList.contains("group-hover/summary:opacity-100")).toBe(true);
-    expect(activityChevron?.classList.contains("rotate-0")).toBe(true);
     expect(container.querySelector("[data-codex-review-diff-summary]")).toBeTruthy();
     expect(container.querySelector(".oai-review-diff-summary-card")).toBeTruthy();
     expect(
@@ -1715,16 +1774,19 @@ describe("Messages", () => {
     expect(container.querySelector('[data-diffs-header="summary"]')).toBeTruthy();
     expect(container.querySelector('[data-diffs-header="summary"]')?.classList.contains("group/custom-section-header")).toBe(true);
     expect(screen.getByRole("button", { name: /1 个文件已更改/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Messages\.tsx \+2 -1/i })).toBeTruthy();
-    expect(container.querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)).toBeNull();
-    expect(container.querySelector(".oai-file-diff-card")).toBeNull();
-
-    fireEvent.click(activitySummary);
+    expect(container.querySelector(".oai-file-change-detail")).toBeNull();
+    const fileChangeGroupButton = screen.getByRole("button", { name: /已编辑 1 个文件/i });
+    expect(fileChangeGroupButton.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(fileChangeGroupButton);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /已编辑 1 个文件/i })).toBeTruthy();
+      expect(screen.getAllByRole("button", { name: /Messages\.tsx \+2 -1/i }).length).toBeGreaterThan(0);
     });
-    expect(activityBlock?.getAttribute("data-collapsed-tool-activity-expanded")).toBe("true");
-    expect(assistantBody?.getAttribute("data-assistant-turn-body-expanded")).toBe("true");
+    expect(
+      container
+        .querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)
+        ?.getAttribute("data-oai-activity-detail-expanded"),
+    ).toBe("false");
+    expect(container.querySelector(".oai-file-diff-card")).toBeNull();
     expect(container.querySelector("[data-collapsed-tool-activity-item].oai-tool-activity-row")).toBeTruthy();
     expect(
       container
@@ -1738,26 +1800,38 @@ describe("Messages", () => {
     ).toBe("STEPS_PROSE");
     expect(container.querySelector("[data-oai-tool-activity-offset]")).toBeTruthy();
     expect(container.querySelector("[data-oai-tool-activity-summary]")).toBeTruthy();
-    expect(container.querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)).toBeNull();
+    expect(
+      container
+        .querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)
+        ?.getAttribute("data-oai-activity-detail-expanded"),
+    ).toBe("false");
     expect(screen.queryByRole("button", { name: "Toggle tool details" })).toBeNull();
     expect(container.querySelector(".oai-file-diff-card")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /已编辑 1 个文件/i }));
+    let fileChangeSummaryButton: HTMLButtonElement | null = null;
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "edited: Messages.tsx +2 -1" }),
-      ).toBeTruthy();
+      fileChangeSummaryButton = container.querySelector(
+        '.oai-vscode-activity-summary[aria-label="Messages.tsx +2 -1"]',
+      );
+      expect(fileChangeSummaryButton).toBeTruthy();
     });
     expect(container.querySelector("[data-collapsed-tool-activity-body]")).toBeTruthy();
     expect(container.querySelector("[data-oai-tool-activity-body]")).toBeTruthy();
     expect(container.querySelector(".oai-tool-activity-body-stack")).toBeTruthy();
-    expect(container.querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)).toBeTruthy();
+    expect(
+      container
+        .querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)
+        ?.getAttribute("data-oai-activity-detail-expanded"),
+    ).toBe("false");
     expect(container.querySelector("[data-oai-activity-detail-offset]")).toBeTruthy();
     expect(container.querySelector("[data-oai-activity-detail-stack]")).toBeTruthy();
     expect(container.querySelector("[data-oai-activity-detail-content]")).toBeTruthy();
     expect(container.querySelector(".tool-inline")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "edited: Messages.tsx +2 -1" }));
+    if (!fileChangeSummaryButton) {
+      throw new Error("Missing file change summary button");
+    }
+    fireEvent.click(fileChangeSummaryButton);
     await waitFor(() => {
       expect(container.querySelector(".oai-file-diff-card")).toBeTruthy();
     });
@@ -1804,10 +1878,14 @@ describe("Messages", () => {
     expect(container.querySelector(".message-file-diff-card")).toBeNull();
     expect(container.querySelector(".message-file-diff-header")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /已处理 1 个操作/i }));
+    fireEvent.click(fileChangeSummaryButton);
     await waitFor(() => {
-      expect(container.querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)).toBeNull();
-      expect(container.querySelector("[data-collapsed-tool-activity-item]")).toBeNull();
+      expect(
+        container
+          .querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)
+          ?.getAttribute("data-oai-activity-detail-expanded"),
+      ).toBe("false");
+      expect(container.querySelector("[data-collapsed-tool-activity-item]")).toBeTruthy();
     });
   });
 
@@ -1904,41 +1982,20 @@ describe("Messages", () => {
         "[data-assistant-turn] > [data-collapsed-tool-activity], [data-assistant-turn-body-stack] > [data-message-author-role='assistant'], [data-assistant-turn-body-stack] > [data-collapsed-tool-activity-item]",
       ),
     );
-    expect(turnBlocks.length).toBe(4);
-    expect(turnBlocks[0].textContent ?? "").toContain("已处理 2s");
-    expect(turnBlocks[1].textContent ?? "").toContain("First paragraph.");
+    expect(turnBlocks.length).toBe(5);
+    expect(turnBlocks[0].textContent ?? "").toContain("First paragraph.");
+    expect(turnBlocks[1].textContent ?? "").toContain("已运行 1 条命令");
     expect(turnBlocks[2].textContent ?? "").toContain("Second paragraph.");
-    expect(turnBlocks[3].textContent ?? "").toContain("Final paragraph.");
-    expect(screen.getAllByRole("button", { name: /已处理/i }).length).toBe(1);
+    expect(turnBlocks[3].textContent ?? "").toContain("已探索 1 个文件");
+    expect(turnBlocks[4].textContent ?? "").toContain("Final paragraph.");
+    expect(container.querySelectorAll("[data-collapsed-tool-activity-summary]").length).toBe(0);
     expect(screen.queryByText(/rg content_id/i)).toBeNull();
-    expect(screen.queryByText("routes.ts")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /已处理 2s/i }));
-
+    expect(container.querySelector("[data-oai-tool-terminal]")).toBeNull();
+    clickAll(container, "[data-oai-tool-activity-summary]");
     await waitFor(() => {
-      expect(container.querySelectorAll("[data-collapsed-tool-activity-item]").length).toBe(2);
+      expect(screen.getAllByText(/rg content_id/i).length).toBeGreaterThan(0);
     });
-    const expandedTurnBlocks = Array.from(
-      container.querySelectorAll(
-        "[data-assistant-turn] > [data-collapsed-tool-activity], [data-assistant-turn-body-stack] > [data-message-author-role='assistant'], [data-assistant-turn-body-stack] > [data-collapsed-tool-activity-item]",
-      ),
-    );
-    expect(expandedTurnBlocks.length).toBe(6);
-    expect(expandedTurnBlocks[0].textContent ?? "").toContain("已处理 2s");
-    expect(expandedTurnBlocks[1].textContent ?? "").toContain("First paragraph.");
-    expect(expandedTurnBlocks[2].textContent ?? "").toContain("已运行 1 条命令");
-    expect(expandedTurnBlocks[3].textContent ?? "").toContain("Second paragraph.");
-    expect(expandedTurnBlocks[4].textContent ?? "").toContain("已探索 1 个文件");
-    expect(expandedTurnBlocks[5].textContent ?? "").toContain("Final paragraph.");
-    expect(screen.queryByText(/rg content_id/i)).toBeNull();
-    expect(screen.queryByText("routes.ts")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /已运行 1 条命令/i }));
-    fireEvent.click(screen.getByRole("button", { name: /已探索 1 个文件/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/rg content_id/i)).toBeTruthy();
-    });
+    expect(screen.getAllByText(/rg content_id/i).length).toBeGreaterThan(0);
     expect(container.querySelector("[data-oai-tool-terminal]")).toBeTruthy();
     expect(container.querySelector("[data-oai-tool-terminal-line]")).toBeTruthy();
     expect(container.querySelector(".tool-inline-terminal")).toBeNull();
@@ -1997,7 +2054,11 @@ describe("Messages", () => {
       expect(screen.getByText("5 tool calls")).toBeTruthy();
     });
     expect(container.querySelector("[data-oai-tool-group]")).toBeTruthy();
-    expect(container.querySelector("[data-oai-tool-activity-stack]")).toBeTruthy();
+    expect(container.querySelector("[data-oai-tool-activity-stack]")).toBeNull();
+    clickFirst(container, "[data-oai-tool-group] [data-oai-section-toggle]");
+    await waitFor(() => {
+      expect(container.querySelector("[data-oai-tool-activity-stack]")).toBeTruthy();
+    });
     expect(container.querySelector(".tool-group")).toBeNull();
     expect(container.querySelector(".tool-group-body")).toBeNull();
   });
@@ -2483,7 +2544,641 @@ describe("Messages", () => {
     expect(screen.queryByText("Input requested")).toBeNull();
   });
 
-  it("renders OpenAI activity item type branches and generated image artifacts", () => {
+  it("matches VS Code collapse state machines for turns, activity, reasoning, command output, and MCP apps", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-start",
+        kind: "message",
+        role: "user",
+        text: "Run checks",
+      },
+      {
+        id: "cmd-state",
+        kind: "tool",
+        toolType: "commandExecution",
+        itemType: "exec",
+        title: "Command: npm run test -- src/features/messages/components/Messages.test.tsx",
+        detail: "/repo",
+        status: "completed",
+        output: "line one\nline two",
+        durationMs: 1400,
+      },
+      {
+        id: "reasoning-state",
+        kind: "reasoning",
+        summary: "Checked renderer behavior",
+        content: "**Checked renderer behavior**\nCompared collapse states and animation.",
+      },
+      {
+        id: "mcp-state",
+        kind: "tool",
+        toolType: "mcp",
+        itemType: "mcp-tool-call",
+        title: "MCP app",
+        detail: "mcp app",
+        status: "completed",
+        mcpApp: {
+          id: "mcp-app-state",
+          title: "MCP state app",
+          expanded: true,
+          url: "https://mcp.example.test/state",
+        },
+      },
+      {
+        id: "assistant-state",
+        kind: "message",
+        role: "assistant",
+        text: "Done.",
+      },
+      {
+        id: "user-follow-up",
+        kind: "message",
+        role: "user",
+        text: "Next request",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const collapsedTurn = container.querySelector("[data-assistant-turn]");
+    expect(collapsedTurn?.getAttribute("data-turn-collapse-allowed")).toBe("true");
+    expect(collapsedTurn?.getAttribute("data-turn-collapsed")).toBe("false");
+    expect(container.querySelector("[data-turn-collapse-summary]")).toBeNull();
+
+    expect(
+      container.querySelector(
+        "[data-collapsed-tool-activity] [data-collapsed-tool-activity-summary]",
+      ),
+    ).toBeNull();
+
+    const groupSummaries = Array.from(container.querySelectorAll("[data-oai-tool-activity-summary]"));
+    expect(groupSummaries.length).toBeGreaterThanOrEqual(3);
+    groupSummaries.forEach((summary) => {
+      expect(summary.getAttribute("aria-expanded")).toBe("false");
+    });
+    expect(container.querySelector("[data-vscode-reasoning-body]")).toBeNull();
+    expect(container.querySelector("[data-vscode-command-output]")).toBeNull();
+    clickAll(container, "[data-oai-tool-activity-summary]");
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-vscode-reasoning-body]")).toBeTruthy();
+      expect(container.querySelector("[data-vscode-command-output]")).toBeTruthy();
+      expect(container.querySelector('[data-mcp-app-instance="mcp-app-state"]')).toBeTruthy();
+    });
+
+    const reasoningRow = container.querySelector("[data-oai-reasoning-detail]");
+    const reasoningButton = reasoningRow?.querySelector("button") as HTMLButtonElement;
+    expect(reasoningRow?.getAttribute("data-vscode-reasoning-state")).toBe("preview");
+    expect(
+      (container.querySelector("[data-vscode-reasoning-body]") as HTMLElement).style.maxHeight,
+    ).toBe("7rem");
+    fireEvent.click(reasoningButton);
+    expect(reasoningRow?.getAttribute("data-vscode-reasoning-state")).toBe("expanded");
+    expect(
+      (container.querySelector("[data-vscode-reasoning-body]") as HTMLElement).style.maxHeight,
+    ).toBe("20rem");
+    fireEvent.click(reasoningButton);
+    expect(reasoningRow?.getAttribute("data-vscode-reasoning-state")).toBe("collapsed");
+    expect(
+      (container.querySelector("[data-vscode-reasoning-body]") as HTMLElement).style.maxHeight,
+    ).toBe("0px");
+
+    const commandPanel = container.querySelector("[data-vscode-command-output]");
+    expect(commandPanel?.querySelector("[data-vscode-command-text]")?.getAttribute("data-command-line-clamp")).toBe("2");
+    expect(
+      (commandPanel?.querySelector("[data-vscode-command-output-lines]") as HTMLElement).style.maxHeight,
+    ).toBe("140px");
+    expect(commandPanel?.querySelector("[data-vscode-copy-command]")).toBeTruthy();
+    expect(commandPanel?.querySelector("[data-vscode-copy-output]")).toBeTruthy();
+    expect(commandPanel?.querySelector("[data-vscode-toggle-output]")).toBeNull();
+    expect(commandPanel?.getAttribute("data-output-expanded")).toBe("true");
+
+    const mcpApp = container.querySelector('[data-mcp-app-instance="mcp-app-state"]');
+    expect(mcpApp?.getAttribute("data-mcp-app-expanded")).toBe("true");
+    fireEvent.click(container.querySelector("[data-mcp-app-toggle-fullscreen]") as Element);
+    expect(container.querySelector('[data-mcp-app-instance="mcp-app-state"]')?.getAttribute("data-mcp-app-fullscreen")).toBe("true");
+    fireEvent.click(container.querySelector("[data-mcp-app-toggle-expanded]") as Element);
+    expect(container.querySelector('[data-mcp-app-instance="mcp-app-state"]')?.getAttribute("data-mcp-app-expanded")).toBe("false");
+  });
+
+  it("collapses only turn activity while keeping the final assistant message visible", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "turn-user",
+        kind: "message",
+        role: "user",
+        text: "Summarize recent edits",
+      },
+      {
+        id: "worked-for-item",
+        kind: "tool",
+        toolType: "status",
+        itemType: "worked-for",
+        title: "Worked on renderer parity",
+        detail: "hidden worked-for detail",
+        output: "worked output should not render as an activity row",
+        status: "completed",
+        durationMs: 3_000,
+      },
+      {
+        id: "hidden-command",
+        kind: "tool",
+        toolType: "commandExecution",
+        itemType: "exec",
+        title: "Command: npm run hidden-check",
+        detail: "/repo",
+        output: "hidden command output",
+        status: "completed",
+      },
+      {
+        id: "turn-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "Final assistant response remains readable.",
+      },
+      {
+        id: "turn-next-user",
+        kind: "message",
+        role: "user",
+        text: "Next turn starts",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const assistantTurn = container.querySelector("[data-assistant-turn]");
+    expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("false");
+    expect(assistantTurn?.getAttribute("data-turn-worked-for-item-id")).toBe("worked-for-item");
+    expect(screen.getByText("Final assistant response remains readable.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /1 条前序内容/i })).toBeNull();
+    expect(screen.queryByText(/npm run hidden-check/i)).toBeNull();
+    expect(screen.queryByText("worked output should not render as an activity row")).toBeNull();
+    clickFirst(container, "[data-oai-tool-activity-summary]");
+    await waitFor(() => {
+      expect(screen.getAllByText(/npm run hidden-check/i).length).toBeGreaterThan(0);
+    });
+    expect(screen.getByText("hidden command output")).toBeTruthy();
+  });
+
+  it("keeps steering user messages persistent when a turn is collapsed", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "steer-user-start",
+        kind: "message",
+        role: "user",
+        text: "Inspect parity",
+      },
+      {
+        id: "steering-user-message",
+        kind: "message",
+        role: "user",
+        itemType: "user-message",
+        steeringStatus: "Steered conversation",
+        text: "Keep this steering instruction visible.",
+      },
+      {
+        id: "steer-command",
+        kind: "tool",
+        toolType: "commandExecution",
+        itemType: "exec",
+        title: "Command: npm run steer-hidden",
+        detail: "/repo",
+        output: "steer hidden output",
+        status: "completed",
+      },
+      {
+        id: "steer-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "Steered response.",
+      },
+      {
+        id: "steer-next-user",
+        kind: "message",
+        role: "user",
+        text: "Next request",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const firstTurn = container.querySelector("[data-turn-key='user:steer-user-start']");
+    const assistantTurn = firstTurn?.querySelector("[data-assistant-turn]");
+    expect(assistantTurn?.getAttribute("data-turn-persistent-entry-count")).toBe("1");
+    expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("false");
+    expect(firstTurn?.textContent ?? "").toContain("Keep this steering instruction visible.");
+    expect(firstTurn?.textContent ?? "").toContain("Steered response.");
+    expect(screen.queryByText(/npm run steer-hidden/i)).toBeNull();
+    clickFirst(container, "[data-oai-tool-activity-summary]");
+    expect(screen.getAllByText(/npm run steer-hidden/i).length).toBeGreaterThan(0);
+    expect(container.querySelectorAll("[data-turn-key]").length).toBe(2);
+  });
+
+  it("uses staged disclosure and pending MCP body attributes for top-level tool groups", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "top-mcp-1",
+        kind: "tool",
+        toolType: "mcp",
+        itemType: "mcp-tool-call",
+        title: "filesystem read",
+        detail: JSON.stringify({ server: "filesystem", tool: "read_file" }),
+        status: "completed",
+        output: "file text",
+      },
+      {
+        id: "top-mcp-2",
+        kind: "tool",
+        toolType: "mcp",
+        itemType: "mcp-tool-call",
+        title: "filesystem list",
+        detail: JSON.stringify({ server: "filesystem", tool: "list_directory" }),
+        status: "completed",
+        output: "src",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const group = container.querySelector("[data-oai-tool-group]");
+    expect(group?.getAttribute("data-oai-tool-group-kind")).toBe("pending-mcp-tool-calls");
+    const toggle = group?.querySelector("[data-oai-section-toggle]") as HTMLButtonElement;
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector("#tool-group-top-mcp-1")).toBeNull();
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(container.querySelector("#tool-group-top-mcp-1")).toBeTruthy();
+    });
+    let body = container.querySelector("#tool-group-top-mcp-1") as HTMLElement;
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(body.getAttribute("aria-expanded")).toBe("true");
+    expect(body.getAttribute("data-pending-mcp-tool-calls-body")).toBe("true");
+    expect(body.getAttribute("data-pending-mcp-tool-calls-view-state")).toBe("expanded");
+    expect(body.getAttribute("data-disclosure-body-mounted")).toBe("true");
+    expect(container.querySelector("[data-mcp-app]")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Expand app|Collapse app/i })).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    body = container.querySelector("#tool-group-top-mcp-1") as HTMLElement;
+    expect(body.getAttribute("data-pending-mcp-tool-calls-view-state")).toBe("collapsed");
+    await waitFor(() => {
+      expect(container.querySelector("#tool-group-top-mcp-1")).toBeNull();
+    });
+
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(container.querySelector("#tool-group-top-mcp-1")).toBeTruthy();
+    });
+    body = container.querySelector("#tool-group-top-mcp-1") as HTMLElement;
+    expect(body.getAttribute("data-pending-mcp-tool-calls-view-state")).toBe("expanded");
+  });
+
+  it("applies pending MCP grouping exceptions for computer-use, node_repl, and auto-expanded MCP apps", async () => {
+    const mcpDetail = (server: string, tool: string) => JSON.stringify({ server, tool });
+    const items: ConversationItem[] = [
+      {
+        id: "mcp-user",
+        kind: "message",
+        role: "user",
+        text: "Run MCP calls",
+      },
+      {
+        id: "mcp-normal-1",
+        kind: "tool",
+        toolType: "mcp",
+        itemType: "mcp-tool-call",
+        title: "filesystem read",
+        detail: mcpDetail("filesystem", "read_file"),
+        status: "completed",
+      },
+      {
+        id: "mcp-normal-2",
+        kind: "tool",
+        toolType: "mcp",
+        itemType: "mcp-tool-call",
+        title: "filesystem list",
+        detail: mcpDetail("filesystem", "list_directory"),
+        status: "completed",
+      },
+      {
+        id: "mcp-computer-use",
+        kind: "tool",
+        toolType: "mcp",
+        itemType: "mcp-tool-call",
+        title: "computer-use click",
+        detail: mcpDetail("computer-use", "click"),
+        status: "completed",
+      },
+      {
+        id: "mcp-node-repl",
+        kind: "tool",
+        toolType: "mcp",
+        itemType: "mcp-tool-call",
+        title: "node_repl js",
+        detail: mcpDetail("node_repl", "js"),
+        status: "completed",
+      },
+      {
+        id: "mcp-auto-app",
+        kind: "tool",
+        toolType: "mcp",
+        itemType: "mcp-tool-call",
+        title: "browser app",
+        detail: mcpDetail("browser", "open"),
+        status: "completed",
+        mcpApp: {
+          id: "auto-expanded-mcp-app",
+          title: "Auto expanded MCP app",
+          expanded: true,
+          url: "https://mcp.example.test/app",
+        },
+      },
+      {
+        id: "mcp-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "MCP calls complete.",
+      },
+      {
+        id: "mcp-next-user",
+        kind: "message",
+        role: "user",
+        text: "Next request",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll('[data-oai-tool-activity-kind="pending-mcp-tool-calls"]').length).toBe(4);
+    });
+    container.querySelectorAll('[data-oai-tool-activity-kind="pending-mcp-tool-calls"]').forEach((row) => {
+      expect(row.getAttribute("data-collapsed-tool-activity-item-expanded")).toBe("false");
+    });
+    clickAll(container, '[data-oai-tool-activity-kind="pending-mcp-tool-calls"] [data-oai-tool-activity-summary]');
+    await waitFor(() => {
+      expect(
+        container.querySelectorAll('[data-oai-tool-activity-body][data-testid="pending-mcp-tool-calls-body"]').length,
+      ).toBe(4);
+    });
+    container.querySelectorAll('[data-oai-tool-activity-body][data-testid="pending-mcp-tool-calls-body"]').forEach((body) => {
+      expect(body.getAttribute("aria-expanded")).toBe("true");
+      expect(body.getAttribute("data-pending-mcp-tool-calls-view-state")).toBe("expanded");
+    });
+    expect(container.querySelector('[data-mcp-app-instance="mcp-normal-1"]')).toBeNull();
+    expect(container.querySelector('[data-mcp-app-instance="filesystem"]')).toBeNull();
+    expect(container.querySelector('[data-mcp-app-instance="auto-expanded-mcp-app"]')?.getAttribute("data-mcp-app-expanded")).toBe("true");
+  });
+
+  it("renders reasoning status labels, strips duplicate headings, and cycles preview heights", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "reasoning-status-user",
+        kind: "message",
+        role: "user",
+        text: "Think through parity",
+      },
+      {
+        id: "reasoning-status",
+        kind: "reasoning",
+        status: "completed",
+        durationMs: 1_500,
+        summary: "Checked renderer behavior",
+        content: "**Checked renderer behavior**\nCompared collapse states and animation.",
+      },
+      {
+        id: "reasoning-running",
+        kind: "reasoning",
+        status: "in_progress",
+        summary: "Scanning bundle\nStill reading qE",
+        content: "",
+      },
+      {
+        id: "reasoning-status-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "Reasoning done.",
+      },
+      {
+        id: "reasoning-next-user",
+        kind: "message",
+        role: "user",
+        text: "Next request",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(
+      container.querySelector("[data-collapsed-tool-activity] [data-collapsed-tool-activity-summary]"),
+    ).toBeNull();
+    await waitFor(() => {
+      expect(container.querySelector('[data-oai-tool-activity-kind="reasoning"] [data-oai-tool-activity-summary]')).toBeTruthy();
+    });
+    expect(container.querySelector("[data-oai-reasoning-detail]")).toBeNull();
+    fireEvent.click(
+      container.querySelector(
+        '[data-oai-tool-activity-kind="reasoning"] [data-oai-tool-activity-summary]',
+      ) as Element,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-oai-reasoning-detail]")).toBeTruthy();
+      expect(screen.getByText("Thought for 2s")).toBeTruthy();
+      expect(screen.getByText("Thinking")).toBeTruthy();
+    });
+    const reasoningBody = container.querySelector("[data-vscode-reasoning-body]") as HTMLElement;
+    expect(reasoningBody.style.maxHeight).toBe("7rem");
+    expect(reasoningBody.textContent ?? "").toContain("Compared collapse states and animation.");
+    expect(reasoningBody.textContent ?? "").not.toContain("**Checked renderer behavior**");
+    const reasoningRow = container.querySelector("[data-oai-reasoning-detail]");
+    const reasoningButton = reasoningRow?.querySelector("button") as HTMLButtonElement;
+    fireEvent.click(reasoningButton);
+    expect(reasoningBody.style.maxHeight).toBe("20rem");
+    fireEvent.click(reasoningButton);
+    expect(reasoningBody.style.maxHeight).toBe("0px");
+  });
+
+  it("renders command execution output with expandable command and No output state", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "cmd-no-output-user",
+        kind: "message",
+        role: "user",
+        text: "Run empty command",
+      },
+      {
+        id: "cmd-no-output",
+        kind: "tool",
+        toolType: "commandExecution",
+        itemType: "exec",
+        title: "Command: npm run very-long-command -- --with-many-flags --and-extra-arguments",
+        detail: "/repo",
+        output: "",
+        status: "completed",
+        durationMs: 2_000,
+      },
+      {
+        id: "cmd-no-output-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "Command finished.",
+      },
+      {
+        id: "cmd-no-output-next-user",
+        kind: "message",
+        role: "user",
+        text: "Next request",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector("[data-collapsed-tool-activity-summary]")).toBeNull();
+    expect(container.querySelector("[data-vscode-command-output]")).toBeNull();
+    fireEvent.click(
+      container.querySelector(
+        '[data-oai-tool-activity-kind="exec"] [data-oai-tool-activity-summary]',
+      ) as Element,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-vscode-command-output]")).toBeTruthy();
+    });
+    const commandPanel = container.querySelector("[data-vscode-command-output]");
+    const commandText = commandPanel?.querySelector("[data-vscode-command-text]") as HTMLButtonElement;
+    expect(commandText.getAttribute("data-command-line-clamp")).toBe("2");
+    expect(commandPanel?.querySelector("[data-vscode-command-full]")).toBeNull();
+    fireEvent.click(commandText);
+    expect(commandText.getAttribute("data-command-line-clamp")).toBe("none");
+    expect(commandPanel?.querySelector("[data-vscode-command-full]")).toBeNull();
+    expect(commandText.textContent ?? "").toContain("npm run very-long-command");
+    expect(commandPanel?.querySelector("[data-vscode-no-output]")?.textContent).toBe("No output");
+    expect(commandPanel?.textContent ?? "").not.toContain("cwd:");
+    expect((commandPanel?.querySelector("[data-vscode-copy-output]") as HTMLButtonElement).disabled).toBe(false);
+    expect(commandPanel?.querySelector("[data-vscode-toggle-output]")).toBeNull();
+    expect(commandPanel?.getAttribute("data-output-expanded")).toBe("true");
+  });
+
+  it("renders context compaction as Codex-style divider status rows", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "compact-running",
+        kind: "tool",
+        toolType: "contextCompaction",
+        itemType: "context-compaction",
+        title: "Context compaction",
+        detail: "Compacting conversation context to fit token limits.",
+        status: "inProgress",
+      },
+      {
+        id: "compact-completed",
+        kind: "tool",
+        toolType: "contextCompaction",
+        itemType: "context-compaction",
+        title: "Context compaction",
+        detail: "Compacting conversation context to fit token limits.",
+        status: "completed",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector("[data-context-compaction='true']")).toBeNull();
+    clickFirst(container, "[data-oai-tool-group] [data-oai-section-toggle]");
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-context-compaction='true']").length).toBe(2);
+    });
+    expect(screen.getByText("上下文压缩中")).toBeTruthy();
+    expect(screen.getByText("上下文已自动压缩")).toBeTruthy();
+    expect(
+      container
+        .querySelector("[data-context-compaction-status='processing']")
+        ?.classList.contains("oai-context-compaction-row"),
+    ).toBe(true);
+    expect(
+      container
+        .querySelector("[data-context-compaction-status='completed']")
+        ?.querySelectorAll(".oai-context-compaction-divider").length,
+    ).toBe(2);
+    expect(screen.queryByText("Context compaction")).toBeNull();
+    expect(screen.queryByText("Context compacted")).toBeNull();
+  });
+
+  it("renders OpenAI activity item type branches and generated image artifacts", async () => {
     const items: ConversationItem[] = [
       {
         id: "generated-image-tool",
@@ -2771,7 +3466,6 @@ describe("Messages", () => {
       "steered",
       "turn-diff",
       "user-input-response",
-      "worked-for",
     ];
     expect(
       openAIActivityItemTypes.filter(
@@ -2780,12 +3474,18 @@ describe("Messages", () => {
     ).toEqual([]);
     expect(container.querySelector("[data-oai-inline-group]")).toBeTruthy();
     expect(container.querySelector("[data-oai-section-toggle]")).toBeTruthy();
-    fireEvent.click(container.querySelector("[data-collapsed-tool-activity-summary]") as Element);
-    container.querySelectorAll("[data-oai-tool-activity-summary]").forEach((button) => {
-      fireEvent.click(button);
+    expect(
+      container.querySelector("[data-collapsed-tool-activity] [data-collapsed-tool-activity-summary]"),
+    ).toBeNull();
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-oai-tool-activity-summary]").length).toBeGreaterThan(0);
     });
-    expect(container.querySelector("[data-pending-mcp-tool-calls-body]")).toBeTruthy();
+    clickAll(container, "[data-oai-tool-activity-summary]");
+    await waitFor(() => {
+      expect(container.querySelector("[data-pending-mcp-tool-calls-body]")).toBeTruthy();
+    });
     expect(container.querySelector('[data-mcp-app][data-mcp-app-instance="mcp-app-1"]')).toBeTruthy();
+    expect(container.querySelector("[data-mcp-app-controls] + [data-mcp-app-frame='true']")).toBeTruthy();
     expect(container.querySelector('[data-mcp-app-expanded="true"]')).toBeTruthy();
     expect(container.querySelector('[data-mcp-app-frame="true"]')).toBeTruthy();
     expect(container.querySelector('[data-mcp-app-frame-loading="false"]')).toBeTruthy();
@@ -2830,7 +3530,7 @@ describe("Messages", () => {
     expect(content?.getAttribute("data-automation-citations")).toBe("true");
     expect(content?.getAttribute("data-render-code-blocks-as-writing-blocks")).toBe("true");
     expect(content?.getAttribute("data-force-code-block-word-wrap")).toBe("true");
-    expect(content?.getAttribute("data-on-add-selected-text-to-chat-handler")).toBe("onAddSelectedTextToChat");
+    expect(content?.getAttribute("data-on-add-selected-text-to-chat-handler")).toBeNull();
     expect(container.querySelector("[data-message-artifacts]")).toBeTruthy();
     expect(container.querySelector('[data-message-artifact][data-artifact-id="artifact-md"]')).toBeTruthy();
   });
@@ -2863,8 +3563,11 @@ describe("Messages", () => {
     expect(screen.getByText("hook:")).toBeTruthy();
     expect(screen.getByText("session-start")).toBeTruthy();
     expect(screen.getByText("failed • 0:03")).toBeTruthy();
+    expect(
+      screen.queryByText("command • sync • thread • session-start.sh • Preparing"),
+    ).toBeNull();
+    clickFirst(container, "[data-oai-activity-detail-summary]");
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle tool details" }));
     expect(
       screen.getByText("command • sync • thread • session-start.sh • Preparing"),
     ).toBeTruthy();

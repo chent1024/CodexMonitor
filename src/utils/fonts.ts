@@ -10,13 +10,13 @@ export const LEGACY_DEFAULT_CODE_FONT_FAMILY =
 export const DEFAULT_CODE_FONT_FAMILY =
   'ui-monospace, "Cascadia Mono", "Segoe UI Mono", "Sarasa Mono SC", "Noto Sans Mono CJK SC", "Source Han Mono SC", Menlo, Monaco, Consolas, "PingFang SC", "Microsoft YaHei", "Liberation Mono", "Courier New", monospace';
 
-export const CODE_FONT_SIZE_DEFAULT = 11;
-export const CODE_FONT_SIZE_MIN = 9;
-export const CODE_FONT_SIZE_MAX = 16;
+export const CODE_FONT_SIZE_DEFAULT = 14;
+export const CODE_FONT_SIZE_MIN = 8;
+export const CODE_FONT_SIZE_MAX = 24;
 
-export const UI_FONT_SIZE_DEFAULT = 13;
-export const UI_FONT_SIZE_MIN = 11;
-export const UI_FONT_SIZE_MAX = 16;
+export const UI_FONT_SIZE_DEFAULT = 14;
+export const UI_FONT_SIZE_MIN = 8;
+export const UI_FONT_SIZE_MAX = 24;
 
 export function normalizeFontFamily(
   value: string | null | undefined,

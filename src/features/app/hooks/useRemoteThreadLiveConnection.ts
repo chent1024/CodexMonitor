@@ -25,6 +25,12 @@ type UseRemoteThreadLiveConnectionOptions = {
   activeThreadIsProcessing?: boolean;
   refreshThread: (workspaceId: string, threadId: string) => Promise<unknown> | unknown;
   reconnectWorkspace?: (workspace: WorkspaceInfo) => Promise<unknown> | unknown;
+  onReconnectError?: (
+    workspaceId: string,
+    threadId: string,
+    message: string,
+    reason?: ReconnectOptions["reason"],
+  ) => void;
 };
 
 function keyForThread(workspaceId: string, threadId: string) {
@@ -81,6 +87,7 @@ export function useRemoteThreadLiveConnection({
   activeThreadIsProcessing = false,
   refreshThread,
   reconnectWorkspace,
+  onReconnectError,
 }: UseRemoteThreadLiveConnectionOptions) {
   const activeWorkspaceId = activeWorkspace?.id ?? null;
   const activeWorkspaceConnected = activeWorkspace?.connected ?? false;
@@ -101,6 +108,7 @@ export function useRemoteThreadLiveConnection({
   const activeThreadIsProcessingRef = useRef(activeThreadIsProcessing);
   const refreshThreadRef = useRef(refreshThread);
   const reconnectWorkspaceRef = useRef(reconnectWorkspace);
+  const onReconnectErrorRef = useRef(onReconnectError);
   const connectionStateRef = useRef(connectionState);
   const activeSubscriptionKeyRef = useRef<string | null>(null);
   const desiredSubscriptionKeyRef = useRef<string | null>(null);
@@ -119,6 +127,7 @@ export function useRemoteThreadLiveConnection({
     activeThreadIsProcessingRef.current = activeThreadIsProcessing;
     refreshThreadRef.current = refreshThread;
     reconnectWorkspaceRef.current = reconnectWorkspace;
+    onReconnectErrorRef.current = onReconnectError;
   }, [
     backendMode,
     activeWorkspace,
@@ -126,6 +135,7 @@ export function useRemoteThreadLiveConnection({
     activeThreadIsProcessing,
     refreshThread,
     reconnectWorkspace,
+    onReconnectError,
   ]);
 
   useEffect(() => {
@@ -256,9 +266,16 @@ export function useRemoteThreadLiveConnection({
             setState("live");
           }
           return true;
-        } catch {
+        } catch (error) {
           if (sequence === reconnectSequenceRef.current) {
             reconcileDisconnectedState();
+            const message = error instanceof Error ? error.message : String(error);
+            onReconnectErrorRef.current?.(
+              workspaceId,
+              threadId,
+              message || "Unable to reconnect live thread.",
+              options?.reason,
+            );
           }
           return false;
         }

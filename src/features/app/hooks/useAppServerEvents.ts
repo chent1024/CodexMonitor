@@ -68,6 +68,13 @@ type AppServerEventHandlers = {
     turnId: string,
     payload: { message: string; willRetry: boolean },
   ) => void;
+  onThreadStreamError?: (
+    workspaceId: string,
+    threadId: string,
+    message: string,
+    options?: { willRetry?: boolean },
+  ) => void;
+  onWorkspaceStderr?: (workspaceId: string, message: string) => void;
   onTurnPlanUpdated?: (
     workspaceId: string,
     threadId: string,
@@ -90,6 +97,7 @@ type AppServerEventHandlers = {
     stdin: string,
   ) => void;
   onFileChangeOutputDelta?: (workspaceId: string, threadId: string, itemId: string, delta: string) => void;
+  onServerRequestResolved?: (workspaceId: string, requestId: string | number) => void;
   onTurnDiffUpdated?: (workspaceId: string, threadId: string, diff: string) => void;
   onThreadTokenUsageUpdated?: (
     workspaceId: string,
@@ -113,6 +121,7 @@ export const METHODS_ROUTED_IN_USE_APP_SERVER_EVENTS = [
   "account/updated",
   "codex/backgroundThread",
   "codex/connected",
+  "codex/stderr",
   "error",
   "hook/completed",
   "hook/started",
@@ -120,16 +129,23 @@ export const METHODS_ROUTED_IN_USE_APP_SERVER_EVENTS = [
   "item/commandExecution/outputDelta",
   "item/commandExecution/terminalInteraction",
   "item/completed",
+  "item/autoApprovalReview/completed",
+  "item/autoApprovalReview/started",
   "item/fileChange/outputDelta",
+  "item/mcpToolCall/progress",
   "item/plan/delta",
   "item/reasoning/summaryPartAdded",
   "item/reasoning/summaryTextDelta",
   "item/reasoning/textDelta",
   "item/started",
+  "item/tool/call",
   "item/tool/requestUserInput",
+  "mcpServer/elicitation/request",
+  "serverRequest/resolved",
   "thread/archived",
   "thread/closed",
   "thread/name/updated",
+  "thread/realtime/error",
   "thread/status/changed",
   "thread/started",
   "thread/tokenUsage/updated",
@@ -165,6 +181,108 @@ function parseHookEvent(
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getStringParam(params: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = params[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function parseRequestUserInputQuestions(params: Record<string, unknown>) {
+  const questionsRaw = Array.isArray(params.questions) ? params.questions : [];
+  const questions = questionsRaw
+    .map((entry) => {
+      const question = asRecord(entry) ?? {};
+      const optionsRaw = Array.isArray(question.options) ? question.options : [];
+      const options = optionsRaw
+        .map((option) => {
+          const record = asRecord(option) ?? {};
+          const label = String(record.label ?? "").trim();
+          const description = String(record.description ?? "").trim();
+          if (!label && !description) {
+            return null;
+          }
+          return { label, description };
+        })
+        .filter((option): option is { label: string; description: string } => Boolean(option));
+      return {
+        id: String(question.id ?? "").trim(),
+        header: String(question.header ?? ""),
+        question: String(question.question ?? ""),
+        isOther: Boolean(question.isOther ?? question.is_other),
+        options: options.length ? options : undefined,
+      };
+    })
+    .filter((question) => question.id);
+
+  if (questions.length > 0) {
+    return questions;
+  }
+
+  const prompt = getStringParam(params, "question", "prompt", "message", "text", "description");
+  if (!prompt) {
+    return [];
+  }
+  return [
+    {
+      id: getStringParam(params, "questionId", "question_id", "itemId", "item_id") || "mcp_elicitation",
+      header: getStringParam(params, "header", "title"),
+      question: prompt,
+      isOther: Boolean(params.isOther ?? params.is_other),
+      options: undefined,
+    },
+  ];
+}
+
+function buildRequestUserInputRequest(
+  workspaceId: string,
+  requestId: string | number,
+  params: Record<string, unknown>,
+): RequestUserInputRequest | null {
+  const requestParams = asRecord(params.params) ?? params;
+  const questions = parseRequestUserInputQuestions(requestParams);
+  if (questions.length === 0) {
+    return null;
+  }
+  return {
+    workspace_id: workspaceId,
+    request_id: requestId,
+    params: {
+      thread_id: getStringParam(requestParams, "threadId", "thread_id"),
+      turn_id: getStringParam(requestParams, "turnId", "turn_id"),
+      item_id: getStringParam(requestParams, "itemId", "item_id"),
+      questions,
+    },
+  };
+}
+
+function buildAutoApprovalReviewItem(
+  params: Record<string, unknown>,
+  status: "inProgress" | "completed",
+) {
+  const source = asRecord(params.item) ?? asRecord(params.review) ?? params;
+  const id =
+    getStringParam(source, "id") ||
+    getStringParam(params, "itemId", "item_id", "reviewId", "review_id") ||
+    `auto-approval-review-${getStringParam(params, "turnId", "turn_id") || "unknown"}`;
+  return {
+    ...source,
+    id,
+    type: "autoApprovalReview",
+    status: getStringParam(source, "status") || status,
+    title: getStringParam(source, "title") || "Automatic approval review",
+  };
+}
+
 export function useAppServerEvents(handlers: AppServerEventHandlers) {
   // Use ref to keep handlers current without triggering re-subscription
   const handlersRef = useRef(handlers);
@@ -191,6 +309,14 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         return;
       }
 
+      if (method === "codex/stderr") {
+        const message = String(params.message ?? "").trim();
+        if (message) {
+          currentHandlers.onWorkspaceStderr?.(workspace_id, message);
+        }
+        return;
+      }
+
       const requestId = getAppServerRequestId(payload);
       const hasRequestId = requestId !== null;
 
@@ -209,41 +335,41 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
       }
 
       if (method === "item/tool/requestUserInput" && hasRequestId) {
-        const questionsRaw = Array.isArray(params.questions) ? params.questions : [];
-        const questions = questionsRaw
-          .map((entry) => {
-            const question = entry as Record<string, unknown>;
-            const optionsRaw = Array.isArray(question.options) ? question.options : [];
-            const options = optionsRaw
-              .map((option) => {
-                const record = option as Record<string, unknown>;
-                const label = String(record.label ?? "").trim();
-                const description = String(record.description ?? "").trim();
-                if (!label && !description) {
-                  return null;
-                }
-                return { label, description };
-              })
-              .filter((option): option is { label: string; description: string } => Boolean(option));
-            return {
-              id: String(question.id ?? "").trim(),
-              header: String(question.header ?? ""),
-              question: String(question.question ?? ""),
-              isOther: Boolean(question.isOther ?? question.is_other),
-              options: options.length ? options : undefined,
-            };
-          })
-          .filter((question) => question.id);
-        currentHandlers.onRequestUserInput?.({
+        const request = buildRequestUserInputRequest(
           workspace_id,
-          request_id: requestId as string | number,
-          params: {
-            thread_id: String(params.threadId ?? params.thread_id ?? ""),
-            turn_id: String(params.turnId ?? params.turn_id ?? ""),
-            item_id: String(params.itemId ?? params.item_id ?? ""),
-            questions,
-          },
-        });
+          requestId as string | number,
+          params,
+        );
+        if (request) {
+          currentHandlers.onRequestUserInput?.(request);
+        }
+        return;
+      }
+
+      if (method === "mcpServer/elicitation/request" && hasRequestId) {
+        const request = buildRequestUserInputRequest(
+          workspace_id,
+          requestId as string | number,
+          params,
+        );
+        if (request) {
+          currentHandlers.onRequestUserInput?.(request);
+        }
+        return;
+      }
+
+      if (method === "serverRequest/resolved") {
+        const resolvedRequestId =
+          requestId ??
+          params.requestId ??
+          params.request_id ??
+          params.id;
+        if (
+          typeof resolvedRequestId === "string" ||
+          typeof resolvedRequestId === "number"
+        ) {
+          currentHandlers.onServerRequestResolved?.(workspace_id, resolvedRequestId);
+        }
         return;
       }
 
@@ -371,11 +497,31 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         const threadId = String(params.threadId ?? params.thread_id ?? "");
         const turnId = String(params.turnId ?? params.turn_id ?? "");
         const error = (params.error as Record<string, unknown> | undefined) ?? {};
-        const messageText = String(error.message ?? "");
+        const messageText = String(
+          error.message ?? params.message ?? params.error ?? "",
+        );
         const willRetry = Boolean(params.willRetry ?? params.will_retry);
         if (threadId) {
           currentHandlers.onTurnError?.(workspace_id, threadId, turnId, {
             message: messageText,
+            willRetry,
+          });
+        }
+        return;
+      }
+
+      if (method === "thread/realtime/error") {
+        const threadId = String(params.threadId ?? params.thread_id ?? "");
+        const error =
+          params.error && typeof params.error === "object" && !Array.isArray(params.error)
+            ? (params.error as Record<string, unknown>)
+            : {};
+        const message = String(
+          error.message ?? params.message ?? params.error ?? "Realtime stream error",
+        );
+        const willRetry = Boolean(params.willRetry ?? params.will_retry);
+        if (threadId) {
+          currentHandlers.onThreadStreamError?.(workspace_id, threadId, message, {
             willRetry,
           });
         }
@@ -481,6 +627,84 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
               text,
             });
           }
+        }
+        return;
+      }
+
+      if (method === "item/autoApprovalReview/started") {
+        const source = asRecord(params.item) ?? asRecord(params.review) ?? params;
+        const threadId =
+          getStringParam(params, "threadId", "thread_id") ||
+          getStringParam(source, "threadId", "thread_id");
+        if (threadId) {
+          currentHandlers.onItemStarted?.(
+            workspace_id,
+            threadId,
+            buildAutoApprovalReviewItem(params, "inProgress"),
+          );
+        }
+        return;
+      }
+
+      if (method === "item/autoApprovalReview/completed") {
+        const source = asRecord(params.item) ?? asRecord(params.review) ?? params;
+        const threadId =
+          getStringParam(params, "threadId", "thread_id") ||
+          getStringParam(source, "threadId", "thread_id");
+        if (threadId) {
+          currentHandlers.onItemCompleted?.(
+            workspace_id,
+            threadId,
+            buildAutoApprovalReviewItem(params, "completed"),
+          );
+        }
+        return;
+      }
+
+      if (method === "item/mcpToolCall/progress") {
+        const source = asRecord(params.item) ?? params;
+        const threadId =
+          getStringParam(params, "threadId", "thread_id") ||
+          getStringParam(source, "threadId", "thread_id");
+        const itemId =
+          getStringParam(params, "itemId", "item_id", "callId", "call_id") ||
+          getStringParam(source, "id", "itemId", "item_id", "callId", "call_id");
+        if (threadId && itemId) {
+          currentHandlers.onItemStarted?.(workspace_id, threadId, {
+            ...source,
+            id: itemId,
+            type: "mcpToolCall",
+            status:
+              getStringParam(source, "status", "state") ||
+              getStringParam(params, "status", "state", "progress") ||
+              "inProgress",
+            output:
+              getStringParam(source, "output", "message", "text") ||
+              getStringParam(params, "output", "message", "text", "delta"),
+          });
+        }
+        return;
+      }
+
+      if (method === "item/tool/call" && hasRequestId) {
+        const source = asRecord(params.item) ?? asRecord(params.toolCall) ?? params;
+        const threadId =
+          getStringParam(params, "threadId", "thread_id") ||
+          getStringParam(source, "threadId", "thread_id");
+        const itemId =
+          getStringParam(params, "itemId", "item_id", "callId", "call_id") ||
+          getStringParam(source, "id", "itemId", "item_id", "callId", "call_id") ||
+          String(requestId);
+        if (threadId && itemId) {
+          currentHandlers.onItemStarted?.(workspace_id, threadId, {
+            ...source,
+            id: itemId,
+            type: getStringParam(source, "type") || "dynamicToolCall",
+            title:
+              getStringParam(source, "title", "name", "toolName", "tool_name") ||
+              "Tool call",
+            status: getStringParam(source, "status") || "pending",
+          });
         }
         return;
       }

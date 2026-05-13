@@ -17,6 +17,11 @@ export type ParsedReasoning = {
   workingLabel: string | null;
 };
 
+const REASONING_PARSE_CACHE_LIMIT = 300;
+const reasoningParseCache = new Map<string, ParsedReasoning>();
+const TOOL_ARGS_PARSE_CACHE_LIMIT = 500;
+const toolArgsParseCache = new Map<string, Record<string, unknown> | null>();
+
 export type MessageImage = {
   src: string;
   label: string;
@@ -77,14 +82,31 @@ export function basename(path: string) {
 }
 
 function parseToolArgs(detail: string) {
+  if (toolArgsParseCache.has(detail)) {
+    return toolArgsParseCache.get(detail) ?? null;
+  }
+  let parsedArgs: Record<string, unknown> | null = null;
   if (!detail) {
-    return null;
+    parsedArgs = null;
+  } else {
+    try {
+      const parsed = JSON.parse(detail) as unknown;
+      parsedArgs =
+        parsed && typeof parsed === "object"
+          ? (parsed as Record<string, unknown>)
+          : null;
+    } catch {
+      parsedArgs = null;
+    }
   }
-  try {
-    return JSON.parse(detail) as Record<string, unknown>;
-  } catch {
-    return null;
+  if (toolArgsParseCache.size >= TOOL_ARGS_PARSE_CACHE_LIMIT) {
+    const oldestKey = toolArgsParseCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      toolArgsParseCache.delete(oldestKey);
+    }
   }
+  toolArgsParseCache.set(detail, parsedArgs);
+  return parsedArgs;
 }
 
 function firstStringField(
@@ -181,11 +203,38 @@ function sanitizeReasoningTitle(title: string) {
     .trim();
 }
 
+function stripLeadingReasoningHeading(body: string, summaryTitle: string) {
+  const lines = body.split("\n");
+  const firstContentIndex = lines.findIndex((line) => line.trim().length > 0);
+  if (firstContentIndex < 0) {
+    return "";
+  }
+  const firstLine = lines[firstContentIndex].trim();
+  const boldHeadingMatch = firstLine.match(/^\*\*(.*?)\*\*\.?$/);
+  const markdownHeadingMatch = firstLine.match(/^#{1,6}\s+(.*?)$/);
+  const heading = sanitizeReasoningTitle(
+    boldHeadingMatch?.[1] ?? markdownHeadingMatch?.[1] ?? "",
+  );
+  const normalizedSummaryTitle = sanitizeReasoningTitle(summaryTitle);
+  if (!heading || (normalizedSummaryTitle && heading !== normalizedSummaryTitle)) {
+    return body.trim();
+  }
+  return lines
+    .filter((_, index) => index !== firstContentIndex)
+    .join("\n")
+    .trim();
+}
+
 export function parseReasoning(
   item: Extract<ConversationItem, { kind: "reasoning" }>,
 ): ParsedReasoning {
   const summary = item.summary ?? "";
   const content = item.content ?? "";
+  const cacheKey = `${item.id}\u0000${summary}\u0000${content}`;
+  const cached = reasoningParseCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
   const hasSummary = summary.trim().length > 0;
   const titleSource = hasSummary ? summary : content;
   const titleLines = titleSource.split("\n");
@@ -215,17 +264,28 @@ export function parseReasoning(
           .join("\n")
           .trim()
       : content.trim();
-  const bodyParts = [summaryBody, contentBody].filter(Boolean);
+  const bodyParts = [
+    stripLeadingReasoningHeading(summaryBody, summaryTitle),
+    stripLeadingReasoningHeading(contentBody, summaryTitle),
+  ].filter(Boolean);
   const bodyText = bodyParts.join("\n\n").trim();
   const hasBody = bodyText.length > 0;
   const hasAnyText = titleSource.trim().length > 0;
   const workingLabel = hasAnyText ? summaryTitle : null;
-  return {
+  const parsed = {
     summaryTitle,
     bodyText,
     hasBody,
     workingLabel,
   };
+  if (reasoningParseCache.size >= REASONING_PARSE_CACHE_LIMIT) {
+    const oldestKey = reasoningParseCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      reasoningParseCache.delete(oldestKey);
+    }
+  }
+  reasoningParseCache.set(cacheKey, parsed);
+  return parsed;
 }
 
 export function normalizeMessageImageSrc(path: string) {

@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode, type MouseEvent } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type MouseEvent,
+} from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -51,6 +60,8 @@ type PreProps = {
 type LinkBlockProps = {
   urls: string[];
 };
+
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkFileLinks];
 
 function extractLanguageTag(className?: string) {
   if (!className) {
@@ -430,7 +441,7 @@ function PreBlock({ node, children, copyUseModifier }: PreProps) {
   );
 }
 
-export function Markdown({
+export const Markdown = memo(function Markdown({
   value,
   className,
   codeBlock,
@@ -442,31 +453,43 @@ export function Markdown({
   onOpenFileLinkMenu,
   onOpenThreadLink,
 }: MarkdownProps) {
-  const normalizedValue = codeBlock
-    ? value
-    : normalizeStructuredReviewTables(normalizeListIndentation(value));
-  const content = codeBlock
-    ? `\`\`\`\n${normalizedValue}\n\`\`\``
-    : normalizedValue;
-  const handleFileLinkClick = (event: React.MouseEvent, path: ParsedFileLocation) => {
+  const normalizedValue = useMemo(
+    () =>
+      codeBlock
+        ? value
+        : normalizeStructuredReviewTables(normalizeListIndentation(value)),
+    [codeBlock, value],
+  );
+  const content = useMemo(
+    () => (codeBlock ? `\`\`\`\n${normalizedValue}\n\`\`\`` : normalizedValue),
+    [codeBlock, normalizedValue],
+  );
+
+  const handleFileLinkClick = useCallback(
+    (event: React.MouseEvent, path: ParsedFileLocation) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenFileLink?.(path);
+    },
+    [onOpenFileLink],
+  );
+  const handleLocalLinkClick = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    onOpenFileLink?.(path);
-  };
-  const handleLocalLinkClick = (event: React.MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-  };
-  const handleFileLinkContextMenu = (
-    event: React.MouseEvent,
-    path: ParsedFileLocation,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onOpenFileLinkMenu?.(event, path);
-  };
-  const resolvedHrefFilePathCache = new Map<string, ParsedFileLocation | null>();
-  const resolveHrefFilePath = (url: string) => {
+  }, []);
+  const handleFileLinkContextMenu = useCallback(
+    (event: React.MouseEvent, path: ParsedFileLocation) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenFileLinkMenu?.(event, path);
+    },
+    [onOpenFileLinkMenu],
+  );
+  const resolvedHrefFilePathCache = useMemo(
+    () => new Map<string, ParsedFileLocation | null>(),
+    [workspacePath],
+  );
+  const resolveHrefFilePath = useCallback((url: string) => {
     if (resolvedHrefFilePathCache.has(url)) {
       return resolvedHrefFilePathCache.get(url) ?? null;
     }
@@ -477,171 +500,200 @@ export function Markdown({
     }
     resolvedHrefFilePathCache.set(url, resolvedPath);
     return resolvedPath;
-  };
-  const components: Components = {
-    table: ({ children }) => (
-      <div className="markdown-table-wrap">
-        <table className="markdown-table">{children}</table>
-      </div>
-    ),
-    a: ({ href, children }) => {
-      const url = (href ?? "").trim();
-      const threadId = url.startsWith("thread://")
-        ? url.slice("thread://".length).trim()
-        : url.startsWith("/thread/")
-          ? url.slice("/thread/".length).trim()
-          : "";
-      if (threadId) {
-        return (
-          <a
-            href={href}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onOpenThreadLink?.(threadId);
-            }}
-          >
-            {children}
-          </a>
-        );
-      }
-      if (isFileLinkUrl(url)) {
-        const path = parseFileLinkUrl(url);
-        if (!path) {
+  }, [resolvedHrefFilePathCache, workspacePath]);
+  const components = useMemo<Components>(() => {
+    const nextComponents: Components = {
+      table: ({ children }) => (
+        <div className="markdown-table-wrap">
+          <table className="markdown-table">{children}</table>
+        </div>
+      ),
+      a: ({ href, children }) => {
+        const url = (href ?? "").trim();
+        const threadId = url.startsWith("thread://")
+          ? url.slice("thread://".length).trim()
+          : url.startsWith("/thread/")
+            ? url.slice("/thread/".length).trim()
+            : "";
+        if (threadId) {
           return (
             <a
               href={href}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                onOpenThreadLink?.(threadId);
               }}
             >
               {children}
             </a>
           );
         }
+        if (isFileLinkUrl(url)) {
+          const path = parseFileLinkUrl(url);
+          if (!path) {
+            return (
+              <a
+                href={href}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                {children}
+              </a>
+            );
+          }
+          return (
+            <FileReferenceLink
+              href={href ?? toFileLink(path)}
+              rawPath={path}
+              showFilePath={showFilePath}
+              workspacePath={workspacePath}
+              onClick={handleFileLinkClick}
+              onContextMenu={handleFileLinkContextMenu}
+            />
+          );
+        }
+        const hrefFilePath = resolveHrefFilePath(url);
+        if (hrefFilePath) {
+          const formattedHrefFilePath = formatParsedFileLocation(hrefFilePath);
+          const clickHandler = (event: React.MouseEvent) =>
+            handleFileLinkClick(event, hrefFilePath);
+          const contextMenuHandler = onOpenFileLinkMenu
+            ? (event: React.MouseEvent) => handleFileLinkContextMenu(event, hrefFilePath)
+            : undefined;
+          return (
+            <a
+              href={href ?? toFileLink(hrefFilePath)}
+              title={formattedHrefFilePath}
+              onClick={clickHandler}
+              onContextMenu={contextMenuHandler}
+            >
+              {children}
+            </a>
+          );
+        }
+        const isExternal =
+          url.startsWith("http://") ||
+          url.startsWith("https://") ||
+          url.startsWith("mailto:");
+
+        if (!isExternal) {
+          if (url.startsWith("#")) {
+            return <a href={href}>{children}</a>;
+          }
+          return (
+            <a href={href} onClick={handleLocalLinkClick}>
+              {children}
+            </a>
+          );
+        }
+
+        return (
+          <a
+            href={href}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void openUrl(url);
+            }}
+          >
+            {children}
+          </a>
+        );
+      },
+      code: ({ className: codeClassName, children }) => {
+        if (codeClassName) {
+          return <code className={codeClassName}>{children}</code>;
+        }
+        const text = String(children ?? "").trim();
+        const fileTarget = parseInlineFileTarget(text);
+        if (!fileTarget) {
+          return <code>{children}</code>;
+        }
+        const href = toFileLink(fileTarget);
         return (
           <FileReferenceLink
-            href={href ?? toFileLink(path)}
-            rawPath={path}
+            href={href}
+            rawPath={fileTarget}
             showFilePath={showFilePath}
             workspacePath={workspacePath}
             onClick={handleFileLinkClick}
             onContextMenu={handleFileLinkContextMenu}
           />
         );
+      },
+    };
+
+    if (codeBlockStyle === "message") {
+      nextComponents.pre = ({ node, children }) => (
+        <PreBlock node={node as PreProps["node"]} copyUseModifier={codeBlockCopyUseModifier}>
+          {children}
+        </PreBlock>
+      );
+    }
+
+    return nextComponents;
+  }, [
+    codeBlockCopyUseModifier,
+    codeBlockStyle,
+    handleFileLinkClick,
+    handleFileLinkContextMenu,
+    handleLocalLinkClick,
+    onOpenFileLinkMenu,
+    onOpenThreadLink,
+    resolveHrefFilePath,
+    showFilePath,
+    workspacePath,
+  ]);
+  const transformUrl = useCallback(
+    (url: string) => {
+      const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url);
+      // Keep file-like hrefs intact before scheme sanitization runs, otherwise
+      // Windows absolute paths such as C:/repo/file.ts look like unknown schemes.
+      if (resolveHrefFilePath(url)) {
+        return url;
       }
-      const hrefFilePath = resolveHrefFilePath(url);
-      if (hrefFilePath) {
-        const formattedHrefFilePath = formatParsedFileLocation(hrefFilePath);
-        const clickHandler = (event: React.MouseEvent) =>
-          handleFileLinkClick(event, hrefFilePath);
-        const contextMenuHandler = onOpenFileLinkMenu
-          ? (event: React.MouseEvent) => handleFileLinkContextMenu(event, hrefFilePath)
-          : undefined;
-        return (
-          <a
-            href={href ?? toFileLink(hrefFilePath)}
-            title={formattedHrefFilePath}
-            onClick={clickHandler}
-            onContextMenu={contextMenuHandler}
-          >
-            {children}
-          </a>
-        );
-      }
-      const isExternal =
+      if (
+        isFileLinkUrl(url) ||
         url.startsWith("http://") ||
         url.startsWith("https://") ||
-        url.startsWith("mailto:");
-
-      if (!isExternal) {
-        if (url.startsWith("#")) {
-          return <a href={href}>{children}</a>;
-        }
-        return (
-          <a href={href} onClick={handleLocalLinkClick}>
-            {children}
-          </a>
-        );
+        url.startsWith("mailto:") ||
+        url.startsWith("#") ||
+        url.startsWith("/") ||
+        url.startsWith("./") ||
+        url.startsWith("../")
+      ) {
+        return url;
       }
-
-      return (
-        <a
-          href={href}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void openUrl(url);
-          }}
-        >
-          {children}
-        </a>
-      );
+      if (!hasScheme) {
+        return url;
+      }
+      return "";
     },
-    code: ({ className: codeClassName, children }) => {
-      if (codeClassName) {
-        return <code className={codeClassName}>{children}</code>;
-      }
-      const text = String(children ?? "").trim();
-      const fileTarget = parseInlineFileTarget(text);
-      if (!fileTarget) {
-        return <code>{children}</code>;
-      }
-      const href = toFileLink(fileTarget);
-      return (
-        <FileReferenceLink
-          href={href}
-          rawPath={fileTarget}
-          showFilePath={showFilePath}
-          workspacePath={workspacePath}
-          onClick={handleFileLinkClick}
-          onContextMenu={handleFileLinkContextMenu}
-        />
-      );
-    },
-  };
+    [resolveHrefFilePath],
+  );
 
-  if (codeBlockStyle === "message") {
-    components.pre = ({ node, children }) => (
-      <PreBlock node={node as PreProps["node"]} copyUseModifier={codeBlockCopyUseModifier}>
-        {children}
-      </PreBlock>
+  if (codeBlock && codeBlockStyle !== "message") {
+    return (
+      <div className={className}>
+        <pre>
+          <code>{value}</code>
+        </pre>
+      </div>
     );
   }
 
   return (
     <div className={className}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkFileLinks]}
-        urlTransform={(url) => {
-          const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url);
-          // Keep file-like hrefs intact before scheme sanitization runs, otherwise
-          // Windows absolute paths such as C:/repo/file.ts look like unknown schemes.
-          if (resolveHrefFilePath(url)) {
-            return url;
-          }
-          if (
-            isFileLinkUrl(url) ||
-            url.startsWith("http://") ||
-            url.startsWith("https://") ||
-            url.startsWith("mailto:") ||
-            url.startsWith("#") ||
-            url.startsWith("/") ||
-            url.startsWith("./") ||
-            url.startsWith("../")
-          ) {
-            return url;
-          }
-          if (!hasScheme) {
-            return url;
-          }
-          return "";
-        }}
+        remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+        urlTransform={transformUrl}
         components={components}
       >
         {content}
       </ReactMarkdown>
     </div>
   );
-}
+});

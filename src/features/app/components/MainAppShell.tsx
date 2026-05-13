@@ -3,7 +3,7 @@ import { AppLayout } from "@app/components/AppLayout";
 import { AppModals } from "@app/components/AppModals";
 import type { AppModalsProps } from "@app/components/AppModals";
 import {
-  TitlebarExpandControls,
+  SidebarTitlebarControls,
 } from "@/features/layout/components/SidebarToggleControls";
 import { WindowCaptionControls } from "@/features/layout/components/WindowCaptionControls";
 import { MobileServerSetupWizard } from "@/features/mobile/components/MobileServerSetupWizard";
@@ -19,7 +19,7 @@ type MainAppShellProps = {
   isResizing: boolean;
   appStyle: CSSProperties;
   appRef: RefObject<HTMLDivElement | null>;
-  sidebarToggleProps: ComponentProps<typeof TitlebarExpandControls>;
+  sidebarToggleProps: ComponentProps<typeof SidebarTitlebarControls>;
   shouldLoadGitHubPanelData: boolean;
   gitHubPanelDataProps: {
     activeWorkspace: ComponentProps<typeof GitHubPanelData>["activeWorkspace"];
@@ -54,7 +54,7 @@ export function MainAppShell({
   return (
     <div className={`${appClassName}${isResizing ? " is-resizing" : ""}`} style={appStyle} ref={appRef}>
       <div className="drag-strip" id="titlebar" />
-      <TitlebarExpandControls {...sidebarToggleProps} />
+      <SidebarTitlebarControls {...sidebarToggleProps} />
       <WindowCaptionControls />
       {shouldLoadGitHubPanelData ? (
         <Suspense fallback={null}>

@@ -8,6 +8,7 @@ This file is the agent contract for how to work in this repo.
 Detailed navigation/runbooks live in:
 
 - `docs/codebase-map.md` (task-oriented file map: "if you need X, edit Y")
+- `docs/vscode-message-renderer-compat.md` (OpenAI ChatGPT VS Code extension message-output alignment contract)
 - `docs/multi-agent-sync-runbook.md` (upstream `../Codex` sync checklist for multi-agent/config behavior)
 - `README.md` (setup, build, release, and broader project docs)
 
@@ -91,6 +92,16 @@ For Queue vs Steer follow-up behavior, start here:
 - Composer runtime behavior: `src/features/composer/components/Composer.tsx`
 - Send intent routing: `src/features/threads/hooks/useQueuedSend.ts`, `src/features/threads/hooks/useThreadMessaging.ts`
 - App/layout wiring: `src/features/app/hooks/useComposerController.ts`, `src/features/layout/hooks/layoutNodes/buildPrimaryNodes.tsx`, `src/App.tsx`
+
+## Message Renderer Compatibility
+
+For message output alignment with `openai.chatgpt` VS Code extension version `26.506.31421`, start with `docs/vscode-message-renderer-compat.md`.
+
+- Keep `src/features/messages/components/Messages.tsx` as a thin entrypoint.
+- Put compatibility renderer work in `src/features/messages-vscode-compat/*`.
+- Do not continue broad structure/style fixes directly in the legacy `Messages.tsx`.
+- Do not import or execute the VS Code extension bundle as the app runtime.
+- Backend app-server protocol, thread reducer, Tauri, or daemon changes are allowed only after the documented gap analysis proves the target message output needs state that existing `ConversationItem` data cannot express.
 
 ## App/Daemon Parity Checklist
 

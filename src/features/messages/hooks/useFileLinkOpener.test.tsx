@@ -1,23 +1,9 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openWorkspaceIn } from "../../../services/tauri";
 import { fileTarget } from "../test/fileLinkAssertions";
 import { useFileLinkOpener } from "./useFileLinkOpener";
-
-const {
-  menuNewMock,
-  menuItemNewMock,
-  predefinedMenuItemNewMock,
-  logicalPositionMock,
-  getCurrentWindowMock,
-} = vi.hoisted(() => ({
-  menuNewMock: vi.fn(),
-  menuItemNewMock: vi.fn(),
-  predefinedMenuItemNewMock: vi.fn(),
-  logicalPositionMock: vi.fn(),
-  getCurrentWindowMock: vi.fn(),
-}));
 
 vi.mock("../../../services/tauri", () => ({
   openWorkspaceIn: vi.fn(),
@@ -25,20 +11,6 @@ vi.mock("../../../services/tauri", () => ({
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   revealItemInDir: vi.fn(),
-}));
-
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: { new: menuNewMock },
-  MenuItem: { new: menuItemNewMock },
-  PredefinedMenuItem: { new: predefinedMenuItemNewMock },
-}));
-
-vi.mock("@tauri-apps/api/dpi", () => ({
-  LogicalPosition: logicalPositionMock,
-}));
-
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: getCurrentWindowMock,
 }));
 
 vi.mock("@sentry/react", () => ({
@@ -60,17 +32,17 @@ describe("useFileLinkOpener", () => {
       value: { writeText: clipboardWriteTextMock },
       configurable: true,
     });
-    menuItemNewMock.mockImplementation(async (options) => options);
-    predefinedMenuItemNewMock.mockImplementation(async (options) => options);
-    menuNewMock.mockImplementation(async ({ items }) => ({
-      items,
-      popup: vi.fn(),
-    }));
 
-    const { result } = renderHook(() => useFileLinkOpener(null, [], ""));
+    let hookResult: ReturnType<typeof useFileLinkOpener> | null = null;
+    function Harness() {
+      hookResult = useFileLinkOpener(null, [], "");
+      return <>{hookResult.fileLinkMenu}</>;
+    }
+
+    render(<Harness />);
 
     await act(async () => {
-      await result.current.showFileLinkMenu(
+      await hookResult?.showFileLinkMenu(
         {
           preventDefault: vi.fn(),
           stopPropagation: vi.fn(),
@@ -81,12 +53,9 @@ describe("useFileLinkOpener", () => {
       );
     });
 
-    const items = menuNewMock.mock.calls[0]?.[0]?.items ?? [];
-    const copyLinkItem = items.find(
-      (item: { text?: string; action?: () => Promise<void> }) => item.text === "Copy Link",
-    );
-
-    await copyLinkItem?.action?.();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Copy Link" }));
+    });
     return clipboardWriteTextMock.mock.calls[0]?.[0];
   }
 

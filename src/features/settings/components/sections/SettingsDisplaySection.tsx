@@ -435,16 +435,26 @@ export function SettingsDisplaySection({
         <div className="settings-field-row">
           <input
             id="ui-font-size"
-            type="range"
+            type="number"
             min={UI_FONT_SIZE_MIN}
             max={UI_FONT_SIZE_MAX}
             step={1}
-            className="settings-input settings-input--range"
+            className="settings-input settings-input--compact"
             value={uiFontSizeDraft}
             onChange={(event) => {
               const nextValue = Number(event.target.value);
-              onSetUiFontSizeDraft(nextValue);
-              void onCommitUiFontSize(nextValue);
+              if (Number.isFinite(nextValue)) {
+                onSetUiFontSizeDraft(nextValue);
+              }
+            }}
+            onBlur={() => {
+              void onCommitUiFontSize(uiFontSizeDraft);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void onCommitUiFontSize(uiFontSizeDraft);
+              }
             }}
           />
           <div className="settings-scale-value">{uiFontSizeDraft}px</div>
@@ -505,16 +515,26 @@ export function SettingsDisplaySection({
         <div className="settings-field-row">
           <input
             id="code-font-size"
-            type="range"
+            type="number"
             min={CODE_FONT_SIZE_MIN}
             max={CODE_FONT_SIZE_MAX}
             step={1}
-            className="settings-input settings-input--range"
+            className="settings-input settings-input--compact"
             value={codeFontSizeDraft}
             onChange={(event) => {
               const nextValue = Number(event.target.value);
-              onSetCodeFontSizeDraft(nextValue);
-              void onCommitCodeFontSize(nextValue);
+              if (Number.isFinite(nextValue)) {
+                onSetCodeFontSizeDraft(nextValue);
+              }
+            }}
+            onBlur={() => {
+              void onCommitCodeFontSize(codeFontSizeDraft);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void onCommitCodeFontSize(codeFontSizeDraft);
+              }
             }}
           />
           <div className="settings-scale-value">{codeFontSizeDraft}px</div>

@@ -39,6 +39,12 @@ type UseMessagesViewStateArgs = {
   onQuoteMessage?: (text: string) => void;
 };
 
+type ReasoningParseCacheEntry = {
+  summary: string;
+  content: string;
+  parsed: ReturnType<typeof parseReasoning>;
+};
+
 export function useMessagesViewState({
   items,
   threadId,
@@ -54,6 +60,9 @@ export function useMessagesViewState({
   const autoScrollRef = useRef(true);
   const copyTimeoutRef = useRef<number | null>(null);
   const manuallyToggledExpandedRef = useRef<Set<string>>(new Set());
+  const reasoningParseCacheRef = useRef<Map<string, ReasoningParseCacheEntry>>(
+    new Map(),
+  );
 
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [collapsedToolGroups, setCollapsedToolGroups] = useState<Set<string>>(
@@ -178,11 +187,21 @@ export function useMessagesViewState({
 
   const reasoningMetaById = useMemo(() => {
     const meta = new Map<string, ReturnType<typeof parseReasoning>>();
+    const nextCache = new Map<string, ReasoningParseCacheEntry>();
     items.forEach((item) => {
       if (item.kind === "reasoning") {
-        meta.set(item.id, parseReasoning(item));
+        const summary = item.summary ?? "";
+        const content = item.content ?? "";
+        const cached = reasoningParseCacheRef.current.get(item.id);
+        const parsed =
+          cached?.summary === summary && cached.content === content
+            ? cached.parsed
+            : parseReasoning(item);
+        meta.set(item.id, parsed);
+        nextCache.set(item.id, { summary, content, parsed });
       }
     });
+    reasoningParseCacheRef.current = nextCache;
     return meta;
   }, [items]);
 

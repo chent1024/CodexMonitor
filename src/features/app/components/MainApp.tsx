@@ -482,6 +482,7 @@ export default function MainApp() {
     handleUserInputSubmit,
     refreshAccountInfo,
     refreshAccountRateLimits,
+    pushThreadErrorMessage,
   } = useThreads({
     activeWorkspace,
     onWorkspaceConnected: markWorkspaceConnected,
@@ -515,6 +516,18 @@ export default function MainApp() {
       ),
       refreshThread,
       reconnectWorkspace: connectWorkspace,
+      onReconnectError: (_workspaceId, threadId, message, reason) => {
+        const prefix =
+          reason === "detached-recovery"
+            ? "Live stream reconnect failed"
+            : "Live connection failed";
+        pushThreadErrorMessage(threadId, `${prefix}: ${message}`, {
+          itemType: "stream-error",
+          title: prefix,
+          detail: "reconnect",
+          status: "failed",
+        });
+      },
     });
 
   const { mobileThreadRefreshLoading, handleMobileThreadRefresh } =
