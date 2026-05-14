@@ -361,6 +361,7 @@ export type AppSettings = {
   remoteBackends: RemoteBackendTarget[];
   activeRemoteBackendId: string | null;
   keepDaemonRunningAfterAppClose: boolean;
+  restartSafeSessions: boolean;
   defaultAccessMode: AccessMode;
   reviewDeliveryMode: "inline" | "detached";
   composerModelShortcut: string | null;

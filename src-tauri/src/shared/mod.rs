@@ -13,6 +13,8 @@ pub(crate) mod local_memory_core;
 pub(crate) mod local_usage_core;
 pub(crate) mod process_core;
 pub(crate) mod prompts_core;
+#[allow(dead_code)]
+pub(crate) mod restart_safe_sessions_core;
 pub(crate) mod settings_core;
 pub(crate) mod workspace_rpc;
 pub(crate) mod workspaces_core;

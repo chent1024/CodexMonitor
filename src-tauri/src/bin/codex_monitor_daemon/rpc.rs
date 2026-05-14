@@ -10,6 +10,8 @@ mod dispatcher;
 mod git;
 #[path = "rpc/prompts.rs"]
 mod prompts;
+#[path = "rpc/session.rs"]
+mod session;
 #[path = "rpc/workspace.rs"]
 mod workspace;
 
@@ -39,6 +41,10 @@ fn build_event_notification(event: DaemonEvent) -> Option<String> {
     let payload = match event {
         DaemonEvent::AppServer(payload) => json!({
             "method": "app-server-event",
+            "params": payload,
+        }),
+        DaemonEvent::RestartSafeSession(payload) => json!({
+            "method": "restart-safe-session-event",
             "params": payload,
         }),
         DaemonEvent::TerminalOutput(payload) => json!({
@@ -106,6 +112,13 @@ pub(super) fn parse_optional_u32(value: &Value, key: &str) -> Option<u32> {
                 Some(v as u32)
             }
         }),
+        _ => None,
+    }
+}
+
+pub(super) fn parse_optional_u64(value: &Value, key: &str) -> Option<u64> {
+    match value {
+        Value::Object(map) => map.get(key).and_then(|value| value.as_u64()),
         _ => None,
     }
 }

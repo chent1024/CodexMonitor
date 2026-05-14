@@ -395,6 +395,8 @@ pub(crate) struct AppSettings {
     pub(crate) active_remote_backend_id: Option<String>,
     #[serde(default, rename = "keepDaemonRunningAfterAppClose")]
     pub(crate) keep_daemon_running_after_app_close: bool,
+    #[serde(default, rename = "restartSafeSessions")]
+    pub(crate) restart_safe_sessions: bool,
     #[serde(default = "default_access_mode", rename = "defaultAccessMode")]
     pub(crate) default_access_mode: String,
     #[serde(
@@ -1118,6 +1120,7 @@ impl Default for AppSettings {
             remote_backends: default_remote_backends(),
             active_remote_backend_id: None,
             keep_daemon_running_after_app_close: false,
+            restart_safe_sessions: false,
             default_access_mode: "current".to_string(),
             review_delivery_mode: default_review_delivery_mode(),
             composer_model_shortcut: default_composer_model_shortcut(),

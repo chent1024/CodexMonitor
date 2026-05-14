@@ -18,7 +18,7 @@ type SearchableDebugEntry = DebugEntry & {
   payloadText?: string;
 };
 
-type DebugSemanticFilter = "memory" | "mcp";
+type DebugSemanticFilter = "memory" | "mcp" | "session" | "daemon";
 type DebugSourceFilter = DebugEntry["source"];
 type DebugFilter = DebugSemanticFilter | DebugSourceFilter | "all";
 
@@ -26,6 +26,8 @@ const DEBUG_FILTERS: Array<{ value: DebugFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "memory", label: "Memory" },
   { value: "mcp", label: "MCP" },
+  { value: "session", label: "Session" },
+  { value: "daemon", label: "Daemon" },
   { value: "client", label: "Client" },
   { value: "server", label: "Server" },
   { value: "event", label: "Event" },
@@ -101,7 +103,13 @@ function appendCategoryTerms(
 
   if (typeof value !== "object") {
     const key = canonicalKey(parentKey);
-    if (CATEGORY_VALUE_KEYS.has(key) || key.includes("memory") || key.includes("mcp")) {
+    if (
+      CATEGORY_VALUE_KEYS.has(key) ||
+      key.includes("memory") ||
+      key.includes("mcp") ||
+      key.includes("session") ||
+      key.includes("daemon")
+    ) {
       terms.push(String(value));
     }
     return;
@@ -112,7 +120,9 @@ function appendCategoryTerms(
     const isCategoryKey =
       CATEGORY_VALUE_KEYS.has(normalizedKey) ||
       normalizedKey.includes("memory") ||
-      normalizedKey.includes("mcp");
+      normalizedKey.includes("mcp") ||
+      normalizedKey.includes("session") ||
+      normalizedKey.includes("daemon");
 
     if (isCategoryKey) {
       terms.push(key);
@@ -153,7 +163,17 @@ function entryMatchesFilter(entry: SearchableDebugEntry, filter: DebugFilter): b
       categoryText.includes("local memory")
     );
   }
-  return categoryText.includes("mcp");
+  if (filter === "mcp") {
+    return categoryText.includes("mcp");
+  }
+  if (filter === "daemon") {
+    return categoryText.includes("daemon");
+  }
+  return (
+    categoryText.includes("session") ||
+    categoryText.includes("restart-safe") ||
+    categoryText.includes("restart_safe")
+  );
 }
 
 export function DebugPanel({
@@ -184,6 +204,8 @@ export function DebugPanel({
       all: entries.length,
       memory: 0,
       mcp: 0,
+      session: 0,
+      daemon: 0,
       client: 0,
       server: 0,
       event: 0,
@@ -197,6 +219,12 @@ export function DebugPanel({
       }
       if (entryMatchesFilter(entry, "mcp")) {
         counts.mcp += 1;
+      }
+      if (entryMatchesFilter(entry, "session")) {
+        counts.session += 1;
+      }
+      if (entryMatchesFilter(entry, "daemon")) {
+        counts.daemon += 1;
       }
     }
     return counts;

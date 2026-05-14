@@ -69,17 +69,23 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use ignore::WalkBuilder;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Mutex, Semaphore};
+use tokio::time::{sleep, Instant};
 
 use backend::app_server::{spawn_workspace_session, WorkspaceSession};
 use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use shared::codex_core::CodexLoginCancelState;
 use shared::process_core::kill_child_process_tree;
 use shared::prompts_core::{self, CustomPromptEntry};
+use shared::restart_safe_sessions_core::{
+    RestartSafeAttachResponse, RestartSafeDebugStatus, RestartSafeReplay, RestartSafeSessionEvent,
+    RestartSafeSessionStatus, RestartSafeSessionStore,
+};
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
     local_usage_core, settings_core, workspaces_core, worktree_core,
@@ -95,6 +101,49 @@ use workspace_settings::apply_workspace_settings_update;
 const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:4732";
 const MAX_IN_FLIGHT_RPC_PER_CONNECTION: usize = 32;
 const DAEMON_NAME: &str = "codex-monitor-daemon";
+const RESTART_SAFE_IDLE_SHUTDOWN_CHECK_SECS: u64 = 30;
+const RESTART_SAFE_IDLE_SHUTDOWN_GRACE_SECS: u64 = 15 * 60;
+
+fn workspace_id_from_session_id(session_id: &str) -> Option<String> {
+    session_id
+        .strip_prefix("workspace:")
+        .map(str::to_string)
+        .filter(|value| !value.trim().is_empty())
+}
+
+fn restart_safe_idle_shutdown_allowed(
+    status: &RestartSafeDebugStatus,
+    connected_client_count: usize,
+) -> bool {
+    connected_client_count == 0 && status.idle_shutdown_allowed
+}
+
+async fn run_restart_safe_idle_shutdown_watcher(
+    state: Arc<DaemonState>,
+    events: broadcast::Sender<DaemonEvent>,
+) {
+    let check_interval = Duration::from_secs(RESTART_SAFE_IDLE_SHUTDOWN_CHECK_SECS);
+    let grace = Duration::from_secs(RESTART_SAFE_IDLE_SHUTDOWN_GRACE_SECS);
+    let mut idle_since: Option<Instant> = None;
+
+    loop {
+        sleep(check_interval).await;
+        let connected_client_count = events.receiver_count();
+        let allowed = state
+            .restart_safe_idle_shutdown_allowed(connected_client_count)
+            .await;
+        if !allowed {
+            idle_since = None;
+            continue;
+        }
+
+        let since = idle_since.get_or_insert_with(Instant::now);
+        if since.elapsed() >= grace {
+            eprintln!("restart-safe daemon idle window elapsed; shutting down");
+            std::process::exit(0);
+        }
+    }
+}
 
 fn spawn_with_client(
     event_sink: DaemonEventSink,
@@ -117,11 +166,13 @@ fn spawn_with_client(
 #[derive(Clone)]
 struct DaemonEventSink {
     tx: broadcast::Sender<DaemonEvent>,
+    restart_safe_sessions: Arc<RestartSafeSessionStore>,
 }
 
 #[derive(Clone)]
 enum DaemonEvent {
     AppServer(AppServerEvent),
+    RestartSafeSession(RestartSafeSessionEvent),
     #[allow(dead_code)]
     TerminalOutput(TerminalOutput),
     #[allow(dead_code)]
@@ -130,6 +181,12 @@ enum DaemonEvent {
 
 impl EventSink for DaemonEventSink {
     fn emit_app_server_event(&self, event: AppServerEvent) {
+        let restart_safe_event = self
+            .restart_safe_sessions
+            .record_app_server_event(&event.workspace_id, event.message.clone());
+        let _ = self
+            .tx
+            .send(DaemonEvent::RestartSafeSession(restart_safe_event));
         let _ = self.tx.send(DaemonEvent::AppServer(event));
     }
 
@@ -156,6 +213,7 @@ struct DaemonState {
     settings_path: PathBuf,
     app_settings: Mutex<AppSettings>,
     event_sink: DaemonEventSink,
+    restart_safe_sessions: Arc<RestartSafeSessionStore>,
     codex_login_cancels: Mutex<HashMap<String, CodexLoginCancelState>>,
     daemon_binary_path: Option<String>,
 }
@@ -182,6 +240,7 @@ impl DaemonState {
             storage_path,
             settings_path,
             app_settings: Mutex::new(app_settings),
+            restart_safe_sessions: event_sink.restart_safe_sessions.clone(),
             event_sink,
             codex_login_cancels: Mutex::new(HashMap::new()),
             daemon_binary_path,
@@ -196,6 +255,202 @@ impl DaemonState {
             "mode": "tcp",
             "binaryPath": self.daemon_binary_path,
         })
+    }
+
+    async fn restart_safe_active_workspace_ids(&self) -> HashSet<String> {
+        self.sessions.lock().await.keys().cloned().collect()
+    }
+
+    fn record_session_lifecycle(&self, workspace_id: &str, event_kind: &str, payload: Value) {
+        let event =
+            self.restart_safe_sessions
+                .record_lifecycle_event(workspace_id, event_kind, payload);
+        let _ = self
+            .event_sink
+            .tx
+            .send(DaemonEvent::RestartSafeSession(event));
+    }
+
+    async fn session_list(&self) -> Result<Vec<RestartSafeSessionStatus>, String> {
+        let active = self.restart_safe_active_workspace_ids().await;
+        Ok(self.restart_safe_sessions.list_statuses(&active))
+    }
+
+    async fn session_status(&self, session_id: String) -> Result<RestartSafeSessionStatus, String> {
+        let active = self.restart_safe_active_workspace_ids().await;
+        for status in self.restart_safe_sessions.list_statuses(&active) {
+            if status.session_id == session_id {
+                return Ok(status);
+            }
+        }
+        Err("session not found".to_string())
+    }
+
+    async fn session_attach(
+        &self,
+        session_id: String,
+        from_seq: u64,
+    ) -> Result<RestartSafeAttachResponse, String> {
+        let active = self.restart_safe_active_workspace_ids().await;
+        let _ = self.restart_safe_sessions.list_statuses(&active);
+        let response = self
+            .restart_safe_sessions
+            .attach(&session_id, from_seq)
+            .ok_or_else(|| "session not found".to_string())?;
+        self.record_session_lifecycle(
+            &response.status.workspace_id,
+            "session/attach",
+            json!({
+                "sessionId": session_id,
+                "fromSeq": from_seq,
+                "retentionGap": response.replay.retention_gap,
+            }),
+        );
+        Ok(response)
+    }
+
+    async fn session_detach(&self, session_id: String) -> Result<RestartSafeSessionStatus, String> {
+        let status = self
+            .restart_safe_sessions
+            .detach(&session_id)
+            .ok_or_else(|| "session not found".to_string())?;
+        self.record_session_lifecycle(
+            &status.workspace_id,
+            "session/detach",
+            json!({ "sessionId": session_id }),
+        );
+        Ok(status)
+    }
+
+    async fn session_replay_events(
+        &self,
+        session_id: String,
+        from_seq: u64,
+    ) -> Result<RestartSafeReplay, String> {
+        self.restart_safe_sessions
+            .replay(&session_id, from_seq)
+            .ok_or_else(|| "session not found".to_string())
+    }
+
+    async fn session_pending_requests(
+        &self,
+        session_id: String,
+    ) -> Result<Vec<shared::restart_safe_sessions_core::PendingSessionRequest>, String> {
+        Ok(self.restart_safe_sessions.pending_requests(&session_id))
+    }
+
+    async fn session_respond_request(
+        &self,
+        session_id: String,
+        request_id: Value,
+        result: Value,
+    ) -> Result<Value, String> {
+        if let Some(resolved) = self
+            .restart_safe_sessions
+            .resolved_request(&session_id, &request_id)
+        {
+            return Ok(json!({
+                "ok": true,
+                "duplicate": true,
+                "resolved": resolved,
+            }));
+        }
+        let workspace_id = workspace_id_from_session_id(&session_id)
+            .ok_or_else(|| "invalid session id".to_string())?;
+        let was_pending = self
+            .restart_safe_sessions
+            .has_pending_request(&session_id, &request_id);
+        codex_core::respond_to_server_request_core(
+            &self.sessions,
+            workspace_id,
+            request_id.clone(),
+            result.clone(),
+        )
+        .await?;
+        let resolved =
+            self.restart_safe_sessions
+                .mark_request_resolved(&session_id, &request_id, result);
+        if let Some(resolved) = resolved.as_ref() {
+            self.record_session_lifecycle(
+                &resolved.workspace_id,
+                "session/respond_request",
+                json!({
+                    "sessionId": session_id,
+                    "requestId": request_id,
+                    "wasPending": was_pending,
+                }),
+            );
+        }
+        Ok(json!({
+            "ok": true,
+            "duplicate": false,
+            "resolved": resolved,
+        }))
+    }
+
+    async fn session_interrupt(
+        &self,
+        session_id: String,
+        thread_id: String,
+        turn_id: String,
+    ) -> Result<Value, String> {
+        let workspace_id = workspace_id_from_session_id(&session_id)
+            .ok_or_else(|| "invalid session id".to_string())?;
+        let response = codex_core::turn_interrupt_core(
+            &self.sessions,
+            workspace_id.clone(),
+            thread_id.clone(),
+            turn_id.clone(),
+        )
+        .await?;
+        self.record_session_lifecycle(
+            &workspace_id,
+            "session/interrupt",
+            json!({
+                "sessionId": session_id,
+                "threadId": thread_id,
+                "turnId": turn_id,
+            }),
+        );
+        Ok(response)
+    }
+
+    async fn session_stop(&self, session_id: String) -> Result<Value, String> {
+        let workspace_id = workspace_id_from_session_id(&session_id)
+            .ok_or_else(|| "invalid session id".to_string())?;
+        let session = {
+            let mut sessions = self.sessions.lock().await;
+            sessions.remove(&workspace_id)
+        };
+        let Some(session) = session else {
+            self.restart_safe_sessions.mark_stopped(&session_id);
+            self.record_session_lifecycle(
+                &workspace_id,
+                "session/stop",
+                json!({ "sessionId": session_id, "stopped": false }),
+            );
+            return Ok(json!({ "stopped": false }));
+        };
+        let mut child = session.child.lock().await;
+        kill_child_process_tree(&mut child).await;
+        self.restart_safe_sessions.mark_stopped(&session_id);
+        self.record_session_lifecycle(
+            &workspace_id,
+            "session/stop",
+            json!({ "sessionId": session_id, "stopped": true }),
+        );
+        Ok(json!({ "stopped": true }))
+    }
+
+    async fn session_debug_status(&self) -> Result<RestartSafeDebugStatus, String> {
+        Ok(self.restart_safe_sessions.debug_status())
+    }
+
+    async fn restart_safe_idle_shutdown_allowed(&self, connected_client_count: usize) -> bool {
+        let active = self.restart_safe_active_workspace_ids().await;
+        let _ = self.restart_safe_sessions.list_statuses(&active);
+        let debug = self.restart_safe_sessions.debug_status();
+        restart_safe_idle_shutdown_allowed(&debug, connected_client_count)
     }
 
     async fn sync_workspaces_from_storage(&self) {
@@ -704,7 +959,15 @@ impl DaemonState {
     }
 
     async fn start_thread(&self, workspace_id: String) -> Result<Value, String> {
-        codex_core::start_thread_core(&self.sessions, &self.workspaces, workspace_id).await
+        let response =
+            codex_core::start_thread_core(&self.sessions, &self.workspaces, workspace_id.clone())
+                .await?;
+        self.record_session_lifecycle(
+            &workspace_id,
+            "session/start",
+            json!({ "workspaceId": workspace_id, "response": response.clone() }),
+        );
+        Ok(response)
     }
 
     async fn resume_thread(
@@ -712,7 +975,19 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
-        codex_core::resume_thread_core(&self.sessions, workspace_id, thread_id).await
+        let response =
+            codex_core::resume_thread_core(&self.sessions, workspace_id.clone(), thread_id.clone())
+                .await?;
+        self.record_session_lifecycle(
+            &workspace_id,
+            "session/resume",
+            json!({
+                "workspaceId": workspace_id,
+                "threadId": thread_id,
+                "response": response.clone(),
+            }),
+        );
+        Ok(response)
     }
 
     async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
@@ -878,7 +1153,23 @@ impl DaemonState {
         thread_id: String,
         turn_id: String,
     ) -> Result<Value, String> {
-        codex_core::turn_interrupt_core(&self.sessions, workspace_id, thread_id, turn_id).await
+        let response = codex_core::turn_interrupt_core(
+            &self.sessions,
+            workspace_id.clone(),
+            thread_id.clone(),
+            turn_id.clone(),
+        )
+        .await?;
+        self.record_session_lifecycle(
+            &workspace_id,
+            "session/interrupt",
+            json!({
+                "sessionId": shared::restart_safe_sessions_core::session_id_for_workspace(&workspace_id),
+                "threadId": thread_id,
+                "turnId": turn_id,
+            }),
+        );
+        Ok(response)
     }
 
     async fn start_review(
@@ -947,14 +1238,45 @@ impl DaemonState {
         request_id: Value,
         result: Value,
     ) -> Result<Value, String> {
+        let session_id =
+            shared::restart_safe_sessions_core::session_id_for_workspace(&workspace_id);
+        if let Some(resolved) = self
+            .restart_safe_sessions
+            .resolved_request(&session_id, &request_id)
+        {
+            return Ok(json!({
+                "ok": true,
+                "duplicate": true,
+                "resolved": resolved,
+            }));
+        }
+        let was_pending = self
+            .restart_safe_sessions
+            .has_pending_request(&session_id, &request_id);
         codex_core::respond_to_server_request_core(
             &self.sessions,
-            workspace_id,
-            request_id,
-            result,
+            workspace_id.clone(),
+            request_id.clone(),
+            result.clone(),
         )
         .await?;
-        Ok(json!({ "ok": true }))
+        let resolved =
+            self.restart_safe_sessions
+                .mark_request_resolved(&session_id, &request_id, result);
+        self.record_session_lifecycle(
+            &workspace_id,
+            "session/respond_request",
+            json!({
+                "sessionId": session_id,
+                "requestId": request_id,
+                "wasPending": was_pending,
+            }),
+        );
+        Ok(json!({
+            "ok": true,
+            "duplicate": false,
+            "resolved": resolved,
+        }))
     }
 
     async fn remember_approval_rule(
@@ -1623,6 +1945,7 @@ mod tests {
 
     fn test_state(data_dir: &std::path::Path) -> DaemonState {
         let (tx, _rx) = broadcast::channel::<DaemonEvent>(32);
+        let restart_safe_sessions = Arc::new(RestartSafeSessionStore::new());
         DaemonState {
             data_dir: data_dir.to_path_buf(),
             workspaces: Mutex::new(HashMap::new()),
@@ -1630,7 +1953,11 @@ mod tests {
             storage_path: data_dir.join("workspaces.json"),
             settings_path: data_dir.join("settings.json"),
             app_settings: Mutex::new(AppSettings::default()),
-            event_sink: DaemonEventSink { tx },
+            restart_safe_sessions: restart_safe_sessions.clone(),
+            event_sink: DaemonEventSink {
+                tx,
+                restart_safe_sessions,
+            },
             codex_login_cancels: Mutex::new(HashMap::new()),
             daemon_binary_path: Some("/tmp/codex-monitor-daemon".to_string()),
         }
@@ -1812,6 +2139,31 @@ mod tests {
             let _ = std::fs::remove_dir_all(&tmp);
         });
     }
+
+    #[test]
+    fn restart_safe_idle_shutdown_requires_no_clients_and_idle_store() {
+        let status = RestartSafeDebugStatus {
+            protocol_version: 1,
+            session_count: 0,
+            active_session_count: 0,
+            retained_session_count: 0,
+            journal_event_count: 0,
+            pending_request_count: 0,
+            attached_client_count: 0,
+            idle_shutdown_allowed: true,
+        };
+
+        assert!(restart_safe_idle_shutdown_allowed(&status, 0));
+        assert!(!restart_safe_idle_shutdown_allowed(&status, 1));
+        assert!(!restart_safe_idle_shutdown_allowed(
+            &RestartSafeDebugStatus {
+                idle_shutdown_allowed: false,
+                ..status
+            },
+            0
+        ));
+    }
+
     #[test]
     fn list_workspaces_syncs_from_storage_file() {
         run_async_test(async {
@@ -1943,12 +2295,18 @@ fn main() {
         .expect("failed to build tokio runtime");
 
     runtime.block_on(async move {
-        let (events_tx, _events_rx) = broadcast::channel::<DaemonEvent>(2048);
+        let (events_tx, _) = broadcast::channel::<DaemonEvent>(2048);
+        let restart_safe_sessions = Arc::new(RestartSafeSessionStore::new());
         let event_sink = DaemonEventSink {
             tx: events_tx.clone(),
+            restart_safe_sessions,
         };
         let state = Arc::new(DaemonState::load(&config, event_sink));
         let config = Arc::new(config);
+        tokio::spawn(run_restart_safe_idle_shutdown_watcher(
+            Arc::clone(&state),
+            events_tx.clone(),
+        ));
 
         let listener = match TcpListener::bind(config.listen).await {
             Ok(listener) => listener,

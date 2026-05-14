@@ -790,6 +790,139 @@ export async function setLocalMemoryEnabled(
   return invoke("set_local_memory_enabled", { enabled });
 }
 
+export type RestartSafeSessionLifecycle =
+  | "live"
+  | "completed"
+  | "failed"
+  | "stopped"
+  | "detached";
+
+export type RestartSafeSessionEvent = {
+  sessionId: string;
+  workspaceId: string;
+  threadId: string | null;
+  turnId: string | null;
+  eventSeq: number;
+  timestampMs: number;
+  eventKind: string;
+  payload: Record<string, unknown>;
+};
+
+export type RestartSafeSessionStatus = {
+  sessionId: string;
+  workspaceId: string;
+  lifecycle: RestartSafeSessionLifecycle;
+  activeThreadId: string | null;
+  activeTurnId: string | null;
+  pendingRequestCount: number;
+  lastEventSeq: number;
+  journalEventCount: number;
+  attachedClientCount: number;
+  startedAtMs: number;
+  updatedAtMs: number;
+};
+
+export type PendingSessionRequest = {
+  sessionId: string;
+  workspaceId: string;
+  threadId: string | null;
+  turnId: string | null;
+  requestId: string | number;
+  requestKey: string;
+  kind: "approval" | "user_input" | "other";
+  payload: Record<string, unknown>;
+  createdAtMs: number;
+  resolvedAtMs: number | null;
+  response: unknown | null;
+};
+
+export type RestartSafeReplay = {
+  sessionId: string;
+  fromSeq: number;
+  events: RestartSafeSessionEvent[];
+  latestSeq: number;
+  oldestAvailableSeq: number | null;
+  retentionGap: boolean;
+};
+
+export type RestartSafeAttachResponse = {
+  status: RestartSafeSessionStatus;
+  replay: RestartSafeReplay;
+  pendingRequests: PendingSessionRequest[];
+  protocolVersion: number;
+};
+
+export type RestartSafeDebugStatus = {
+  protocolVersion: number;
+  sessionCount: number;
+  activeSessionCount: number;
+  retainedSessionCount: number;
+  journalEventCount: number;
+  pendingRequestCount: number;
+  attachedClientCount: number;
+  idleShutdownAllowed: boolean;
+};
+
+export async function listRestartSafeSessions(): Promise<RestartSafeSessionStatus[]> {
+  return invoke("session_list");
+}
+
+export async function getRestartSafeSessionStatus(
+  sessionId: string,
+): Promise<RestartSafeSessionStatus> {
+  return invoke("session_status", { sessionId });
+}
+
+export async function attachRestartSafeSession(
+  sessionId: string,
+  fromSeq = 0,
+): Promise<RestartSafeAttachResponse> {
+  return invoke("session_attach", { sessionId, fromSeq });
+}
+
+export async function detachRestartSafeSession(
+  sessionId: string,
+): Promise<RestartSafeSessionStatus> {
+  return invoke("session_detach", { sessionId });
+}
+
+export async function replayRestartSafeSessionEvents(
+  sessionId: string,
+  fromSeq = 0,
+): Promise<RestartSafeReplay> {
+  return invoke("session_replay_events", { sessionId, fromSeq });
+}
+
+export async function listRestartSafePendingRequests(
+  sessionId: string,
+): Promise<PendingSessionRequest[]> {
+  return invoke("session_pending_requests", { sessionId });
+}
+
+export async function respondRestartSafeSessionRequest(
+  sessionId: string,
+  requestId: string | number,
+  result: unknown,
+): Promise<unknown> {
+  return invoke("session_respond_request", { sessionId, requestId, result });
+}
+
+export async function interruptRestartSafeSession(
+  sessionId: string,
+  threadId: string,
+  turnId: string,
+): Promise<unknown> {
+  return invoke("session_interrupt", { sessionId, threadId, turnId });
+}
+
+export async function stopRestartSafeSession(sessionId: string): Promise<unknown> {
+  return invoke("session_stop", { sessionId });
+}
+
+export async function getRestartSafeSessionDebugStatus(): Promise<RestartSafeDebugStatus> {
+  return invoke("session_debug_status");
+}
+
 export async function generateRunMetadata(workspaceId: string, prompt: string) {
   return invoke<{ title: string; worktreeName: string }>("generate_run_metadata", {
     workspaceId,

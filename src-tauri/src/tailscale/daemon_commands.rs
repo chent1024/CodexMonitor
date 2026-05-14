@@ -90,15 +90,21 @@ pub(super) async fn tailscale_daemon_start(
     }
 
     let settings = state.app_settings.lock().await.clone();
+    let restart_safe_local =
+        settings.restart_safe_sessions && !matches!(settings.backend_mode, BackendMode::Remote);
     let token = settings
         .remote_backend_token
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            "Set a Remote backend token before starting mobile access daemon.".to_string()
-        })?;
-    let listen_addr = configured_daemon_listen_addr(&settings);
+        .filter(|value| !value.is_empty());
+    if token.is_none() && !restart_safe_local {
+        return Err("Set a Remote backend token before starting mobile access daemon.".to_string());
+    }
+    let listen_addr = if restart_safe_local {
+        "127.0.0.1:4732".to_string()
+    } else {
+        configured_daemon_listen_addr(&settings)
+    };
     let listen_port = parse_port_from_remote_host(&listen_addr)
         .ok_or_else(|| format!("Invalid daemon listen address: {listen_addr}"))?;
     let daemon_binary = resolve_daemon_binary_path()?;
@@ -112,7 +118,7 @@ pub(super) async fn tailscale_daemon_start(
     let mut runtime = state.tcp_daemon.lock().await;
     refresh_tcp_daemon_runtime(&mut runtime).await;
 
-    match probe_daemon(&listen_addr, Some(token)).await {
+    match probe_daemon(&listen_addr, token).await {
         DaemonProbe::Running {
             auth_ok,
             auth_error,
@@ -145,7 +151,7 @@ pub(super) async fn tailscale_daemon_start(
 
             let force_kill_allowed = can_force_stop_daemon(auth_ok, info.as_ref());
             let pid_for_control = pid;
-            if let Err(shutdown_error) = request_daemon_shutdown(&listen_addr, Some(token)).await {
+            if let Err(shutdown_error) = request_daemon_shutdown(&listen_addr, token).await {
                 if !force_kill_allowed {
                     return Err(format!(
                         "{}; automatic restart aborted because daemon ownership could not be verified: {}",
@@ -170,7 +176,7 @@ pub(super) async fn tailscale_daemon_start(
                 }
             }
 
-            if !wait_for_daemon_shutdown(&listen_addr, Some(token)).await {
+            if !wait_for_daemon_shutdown(&listen_addr, token).await {
                 if !force_kill_allowed {
                     return Err(format!(
                         "{}; daemon acknowledged shutdown but is still reachable",
@@ -212,13 +218,16 @@ pub(super) async fn tailscale_daemon_start(
 
     ensure_listen_addr_available(&listen_addr).await?;
 
-    let child = tokio_command(&daemon_binary)
+    let mut command = tokio_command(&daemon_binary);
+    command
         .arg("--listen")
         .arg(&listen_addr)
         .arg("--data-dir")
-        .arg(data_dir)
-        .arg("--token")
-        .arg(token)
+        .arg(data_dir);
+    if let Some(token) = token {
+        command.arg("--token").arg(token);
+    }
+    let child = command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())

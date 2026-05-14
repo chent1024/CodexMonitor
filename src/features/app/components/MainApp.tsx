@@ -80,7 +80,10 @@ import {
 import { useAppShellOrchestration } from "@app/orchestration/useLayoutOrchestration";
 import { normalizeCodexArgsInput } from "@/utils/codexArgsInput";
 import { subscribeTrayOpenThread } from "@services/events";
-import { getLocalMemoryDebugStatus } from "@services/tauri";
+import {
+  getLocalMemoryDebugStatus,
+  getRestartSafeSessionDebugStatus,
+} from "@services/tauri";
 
 const SettingsView = lazy(() =>
   import("@settings/components/SettingsView").then((module) => ({
@@ -146,12 +149,36 @@ export default function MainApp() {
       setLocalMemoryDebugLoading(false);
     }
   }, [addDebugEntry]);
+  const refreshRestartSafeSessionDebug = useCallback(async () => {
+    if (!appSettings.restartSafeSessions) {
+      return;
+    }
+    try {
+      const snapshot = await getRestartSafeSessionDebugStatus();
+      addDebugEntry({
+        id: `restart-safe-session-debug-${Date.now()}`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "restart-safe daemon session debug status",
+        payload: snapshot,
+      });
+    } catch (error) {
+      addDebugEntry({
+        id: `restart-safe-session-debug-error-${Date.now()}`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "restart-safe daemon session debug status error",
+        payload: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, [addDebugEntry, appSettings.restartSafeSessions]);
   useEffect(() => {
     if (debugOpen && !previousDebugOpenRef.current) {
       void refreshLocalMemoryDebug();
+      void refreshRestartSafeSessionDebug();
     }
     previousDebugOpenRef.current = debugOpen;
-  }, [debugOpen, refreshLocalMemoryDebug]);
+  }, [debugOpen, refreshLocalMemoryDebug, refreshRestartSafeSessionDebug]);
   const {
     workspaces,
     workspaceGroups,
@@ -536,6 +563,7 @@ export default function MainApp() {
     customPrompts: prompts,
     onMessageActivity: handleThreadMessageActivity,
     threadSortKey: threadListSortKey,
+    restartSafeSessions: appSettings.restartSafeSessions,
     onThreadCodexMetadataDetected: handleThreadCodexMetadataDetected,
   });
   const { connectionState: remoteThreadConnectionState, reconnectLive } =

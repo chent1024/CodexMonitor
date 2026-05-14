@@ -3,6 +3,7 @@ import type {
   AppServerEvent,
   TrayOpenThreadPayload,
 } from "../types";
+import type { RestartSafeSessionEvent } from "./tauri";
 
 export type Unsubscribe = () => void;
 
@@ -81,10 +82,23 @@ function createEventHub<T>(eventName: string) {
     };
   };
 
-  return { subscribe };
+  const emit = (payload: T) => {
+    for (const listener of listeners) {
+      try {
+        listener(payload);
+      } catch (error) {
+        console.error(`[events] ${eventName} replay listener failed`, error);
+      }
+    }
+  };
+
+  return { subscribe, emit };
 }
 
 const appServerHub = createEventHub<AppServerEvent>("app-server-event");
+const restartSafeSessionHub = createEventHub<RestartSafeSessionEvent>(
+  "restart-safe-session-event",
+);
 const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output");
 const terminalExitHub = createEventHub<TerminalExitEvent>("terminal-exit");
 const updaterCheckHub = createEventHub<void>("updater-check");
@@ -119,6 +133,17 @@ export function subscribeAppServerEvents(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return appServerHub.subscribe(onEvent, options);
+}
+
+export function dispatchReplayedAppServerEvent(event: AppServerEvent): void {
+  appServerHub.emit(event);
+}
+
+export function subscribeRestartSafeSessionEvents(
+  onEvent: (event: RestartSafeSessionEvent) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return restartSafeSessionHub.subscribe(onEvent, options);
 }
 
 export function subscribeTerminalOutput(

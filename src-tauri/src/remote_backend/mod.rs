@@ -11,6 +11,7 @@ use tauri::AppHandle;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
+use crate::shared::restart_safe_sessions_core::RESTART_SAFE_SESSION_PROTOCOL_VERSION;
 use crate::state::AppState;
 use crate::types::BackendMode;
 
@@ -109,7 +110,7 @@ impl RemoteBackend {
 
 pub(crate) async fn is_remote_mode(state: &AppState) -> bool {
     let settings = state.app_settings.lock().await;
-    matches!(settings.backend_mode, BackendMode::Remote)
+    matches!(settings.backend_mode, BackendMode::Remote) || settings.restart_safe_sessions
 }
 
 pub(crate) async fn call_remote(
@@ -181,6 +182,13 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "read_agent_config_toml"
             | "read_workspace_file"
             | "resume_thread"
+            | "session/attach"
+            | "session/debug_status"
+            | "session/detach"
+            | "session/list"
+            | "session/pending_requests"
+            | "session/replay_events"
+            | "session/status"
             | "thread_live_subscribe"
             | "thread_live_unsubscribe"
             | "skills_list"
@@ -227,6 +235,26 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
     }
 
     {
+        let settings = state.app_settings.lock().await;
+        if settings.restart_safe_sessions {
+            let status = client.call("session/debug_status", json!({})).await?;
+            let protocol_version = status
+                .get("protocolVersion")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    "restart-safe daemon did not report a session protocol version".to_string()
+                })?;
+            if protocol_version != u64::from(RESTART_SAFE_SESSION_PROTOCOL_VERSION) {
+                return Err(format!(
+                    "restart-safe daemon session protocol mismatch: app requires {}, daemon reported {}. Let active sessions finish, then restart the daemon.",
+                    RESTART_SAFE_SESSION_PROTOCOL_VERSION,
+                    protocol_version
+                ));
+            }
+        }
+    }
+
+    {
         let mut guard = state.remote_backend.lock().await;
         *guard = Some(client.clone());
     }
@@ -237,6 +265,12 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
 fn resolve_transport_config(
     settings: &crate::types::AppSettings,
 ) -> Result<RemoteTransportConfig, String> {
+    if settings.restart_safe_sessions && !matches!(settings.backend_mode, BackendMode::Remote) {
+        return Ok(RemoteTransportConfig::Tcp {
+            host: DEFAULT_REMOTE_HOST.to_string(),
+            auth_token: settings.remote_backend_token.clone(),
+        });
+    }
     let host = if settings.remote_backend_host.trim().is_empty() {
         DEFAULT_REMOTE_HOST.to_string()
     } else {

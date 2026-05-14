@@ -135,6 +135,9 @@ pub(crate) async fn dispatch_incoming_line(
             "app-server-event" => {
                 let _ = app.emit("app-server-event", params);
             }
+            "restart-safe-session-event" => {
+                let _ = app.emit("restart-safe-session-event", params);
+            }
             "terminal-output" => {
                 let _ = app.emit("terminal-output", params);
             }

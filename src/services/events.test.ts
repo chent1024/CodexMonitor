@@ -7,8 +7,10 @@ import {
   subscribeMenuCycleCollaborationMode,
   subscribeMenuCycleModel,
   subscribeMenuNewAgent,
+  subscribeRestartSafeSessionEvents,
   subscribeTerminalOutput,
 } from "./events";
+import type { RestartSafeSessionEvent } from "./tauri";
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(),
@@ -87,6 +89,38 @@ describe("events subscriptions", () => {
     listener(event);
     expect(onEvent).toHaveBeenCalledTimes(1);
 
+    cleanup();
+  });
+
+  it("delivers restart-safe session event payloads", async () => {
+    let listener: EventCallback<RestartSafeSessionEvent> = () => {};
+    const unlisten = vi.fn();
+
+    vi.mocked(listen).mockImplementation((_event, handler) => {
+      listener = handler as EventCallback<RestartSafeSessionEvent>;
+      return Promise.resolve(unlisten);
+    });
+
+    const onEvent = vi.fn();
+    const cleanup = subscribeRestartSafeSessionEvents(onEvent);
+    const payload: RestartSafeSessionEvent = {
+      sessionId: "workspace:ws-1",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      eventSeq: 7,
+      timestampMs: 1_700_000_000,
+      eventKind: "session/attach",
+      payload: { method: "session/attach" },
+    };
+
+    listener({
+      event: "restart-safe-session-event",
+      id: 1,
+      payload,
+    });
+
+    expect(onEvent).toHaveBeenCalledWith(payload);
     cleanup();
   });
 

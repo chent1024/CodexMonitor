@@ -18,7 +18,7 @@ use crate::daemon_binary::resolve_daemon_binary_path;
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
 use crate::state::{AppState, TcpDaemonRuntime};
 use crate::types::{
-    TailscaleDaemonCommandPreview, TailscaleStatus, TcpDaemonState, TcpDaemonStatus,
+    BackendMode, TailscaleDaemonCommandPreview, TailscaleStatus, TcpDaemonState, TcpDaemonStatus,
 };
 
 use self::core as tailscale_core;

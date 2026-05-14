@@ -46,11 +46,8 @@ static EXIT_CLEANUP_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 fn keep_daemon_running_after_close(app_handle: &tauri::AppHandle) -> bool {
     let state = app_handle.state::<state::AppState>();
     tauri::async_runtime::block_on(async {
-        state
-            .app_settings
-            .lock()
-            .await
-            .keep_daemon_running_after_app_close
+        let settings = state.app_settings.lock().await;
+        settings.keep_daemon_running_after_app_close || settings.restart_safe_sessions
     })
 }
 
@@ -138,8 +135,10 @@ pub fn run() {
                         settings.remote_backend_provider,
                         crate::types::RemoteBackendProvider::Tcp
                     ) {
-                        if matches!(settings.backend_mode, crate::types::BackendMode::Remote) {
-                            // Remote mode: ensure daemon is up and version-current.
+                        if matches!(settings.backend_mode, crate::types::BackendMode::Remote)
+                            || settings.restart_safe_sessions
+                        {
+                            // Remote and restart-safe session modes require a daemon client path.
                             let state = app_handle.state::<state::AppState>();
                             let _ = tailscale::tailscale_daemon_start(state).await;
                         } else {
@@ -187,6 +186,16 @@ pub fn run() {
             files::read_image_as_data_url,
             files::write_text_file,
             codex::get_config_model,
+            codex::session_list,
+            codex::session_status,
+            codex::session_attach,
+            codex::session_detach,
+            codex::session_replay_events,
+            codex::session_pending_requests,
+            codex::session_respond_request,
+            codex::session_interrupt,
+            codex::session_stop,
+            codex::session_debug_status,
             menu::menu_set_accelerators,
             tray::set_tray_recent_threads,
             tray::set_tray_session_usage,

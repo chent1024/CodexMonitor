@@ -948,6 +948,184 @@ pub(crate) async fn get_config_model(
     codex_core::get_config_model_core(&state.workspaces, workspace_id).await
 }
 
+#[tauri::command]
+pub(crate) async fn session_list(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(&*state, app, "session/list", json!({})).await;
+    }
+    Ok(json!([]))
+}
+
+#[tauri::command]
+pub(crate) async fn session_status(
+    session_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "session/status",
+            json!({ "sessionId": session_id }),
+        )
+        .await;
+    }
+    Err("restart-safe sessions are not enabled".to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn session_attach(
+    session_id: String,
+    from_seq: Option<u64>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "session/attach",
+            json!({ "sessionId": session_id, "fromSeq": from_seq.unwrap_or(0) }),
+        )
+        .await;
+    }
+    Err("restart-safe sessions are not enabled".to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn session_detach(
+    session_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "session/detach",
+            json!({ "sessionId": session_id }),
+        )
+        .await;
+    }
+    Err("restart-safe sessions are not enabled".to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn session_replay_events(
+    session_id: String,
+    from_seq: Option<u64>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "session/replay_events",
+            json!({ "sessionId": session_id, "fromSeq": from_seq.unwrap_or(0) }),
+        )
+        .await;
+    }
+    Err("restart-safe sessions are not enabled".to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn session_pending_requests(
+    session_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "session/pending_requests",
+            json!({ "sessionId": session_id }),
+        )
+        .await;
+    }
+    Ok(json!([]))
+}
+
+#[tauri::command]
+pub(crate) async fn session_respond_request(
+    session_id: String,
+    request_id: Value,
+    result: Value,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "session/respond_request",
+            json!({ "sessionId": session_id, "requestId": request_id, "result": result }),
+        )
+        .await;
+    }
+    Err("restart-safe sessions are not enabled".to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn session_interrupt(
+    session_id: String,
+    thread_id: String,
+    turn_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "session/interrupt",
+            json!({ "sessionId": session_id, "threadId": thread_id, "turnId": turn_id }),
+        )
+        .await;
+    }
+    Err("restart-safe sessions are not enabled".to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn session_stop(
+    session_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "session/stop",
+            json!({ "sessionId": session_id }),
+        )
+        .await;
+    }
+    Err("restart-safe sessions are not enabled".to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn session_debug_status(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(&*state, app, "session/debug_status", json!({})).await;
+    }
+    Ok(json!({
+        "protocolVersion": 1,
+        "sessionCount": 0,
+        "journalEventCount": 0,
+        "pendingRequestCount": 0,
+        "attachedClientCount": 0,
+    }))
+}
+
 /// Generates a commit message in the background without showing in the main chat
 #[tauri::command]
 pub(crate) async fn generate_commit_message(

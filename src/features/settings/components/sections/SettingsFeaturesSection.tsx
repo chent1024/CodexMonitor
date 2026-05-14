@@ -79,6 +79,20 @@ function featureSubtitle(feature: CodexFeature): string {
   return `功能键：features.${feature.name}`;
 }
 
+function formatRestartSafeSessionStatus(
+  status: SettingsFeaturesSectionProps["restartSafeSessionStatus"],
+): string {
+  if (!status) {
+    return "Status unavailable until the daemon is reachable.";
+  }
+  return [
+    `${status.activeSessionCount} active`,
+    `${status.pendingRequestCount} pending`,
+    `${status.journalEventCount} journaled`,
+    status.idleShutdownAllowed ? "idle shutdown allowed" : "daemon retained",
+  ].join(" · ");
+}
+
 export function SettingsFeaturesSection({
   appSettings,
   hasFeatureWorkspace,
@@ -93,8 +107,12 @@ export function SettingsFeaturesSection({
   localMemoryLoading,
   localMemoryUpdating,
   localMemoryError,
+  restartSafeSessionStatus,
+  restartSafeSessionLoading,
+  restartSafeSessionError,
   onOpenConfig,
   onToggleLocalMemory,
+  onRefreshRestartSafeSessionStatus,
   onToggleCodexFeature,
   onUpdateAppSettings,
 }: SettingsFeaturesSectionProps) {
@@ -135,6 +153,50 @@ export function SettingsFeaturesSection({
         />
       </SettingsToggleRow>
       {localMemoryError && <div className="settings-help">{localMemoryError}</div>}
+      <SettingsToggleRow
+        title="Restart-safe sessions"
+        subtitle={
+          <>
+            Keep new Codex sessions owned by the daemon so active turns can survive a UI restart.
+            {appSettings.restartSafeSessions ? (
+              <>
+                <br />
+                {restartSafeSessionLoading
+                  ? "Loading session status..."
+                  : formatRestartSafeSessionStatus(restartSafeSessionStatus)}
+              </>
+            ) : null}
+          </>
+        }
+      >
+        <div className="settings-inline-actions">
+          {appSettings.restartSafeSessions ? (
+            <button
+              type="button"
+              className="ghost"
+              onClick={onRefreshRestartSafeSessionStatus}
+              disabled={restartSafeSessionLoading}
+            >
+              {restartSafeSessionLoading ? "Refreshing..." : "Refresh"}
+            </button>
+          ) : null}
+          <SettingsToggleSwitch
+            pressed={appSettings.restartSafeSessions}
+            onClick={() =>
+              void onUpdateAppSettings({
+                ...appSettings,
+                restartSafeSessions: !appSettings.restartSafeSessions,
+                keepDaemonRunningAfterAppClose:
+                  !appSettings.restartSafeSessions ||
+                  appSettings.keepDaemonRunningAfterAppClose,
+              })
+            }
+          />
+        </div>
+      </SettingsToggleRow>
+      {restartSafeSessionError && (
+        <div className="settings-help">{restartSafeSessionError}</div>
+      )}
       <SettingsSubsection
         title="稳定功能"
         subtitle="默认启用、可用于生产的功能。"

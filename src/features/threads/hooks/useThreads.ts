@@ -25,10 +25,17 @@ import { useThreadUserInput } from "./useThreadUserInput";
 import { useThreadTitleAutogeneration } from "./useThreadTitleAutogeneration";
 import { useDetachedReviewTracking } from "./useDetachedReviewTracking";
 import {
+  attachRestartSafeSession,
   archiveThread as archiveThreadService,
+  detachRestartSafeSession,
+  listRestartSafeSessions,
   readThread as readThreadService,
   setThreadName as setThreadNameService,
 } from "@services/tauri";
+import {
+  dispatchReplayedAppServerEvent,
+  subscribeRestartSafeSessionEvents,
+} from "@services/events";
 import {
   makeCustomNameKey,
   saveCustomName,
@@ -61,6 +68,7 @@ type UseThreadsOptions = {
   customPrompts?: CustomPromptOption[];
   onMessageActivity?: () => void;
   threadSortKey?: ThreadListSortKey;
+  restartSafeSessions?: boolean;
   onThreadCodexMetadataDetected?: (
     workspaceId: string,
     threadId: string,
@@ -73,6 +81,42 @@ function buildWorkspaceThreadKey(workspaceId: string, threadId: string) {
 }
 
 const CASCADE_ARCHIVE_SKIP_TTL_MS = 120_000;
+const RESTART_SAFE_LAST_SEQ_STORAGE_KEY = "codex.restartSafeSessionLastSeq.v1";
+
+function readRestartSafeLastSeq(sessionId: string): number {
+  try {
+    const raw = window.localStorage.getItem(RESTART_SAFE_LAST_SEQ_STORAGE_KEY);
+    if (!raw) {
+      return 0;
+    }
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const value = parsed[sessionId];
+    return typeof value === "number" && Number.isFinite(value)
+      ? Math.max(0, Math.floor(value))
+      : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeRestartSafeLastSeq(sessionId: string, seq: number): void {
+  try {
+    const raw = window.localStorage.getItem(RESTART_SAFE_LAST_SEQ_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    const current = parsed[sessionId];
+    const currentSeq =
+      typeof current === "number" && Number.isFinite(current) ? current : 0;
+    if (seq <= currentSeq) {
+      return;
+    }
+    window.localStorage.setItem(
+      RESTART_SAFE_LAST_SEQ_STORAGE_KEY,
+      JSON.stringify({ ...parsed, [sessionId]: seq }),
+    );
+  } catch {
+    // Ignore storage failures; replay can still fall back to fromSeq=0.
+  }
+}
 
 export function useThreads({
   activeWorkspace,
@@ -92,6 +136,7 @@ export function useThreads({
   customPrompts = [],
   onMessageActivity,
   threadSortKey = "updated_at",
+  restartSafeSessions = false,
   onThreadCodexMetadataDetected,
 }: UseThreadsOptions) {
   const maxItemsPerThread =
@@ -626,6 +671,123 @@ export function useThreads({
     onSubagentThreadDetected,
     onThreadCodexMetadataDetected,
   });
+
+  useEffect(() => {
+    if (!restartSafeSessions) {
+      return;
+    }
+    return subscribeRestartSafeSessionEvents((event) => {
+      writeRestartSafeLastSeq(event.sessionId, event.eventSeq);
+      if (event.eventKind.startsWith("session/")) {
+        onDebug?.({
+          id: `${Date.now()}-restart-safe-session-event-${event.eventSeq}`,
+          timestamp: Date.now(),
+          source: "event",
+          label: `restart-safe ${event.eventKind}`,
+          payload: event,
+        });
+      }
+    });
+  }, [onDebug, restartSafeSessions]);
+
+  useEffect(() => {
+    if (!restartSafeSessions) {
+      return;
+    }
+    let canceled = false;
+    const attachedSessionIds = new Set<string>();
+    void (async () => {
+      try {
+        const sessions = await listRestartSafeSessions();
+        for (const session of sessions) {
+          if (canceled || session.lifecycle === "stopped") {
+            continue;
+          }
+          const shouldAttach =
+            session.workspaceId === activeWorkspaceId ||
+            session.lifecycle === "live" ||
+            session.pendingRequestCount > 0;
+          if (!shouldAttach) {
+            continue;
+          }
+          const fromSeq = readRestartSafeLastSeq(session.sessionId);
+          const attached = await attachRestartSafeSession(session.sessionId, fromSeq);
+          if (canceled) {
+            void detachRestartSafeSession(session.sessionId);
+            return;
+          }
+          attachedSessionIds.add(session.sessionId);
+          if (attached.replay.latestSeq > fromSeq) {
+            writeRestartSafeLastSeq(session.sessionId, attached.replay.latestSeq);
+          }
+          for (const event of attached.replay.events) {
+            dispatchReplayedAppServerEvent({
+              workspace_id: event.workspaceId,
+              message: event.payload,
+            });
+          }
+          for (const request of attached.pendingRequests) {
+            dispatchReplayedAppServerEvent({
+              workspace_id: request.workspaceId,
+              message: request.payload,
+            });
+          }
+          if (
+            attached.replay.retentionGap &&
+            activeWorkspace &&
+            activeWorkspace.id === session.workspaceId
+          ) {
+            await listThreadsForWorkspace(activeWorkspace, {
+              preserveState: true,
+              maxPages: 1,
+            });
+          }
+          onDebug?.({
+            id: `${Date.now()}-restart-safe-session-attached`,
+            timestamp: Date.now(),
+            source: attached.replay.retentionGap ? "error" : "event",
+            label: attached.replay.retentionGap
+              ? "restart-safe replay retention gap"
+              : "restart-safe attached",
+            payload: {
+              sessionId: session.sessionId,
+              workspaceId: session.workspaceId,
+              fromSeq,
+              latestSeq: attached.replay.latestSeq,
+              replayedEvents: attached.replay.events.length,
+              pendingRequests: attached.pendingRequests.length,
+              retentionGap: attached.replay.retentionGap,
+            },
+          });
+        }
+      } catch (error) {
+        onDebug?.({
+          id: `${Date.now()}-restart-safe-reconnect-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "restart-safe reconnect",
+          payload: {
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unable to reconnect restart-safe sessions.",
+          },
+        });
+      }
+    })();
+    return () => {
+      canceled = true;
+      for (const sessionId of attachedSessionIds) {
+        void detachRestartSafeSession(sessionId);
+      }
+    };
+  }, [
+    activeWorkspace,
+    activeWorkspaceId,
+    listThreadsForWorkspace,
+    onDebug,
+    restartSafeSessions,
+  ]);
 
   const ensureWorkspaceRuntimeCodexArgsBestEffort = useCallback(
     async (workspaceId: string, threadId: string | null, phase: string) => {
