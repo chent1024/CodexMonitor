@@ -6,7 +6,7 @@ import {
   buildItemForDisplay,
   handleConvertedItemEffects,
 } from "./threadItemEventHelpers";
-import type { ThreadAction } from "./useThreadsReducer";
+import type { StreamDeltaAction, ThreadAction } from "./useThreadsReducer";
 
 type UseThreadItemEventsOptions = {
   activeThreadId: string | null;
@@ -133,6 +133,24 @@ export function useThreadItemEvents({
       }
 
       const pendingEntries = Array.from(pendingStreamDeltasRef.current.entries());
+      const streamDeltas: StreamDeltaAction[] = [];
+      const ensuredThreadKeys = new Set<string>();
+      const processingThreadIds = new Set<string>();
+      const ensureThreadOnce = (workspaceId: string, threadId: string) => {
+        const key = `${workspaceId}:${threadId}`;
+        if (ensuredThreadKeys.has(key)) {
+          return;
+        }
+        ensuredThreadKeys.add(key);
+        dispatch({ type: "ensureThread", workspaceId, threadId });
+      };
+      const markProcessingOnce = (threadId: string) => {
+        if (processingThreadIds.has(threadId)) {
+          return;
+        }
+        processingThreadIds.add(threadId);
+        markProcessing(threadId, true);
+      };
       for (const [key, pending] of pendingEntries) {
         if (shouldFlush && !shouldFlush(pending)) {
           continue;
@@ -141,13 +159,9 @@ export function useThreadItemEvents({
         pendingStreamDeltasRef.current.delete(key);
         switch (pending.kind) {
           case "agent":
-            dispatch({
-              type: "ensureThread",
-              workspaceId: pending.workspaceId,
-              threadId: pending.threadId,
-            });
-            markProcessing(pending.threadId, true);
-            dispatch({
+            ensureThreadOnce(pending.workspaceId, pending.threadId);
+            markProcessingOnce(pending.threadId);
+            streamDeltas.push({
               type: "appendAgentDelta",
               workspaceId: pending.workspaceId,
               threadId: pending.threadId,
@@ -157,8 +171,8 @@ export function useThreadItemEvents({
             });
             break;
           case "toolOutput":
-            markProcessing(pending.threadId, true);
-            dispatch({
+            markProcessingOnce(pending.threadId);
+            streamDeltas.push({
               type: "appendToolOutput",
               threadId: pending.threadId,
               itemId: pending.itemId,
@@ -167,7 +181,7 @@ export function useThreadItemEvents({
             safeMessageActivity();
             break;
           case "reasoningSummary":
-            dispatch({
+            streamDeltas.push({
               type: "appendReasoningSummary",
               threadId: pending.threadId,
               itemId: pending.itemId,
@@ -175,7 +189,7 @@ export function useThreadItemEvents({
             });
             break;
           case "reasoningContent":
-            dispatch({
+            streamDeltas.push({
               type: "appendReasoningContent",
               threadId: pending.threadId,
               itemId: pending.itemId,
@@ -183,7 +197,7 @@ export function useThreadItemEvents({
             });
             break;
           case "plan":
-            dispatch({
+            streamDeltas.push({
               type: "appendPlanDelta",
               threadId: pending.threadId,
               itemId: pending.itemId,
@@ -191,6 +205,10 @@ export function useThreadItemEvents({
             });
             break;
         }
+      }
+
+      if (streamDeltas.length > 0) {
+        dispatch({ type: "appendStreamDeltasBatch", deltas: streamDeltas });
       }
 
       if (

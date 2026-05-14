@@ -229,23 +229,6 @@ export function useThreadEventHandlers({
     [pushThreadErrorMessage, safeMessageActivity],
   );
 
-  const onWorkspaceStderr = useCallback(
-    (_workspaceId: string, message: string) => {
-      const threadId = activeThreadId;
-      if (!threadId || !message.trim()) {
-        return;
-      }
-      pushThreadErrorMessage(threadId, `Codex stderr: ${message}`, {
-        itemType: "system-error",
-        title: "Codex stderr",
-        detail: "stderr",
-        status: "failed",
-      });
-      safeMessageActivity();
-    },
-    [activeThreadId, pushThreadErrorMessage, safeMessageActivity],
-  );
-
   const onServerRequestResolved = useCallback(
     (workspaceId: string, requestId: string | number) => {
       dispatch({ type: "removeApproval", workspaceId, requestId });
@@ -278,7 +261,6 @@ export function useThreadEventHandlers({
       onHookCompleted,
       onBackgroundThreadAction,
       onThreadStreamError,
-      onWorkspaceStderr,
       onServerRequestResolved,
       onAppServerEvent,
       onAgentMessageDelta,
@@ -314,7 +296,6 @@ export function useThreadEventHandlers({
       onHookCompleted,
       onBackgroundThreadAction,
       onThreadStreamError,
-      onWorkspaceStderr,
       onServerRequestResolved,
       onAppServerEvent,
       onAgentMessageDelta,

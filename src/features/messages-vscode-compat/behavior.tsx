@@ -3,6 +3,7 @@ import type { ConversationItem } from "../../types";
 import type {
   AssistantTurn,
   AssistantTurnActivityBlock,
+  AssistantTurnBlock,
   ToolGroupItem,
 } from "../messages/utils/messageRenderUtils";
 
@@ -35,12 +36,14 @@ export function getTurnCollapseState({
   hasFinalAssistantStarted,
   isTurnCancelled,
   hasRenderableAgentItems,
+  hasAutoCollapseSignal,
   preventAutoCollapse,
   persistedCollapsed,
 }: {
   hasFinalAssistantStarted: boolean;
   isTurnCancelled: boolean;
   hasRenderableAgentItems: boolean;
+  hasAutoCollapseSignal: boolean;
   preventAutoCollapse: boolean;
   persistedCollapsed?: boolean;
 }) {
@@ -49,7 +52,7 @@ export function getTurnCollapseState({
   }
   return {
     shouldAllowCollapse: true,
-    isCollapsed: persistedCollapsed ?? !preventAutoCollapse,
+    isCollapsed: persistedCollapsed ?? (hasAutoCollapseSignal && !preventAutoCollapse),
   };
 }
 
@@ -99,11 +102,11 @@ export function splitActivityItemsLikeOpenAI(items: ToolGroupItem[]) {
 
 export function splitAssistantTurnBlocksLikeOpenAI(turn: AssistantTurn) {
   let workedForItem: ToolGroupItem | null = null;
-  const blocks: AssistantTurn["blocks"] = [];
+  const expandedBlocks: AssistantTurn["blocks"] = [];
 
   for (const block of turn.blocks) {
     if (block.kind !== "activity") {
-      blocks.push(block);
+      expandedBlocks.push(block);
       continue;
     }
     const split = splitActivityItemsLikeOpenAI(block.items);
@@ -111,7 +114,7 @@ export function splitAssistantTurnBlocksLikeOpenAI(turn: AssistantTurn) {
     if (split.collapsibleEntries.length === 0) {
       continue;
     }
-    blocks.push({
+    expandedBlocks.push({
       ...block,
       items: split.collapsibleEntries,
       toolCount: countToolCalls(split.collapsibleEntries),
@@ -120,22 +123,74 @@ export function splitAssistantTurnBlocksLikeOpenAI(turn: AssistantTurn) {
     } satisfies AssistantTurnActivityBlock);
   }
 
+  const finalAssistantBlockIndex = findFinalAssistantBlockIndex(expandedBlocks);
+  const persistentBlocks = expandedBlocks.filter((block, index) =>
+    index === finalAssistantBlockIndex || isPersistentTurnBlock(block),
+  );
+  const collapsibleBlocks = expandedBlocks.filter(
+    (block) =>
+      !persistentBlocks.includes(block),
+  );
+  const expandedTurn = withSummarizedBlocks(turn, expandedBlocks);
+  const collapsedTurn = withSummarizedBlocks(turn, persistentBlocks);
+
   return {
-    turn: {
-      ...turn,
-      blocks,
-      toolCount: blocks.reduce(
-        (total, block) => total + (block.kind === "activity" ? block.toolCount : 0),
-        0,
-      ),
-      messageCount: blocks.reduce(
-        (total, block) => total + (block.kind === "activity" ? block.messageCount : 0),
-        0,
-      ),
-      durationMs: sumDurationFromBlocks(blocks),
-    },
+    turn: expandedTurn,
+    collapsedTurn,
+    collapsibleBlocks,
+    persistentBlocks,
+    collapsedMessageCount: countCollapsedMessages(collapsibleBlocks),
+    hasFinalAssistantBlock: finalAssistantBlockIndex >= 0,
     workedForItem,
   };
+}
+
+function findFinalAssistantBlockIndex(blocks: AssistantTurnBlock[]) {
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (
+      block.kind === "message" &&
+      block.message.role === "assistant" &&
+      block.message.text.trim().length > 0
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function isPersistentTurnBlock(block: AssistantTurnBlock) {
+  return (
+    block.kind === "message" &&
+    block.message.role === "user" &&
+    block.message.itemType === "user-message" &&
+    block.message.steeringStatus != null
+  );
+}
+
+function withSummarizedBlocks(turn: AssistantTurn, blocks: AssistantTurnBlock[]): AssistantTurn {
+  return {
+    ...turn,
+    blocks,
+    toolCount: blocks.reduce(
+      (total, block) => total + (block.kind === "activity" ? block.toolCount : 0),
+      0,
+    ),
+    messageCount: blocks.reduce(
+      (total, block) => total + (block.kind === "activity" ? block.messageCount : 0),
+      0,
+    ),
+    durationMs: sumDurationFromBlocks(blocks),
+  };
+}
+
+function countCollapsedMessages(blocks: AssistantTurnBlock[]) {
+  return blocks.reduce((total, block) => {
+    if (block.kind === "activity") {
+      return total + block.items.length;
+    }
+    return total + 1;
+  }, 0);
 }
 
 function countToolCalls(items: ToolGroupItem[]) {
@@ -184,7 +239,7 @@ export function getTurnCollapseSummary({
   workedForTitle?: string | null;
 }) {
   if (workedDurationMs && workedDurationMs > 0) {
-    return `处理了 ${formatCompactDuration(workedDurationMs)}`;
+    return `已处理 ${formatCompactDuration(workedDurationMs)}`;
   }
   if (workedForTitle?.trim()) {
     return workedForTitle.trim();
@@ -202,13 +257,18 @@ function formatCompactDuration(durationMs: number) {
   return remainingSeconds > 0 ? `${minutes} 分 ${remainingSeconds} 秒` : `${minutes} 分`;
 }
 
-export function getAssistantTurnCollapseInput(turn: AssistantTurn, _isMostRecentTurn: boolean) {
+export function getAssistantTurnCollapseInput(
+  turn: AssistantTurn,
+  isMostRecentTurn: boolean,
+  isThinking = false,
+) {
   const activityItems = turn.blocks.flatMap((block) =>
     block.kind === "activity" ? block.items : [],
   );
   const hasFinalAssistantStarted = turn.blocks.some(
     (block) =>
       block.kind === "message" &&
+      block.message.role === "assistant" &&
       block.message.text.trim().length > 0,
   );
   const isTurnCancelled = activityItems.some((item) => {
@@ -218,15 +278,22 @@ export function getAssistantTurnCollapseInput(turn: AssistantTurn, _isMostRecent
     const status = (item.status ?? "").toLowerCase();
     return status.includes("cancel") || status.includes("interrupt");
   });
-  const preventAutoCollapse = true;
+  const hasLiveActivityItems = activityItems.some((item) => {
+    const status = "status" in item && typeof item.status === "string" ? item.status : "";
+    return /pending|running|processing|started|in[_\s-]*progress/.test(status.toLowerCase());
+  });
+  const preventAutoCollapse = (isMostRecentTurn && isThinking) || hasLiveActivityItems;
 
   return {
     hasFinalAssistantStarted,
     isTurnCancelled,
     hasRenderableAgentItems: activityItems.length > 0,
+    hasAutoCollapseSignal:
+      typeof turn.durationMs === "number" && Number.isFinite(turn.durationMs) && turn.durationMs > 0,
     preventAutoCollapse,
   };
 }
+
 
 export function useStagedMount(isExpanded: boolean, onEntered?: () => void) {
   const [isMounted, setIsMounted] = useState(isExpanded);

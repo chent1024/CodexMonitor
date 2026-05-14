@@ -57,7 +57,6 @@ describe("useAppServerEvents", () => {
       onThreadUnarchived: vi.fn(),
       onBackgroundThreadAction: vi.fn(),
       onThreadStreamError: vi.fn(),
-      onWorkspaceStderr: vi.fn(),
       onAgentMessageDelta: vi.fn(),
       onReasoningSummaryBoundary: vi.fn(),
       onPlanDelta: vi.fn(),
@@ -80,16 +79,19 @@ describe("useAppServerEvents", () => {
     });
     expect(handlers.onWorkspaceConnected).toHaveBeenCalledWith("ws-1");
 
+    const stderrEvent: AppServerEvent = {
+      workspace_id: "ws-1",
+      message: {
+        method: "codex/stderr",
+        params: { message: "reconnect failed" },
+      },
+    };
     act(() => {
       listener?.({
-        workspace_id: "ws-1",
-        message: {
-          method: "codex/stderr",
-          params: { message: "reconnect failed" },
-        },
+        ...stderrEvent,
       });
     });
-    expect(handlers.onWorkspaceStderr).toHaveBeenCalledWith("ws-1", "reconnect failed");
+    expect(handlers.onAppServerEvent).toHaveBeenCalledWith(stderrEvent);
 
     act(() => {
       listener?.({

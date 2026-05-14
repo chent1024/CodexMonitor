@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
@@ -18,6 +18,7 @@ import {
   formatCount,
   type AssistantTurn,
   type AssistantTurnActivityBlock,
+  type ToolGroupItem,
 } from "../messages/utils/messageRenderUtils";
 import {
   FileChangeSummaryCard,
@@ -45,6 +46,7 @@ import {
   getActivityBlockKind,
   getOpenAIActivityItemTypes,
   groupActivityItemsLikeOpenAI,
+  isCodexStderrTranscriptItem,
   type VscodeRenderedEntry,
 } from "./viewModel";
 
@@ -100,6 +102,46 @@ function isFileContentItem(item: ConversationItem) {
 
 function getDefaultExpandedState(isMarked: boolean, defaultExpanded: boolean) {
   return defaultExpanded ? !isMarked : isMarked;
+}
+
+function isLiveActivityItem(item: ConversationItem) {
+  if (item.kind !== "tool") {
+    return false;
+  }
+  const isRunOrEditActivity =
+    item.toolType === "commandExecution" ||
+    item.toolType === "fileChange" ||
+    item.itemType === "exec" ||
+    item.itemType === "patch";
+  if (!isRunOrEditActivity) {
+    return false;
+  }
+  const status = (item.status ?? "").toLowerCase();
+  return /pending|running|processing|started|in[_\s-]*progress/.test(status);
+}
+
+function hasLiveActivityItems(items: ToolGroupItem[]) {
+  return items.some(isLiveActivityItem);
+}
+
+function useWorkingElapsedMs(isWorking: boolean, startedAtMs?: number | null) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!isWorking || typeof startedAtMs !== "number") {
+      return undefined;
+    }
+    setNowMs(Date.now());
+    const interval = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [isWorking, startedAtMs]);
+
+  if (!isWorking || typeof startedAtMs !== "number") {
+    return null;
+  }
+  return Math.max(nowMs - startedAtMs, 0);
 }
 
 const TURN_VIRTUALIZATION_THRESHOLD = 80;
@@ -195,6 +237,7 @@ export const Messages = memo(function Messages({
     openTargets,
     selectedOpenAppId,
   );
+  const workingElapsedMs = useWorkingElapsedMs(isThinking, processingStartedAt);
   const [selectedTurnById, setSelectedTurnById] = useState<Record<string, number>>({});
   const [collapsedTurns, setCollapsedTurns] = useState<Record<string, boolean | undefined>>({});
   const handleOpenThreadLink = useCallback(
@@ -205,6 +248,10 @@ export const Messages = memo(function Messages({
   );
   const hasActiveUserInputRequest = activeUserInputRequestId !== null;
   const hasVisibleUserInputRequest = hasActiveUserInputRequest && Boolean(onUserInputSubmit);
+  const transcriptItems = useMemo(
+    () => items.filter((item) => !isCodexStderrTranscriptItem(item)),
+    [items],
+  );
   const userInputNode =
     hasActiveUserInputRequest && onUserInputSubmit ? (
       <RequestUserInputMessage
@@ -231,7 +278,7 @@ export const Messages = memo(function Messages({
     planFollowup,
     dismissPlanFollowup,
   } = useMessagesViewState({
-    items,
+    items: transcriptItems,
     threadId,
     isThinking,
     activeUserInputRequestId,
@@ -347,7 +394,11 @@ export const Messages = memo(function Messages({
       isActivitySliceClosed: !turnActivityExpanded,
     });
     return groups.map((group) => {
-      const isExpanded = getDefaultExpandedState(expandedItems.has(group.id), false);
+      const defaultExpanded = hasLiveActivityItems(group.items);
+      const isExpanded = getDefaultExpandedState(
+        expandedItems.has(group.id),
+        defaultExpanded,
+      );
       const activityBodyId = `assistant-turn-activity-body-${group.id}`;
       const groupBlock: AssistantTurnActivityBlock = {
         kind: "activity",
@@ -361,6 +412,18 @@ export const Messages = memo(function Messages({
       const ActivityIcon = activityBlockHasFileChange(groupBlock) ? Pencil : SquareTerminal;
       const activityKind = group.kind;
       const openAIItemTypes = getOpenAIActivityItemTypes(group.items);
+      if (activityKind === "context-compaction") {
+        return (
+          <div
+            key={group.id}
+            className="oai-context-compaction-slot"
+            data-context-compaction-slot
+            data-openai-activity-item-types={openAIItemTypes.join(" ")}
+          >
+            {group.items.map((item) => renderItem(item))}
+          </div>
+        );
+      }
       return (
         <div
           key={group.id}
@@ -398,6 +461,13 @@ export const Messages = memo(function Messages({
                     data-openai-activity-item-type={itemType}
                   />
                 ))}
+                <span
+                  className={`oai-tool-activity-chevron${isExpanded ? " is-expanded" : ""}`}
+                  data-oai-tool-activity-chevron
+                  aria-hidden
+                >
+                  <ChevronRight size={12} />
+                </span>
               </button>
               <AnimatedDisclosureBody
                 isExpanded={isExpanded}
@@ -565,6 +635,7 @@ export const Messages = memo(function Messages({
   const renderAssistantTurn = (turn: AssistantTurn, isMostRecentTurn: boolean) => {
     const assistantTurnSplit = splitAssistantTurnBlocksLikeOpenAI(turn);
     const visibleTurn = assistantTurnSplit.turn;
+    const collapsedVisibleTurn = assistantTurnSplit.collapsedTurn;
     const workedForItem = assistantTurnSplit.workedForItem;
     const activityBlocks = visibleTurn.blocks.filter(
       (block): block is AssistantTurnActivityBlock => block.kind === "activity",
@@ -584,15 +655,20 @@ export const Messages = memo(function Messages({
     const hasActivity = activityBlocks.length > 0;
     const turnActivityItems = activityBlocks.flatMap((block) => block.items);
     const turnOpenAIItemTypes = getOpenAIActivityItemTypes(turnActivityItems);
-    const turnCollapseInput = getAssistantTurnCollapseInput(visibleTurn, isMostRecentTurn);
+    const turnCollapseInput = getAssistantTurnCollapseInput(turn, isMostRecentTurn, isThinking);
     const turnCollapse = getTurnCollapseState({
       ...turnCollapseInput,
       persistedCollapsed: collapsedTurns[turn.id],
     });
     const isTurnCollapsed = turnCollapse.shouldAllowCollapse && turnCollapse.isCollapsed;
+    const renderedTurn = isTurnCollapsed ? collapsedVisibleTurn : visibleTurn;
+    const showTurnCollapseToggle =
+      turnCollapse.shouldAllowCollapse && assistantTurnSplit.collapsibleBlocks.length > 0;
+    const summaryDurationMs =
+      isMostRecentTurn && workingElapsedMs != null ? workingElapsedMs : turn.durationMs;
     const collapseSummary = getTurnCollapseSummary({
-      collapsedMessageCount: activityBlocks.reduce((total, block) => total + block.items.length, 0),
-      workedDurationMs: turn.durationMs,
+      collapsedMessageCount: assistantTurnSplit.collapsedMessageCount,
+      workedDurationMs: summaryDurationMs,
       workedForTitle: workedForItem?.kind === "tool" ? workedForItem.title : null,
     });
 
@@ -607,14 +683,14 @@ export const Messages = memo(function Messages({
         data-turn-worked-for-item-id={workedForItem?.id}
         data-turn-persistent-entry-count={String(persistentMessageCount)}
       >
-        {isTurnCollapsed ? (
+        {showTurnCollapseToggle ? (
           <div
             className="text-size-chat text-token-text-secondary oai-turn-collapse-summary-shell"
             data-turn-collapse-summary-shell
           >
             <button
               type="button"
-              className="text-size-chat hover:bg-token-bg-subtle inline-flex items-center gap-1 rounded-md border border-transparent focus-visible:ring-2 focus-visible:ring-token-focus-border focus-visible:outline-none oai-turn-collapse-summary"
+              className="text-size-chat inline-flex items-center gap-1 rounded-md border border-transparent focus-visible:ring-2 focus-visible:ring-token-focus-border focus-visible:outline-none oai-turn-collapse-summary"
               data-turn-collapse-summary
               data-collapsed-tool-activity-summary={isTurnCollapsed ? "true" : undefined}
               data-oai-inline-group={isTurnCollapsed ? "true" : undefined}
@@ -623,7 +699,7 @@ export const Messages = memo(function Messages({
               onClick={() =>
                 setCollapsedTurns((current) => ({
                   ...current,
-                  [turn.id]: !isTurnCollapsed,
+                  [turn.id]: isTurnCollapsed ? false : true,
                 }))
               }
             >
@@ -654,7 +730,7 @@ export const Messages = memo(function Messages({
             style={{ height: "var(--conversation-tool-assistant-gap, 8px)" }}
           />
         )}
-        {renderAssistantTurnBody(visibleTurn, hasActivity, isActivityExpanded, isTurnCollapsed)}
+        {renderAssistantTurnBody(renderedTurn, hasActivity, isActivityExpanded, isTurnCollapsed)}
         <div
           className="flex w-full min-w-0 flex-col gap-0 oai-assistant-turn-footer"
           data-assistant-turn-footer
@@ -674,7 +750,8 @@ export const Messages = memo(function Messages({
     }
     if (entry.kind === "toolGroup") {
       const { group } = entry;
-      const isCollapsed = !collapsedToolGroups.has(group.id);
+      const defaultExpanded = hasLiveActivityItems(group.items);
+      const isCollapsed = !defaultExpanded && !collapsedToolGroups.has(group.id);
       const groupKind = getActivityBlockKind({
         kind: "activity",
         id: group.id,
@@ -776,8 +853,11 @@ export const Messages = memo(function Messages({
       const agentTurnCollapse =
         assistantTurnEntry?.entry.kind === "assistantTurn"
           ? (() => {
-              const split = splitAssistantTurnBlocksLikeOpenAI(assistantTurnEntry.entry.turn);
-              const collapseInput = getAssistantTurnCollapseInput(split.turn, isMostRecentTurn);
+              const collapseInput = getAssistantTurnCollapseInput(
+                assistantTurnEntry.entry.turn,
+                isMostRecentTurn,
+                isThinking,
+              );
               const collapse = getTurnCollapseState({
                 ...collapseInput,
                 persistedCollapsed: collapsedTurns[assistantTurnEntry.entry.turn.id],
@@ -916,7 +996,7 @@ export const Messages = memo(function Messages({
     }
     const isExpanded = getDefaultExpandedState(
       expandedItems.has(item.id),
-      defaultExpanded,
+      defaultExpanded || isLiveActivityItem(item),
     );
     return (
       <ActivityItemRow
@@ -956,17 +1036,17 @@ export const Messages = memo(function Messages({
           isThinking={isThinking}
           processingStartedAt={processingStartedAt}
           lastDurationMs={lastDurationMs}
-          hasItems={items.length > 0}
+          hasItems={transcriptItems.length > 0}
           reasoningLabel={latestReasoningLabel}
           showPollingFetchStatus={showPollingFetchStatus}
           pollingIntervalMs={pollingIntervalMs}
         />
-        {!items.length && !userInputNode && !isThinking && !isLoadingMessages && (
+        {!transcriptItems.length && !userInputNode && !isThinking && !isLoadingMessages && (
           <div className="empty messages-empty">
             {threadId ? "Send a prompt to the agent." : "Send a prompt to start a new agent."}
           </div>
         )}
-        {!items.length && !userInputNode && !isThinking && isLoadingMessages && (
+        {!transcriptItems.length && !userInputNode && !isThinking && isLoadingMessages && (
           <div className="empty messages-empty">
             <div className="messages-loading-indicator" role="status" aria-live="polite">
               <span className="oai-thinking-shimmer__spinner" aria-hidden />

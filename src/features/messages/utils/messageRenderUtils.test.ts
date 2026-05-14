@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ConversationItem } from "../../../types";
-import { buildToolSummary, statusToneFromText } from "./messageRenderUtils";
+import { buildToolSummary, formatActivitySummary, statusToneFromText } from "./messageRenderUtils";
 
 function makeToolItem(
   overrides: Partial<Extract<ConversationItem, { kind: "tool" }>>,
@@ -40,6 +40,27 @@ describe("messageRenderUtils", () => {
 
   it("classifies camelCase inProgress as processing", () => {
     expect(statusToneFromText("inProgress")).toBe("processing");
+  });
+
+  it("summarizes mixed running and completed commands without reordering them", () => {
+    const runningCommand = makeToolItem({
+      id: "command-running",
+      toolType: "commandExecution",
+      title: "Command: npm test",
+      detail: "npm test",
+      status: "running",
+    });
+    const completedCommand = makeToolItem({
+      id: "command-completed",
+      toolType: "commandExecution",
+      title: "Command: git diff",
+      detail: "git diff",
+      status: "completed",
+    });
+
+    expect(formatActivitySummary([runningCommand, completedCommand])).toContain(
+      "正在运行 1 条命令，已运行 1 条命令",
+    );
   });
 
   it("renders collab tool calls with nickname and role", () => {

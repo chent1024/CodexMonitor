@@ -11,7 +11,10 @@ import {
   forkThread,
   getAppsList,
   getAgentsSettings,
+  getCodexFeatureFlag,
   getExperimentalFeatureList,
+  getLocalMemoryDebugStatus,
+  getLocalMemoryStatus,
   getGitHubIssues,
   getGitLog,
   getGitStatus,
@@ -31,6 +34,7 @@ import {
   steerTurn,
   sendNotification,
   setCodexFeatureFlag,
+  setLocalMemoryEnabled,
   setAgentsCoreSettings,
   setTrayRecentThreads,
   setTraySessionUsage,
@@ -398,6 +402,46 @@ describe("tauri invoke wrappers", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("set_codex_feature_flag", {
       featureKey: "apps",
+      enabled: true,
+    });
+  });
+
+  it("maps feature key for get_codex_feature_flag", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce(false);
+
+    await getCodexFeatureFlag("fast_mode");
+
+    expect(invokeMock).toHaveBeenCalledWith("get_codex_feature_flag", {
+      featureKey: "fast_mode",
+    });
+  });
+
+  it("invokes get_local_memory_status", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ enabled: false });
+
+    await getLocalMemoryStatus();
+
+    expect(invokeMock).toHaveBeenCalledWith("get_local_memory_status");
+  });
+
+  it("invokes get_local_memory_debug_status", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ config: { enabled: true } });
+
+    await getLocalMemoryDebugStatus();
+
+    expect(invokeMock).toHaveBeenCalledWith("get_local_memory_debug_status");
+  });
+
+  it("maps enabled for set_local_memory_enabled", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ enabled: true });
+
+    await setLocalMemoryEnabled(true);
+
+    expect(invokeMock).toHaveBeenCalledWith("set_local_memory_enabled", {
       enabled: true,
     });
   });

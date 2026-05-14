@@ -408,6 +408,7 @@ export function formatActivitySummary(items: ToolGroupItem[]) {
   let listCount = 0;
   let searchCount = 0;
   let commandCount = 0;
+  let runningCommandCount = 0;
   let createdFiles = 0;
   let editedFiles = 0;
   let deletedFiles = 0;
@@ -422,7 +423,11 @@ export function formatActivitySummary(items: ToolGroupItem[]) {
         } else if (entry.kind === "search") {
           searchCount += 1;
         } else if (entry.kind === "run") {
-          commandCount += 1;
+          if (statusToneFromText(item.status) === "processing") {
+            runningCommandCount += 1;
+          } else {
+            commandCount += 1;
+          }
         }
       });
       return;
@@ -431,7 +436,11 @@ export function formatActivitySummary(items: ToolGroupItem[]) {
       return;
     }
     if (item.toolType === "commandExecution") {
-      commandCount += 1;
+      if (statusToneFromText(item.status) === "processing") {
+        runningCommandCount += 1;
+      } else {
+        commandCount += 1;
+      }
       return;
     }
     if (item.toolType === "fileChange") {
@@ -471,7 +480,14 @@ export function formatActivitySummary(items: ToolGroupItem[]) {
   if (exploreParts.length > 0) {
     parts.push(`已探索 ${exploreParts.join(",")}`);
   }
-  if (commandCount > 0) {
+  if (runningCommandCount > 0) {
+    const runningLabel = `正在运行 ${formatChineseCount(runningCommandCount, "条命令")}`;
+    parts.push(
+      commandCount > 0
+        ? `${runningLabel}，已运行 ${formatChineseCount(commandCount, "条命令")}`
+        : runningLabel,
+    );
+  } else if (commandCount > 0) {
     parts.push(`已运行 ${formatChineseCount(commandCount, "条命令")}`);
   }
   if (parts.length > 0) {

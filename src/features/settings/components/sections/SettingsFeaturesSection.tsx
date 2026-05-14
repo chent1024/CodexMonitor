@@ -89,7 +89,12 @@ export function SettingsFeaturesSection({
   stableFeatures,
   experimentalFeatures,
   hasDynamicFeatureRows,
+  localMemoryStatus,
+  localMemoryLoading,
+  localMemoryUpdating,
+  localMemoryError,
   onOpenConfig,
+  onToggleLocalMemory,
   onToggleCodexFeature,
   onUpdateAppSettings,
 }: SettingsFeaturesSectionProps) {
@@ -107,6 +112,29 @@ export function SettingsFeaturesSection({
         </button>
       </SettingsToggleRow>
       {openConfigError && <div className="settings-help">{openConfigError}</div>}
+      <SettingsToggleRow
+        title="本地记忆"
+        subtitle={
+          <>
+            使用本地 SQLite 与 sqlite-vec 的 Mem0-compatible MCP 服务。
+            {localMemoryStatus ? (
+              <>
+                <br />
+                <code>{localMemoryStatus.serverName}</code>
+                {" -> "}
+                <code>{localMemoryStatus.dbPath}</code>
+              </>
+            ) : null}
+          </>
+        }
+      >
+        <SettingsToggleSwitch
+          pressed={localMemoryStatus?.enabled ?? false}
+          onClick={onToggleLocalMemory}
+          disabled={localMemoryLoading || localMemoryUpdating}
+        />
+      </SettingsToggleRow>
+      {localMemoryError && <div className="settings-help">{localMemoryError}</div>}
       <SettingsSubsection
         title="稳定功能"
         subtitle="默认启用、可用于生产的功能。"

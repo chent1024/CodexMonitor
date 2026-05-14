@@ -747,6 +747,49 @@ export async function setCodexFeatureFlag(
   return invoke("set_codex_feature_flag", { featureKey, enabled });
 }
 
+export async function getCodexFeatureFlag(featureKey: string): Promise<boolean> {
+  return invoke("get_codex_feature_flag", { featureKey });
+}
+
+export type LocalMemoryConfigStatus = {
+  enabled: boolean;
+  serverName: string;
+  configPath: string | null;
+  commandPath: string;
+  dbPath: string;
+  vectorBackend: string;
+};
+
+export type LocalMemoryStoreDebugStatus = {
+  dbPath: string;
+  vectorBackend: string;
+  vectorAvailable: boolean;
+  embeddingDim: number;
+  memoryCount: number;
+  vectorCount: number;
+  ftsCount: number;
+};
+
+export type LocalMemoryDebugSnapshot = {
+  config: LocalMemoryConfigStatus;
+  database: LocalMemoryStoreDebugStatus | null;
+  error: string | null;
+};
+
+export async function getLocalMemoryStatus(): Promise<LocalMemoryConfigStatus> {
+  return invoke("get_local_memory_status");
+}
+
+export async function getLocalMemoryDebugStatus(): Promise<LocalMemoryDebugSnapshot> {
+  return invoke("get_local_memory_debug_status");
+}
+
+export async function setLocalMemoryEnabled(
+  enabled: boolean,
+): Promise<LocalMemoryConfigStatus> {
+  return invoke("set_local_memory_enabled", { enabled });
+}
+
 export async function generateRunMetadata(workspaceId: string, prompt: string) {
   return invoke<{ title: string; worktreeName: string }>("generate_run_metadata", {
     workspaceId,

@@ -1,6 +1,10 @@
 import type { ConversationItem } from "@/types";
 import { normalizeItem, prepareThreadItems, upsertItem } from "@utils/threadItems";
-import type { ThreadAction, ThreadState } from "../useThreadsReducer";
+import type {
+  StreamDeltaAction,
+  ThreadAction,
+  ThreadState,
+} from "../useThreadsReducer";
 import {
   addSummaryBoundary,
   dropLatestLocalReviewStart,
@@ -27,8 +31,296 @@ const replaceThreadItem = (
   return next;
 };
 
+type StreamDeltaBatchContext = {
+  workingItemsByThread: Map<string, ConversationItem[]>;
+  itemIndexByThread: Map<string, Map<string, number>>;
+  changedThreadIds: Set<string>;
+  threadNeedsPrepare: Set<string>;
+  threadsByWorkspace: ThreadState["threadsByWorkspace"];
+};
+
+const getBatchThreadItems = (
+  state: ThreadState,
+  context: StreamDeltaBatchContext,
+  threadId: string,
+) => context.workingItemsByThread.get(threadId) ?? state.itemsByThread[threadId] ?? [];
+
+const getWritableBatchThreadItems = (
+  state: ThreadState,
+  context: StreamDeltaBatchContext,
+  threadId: string,
+) => {
+  const existing = context.workingItemsByThread.get(threadId);
+  if (existing) {
+    return existing;
+  }
+  const writable = [...(state.itemsByThread[threadId] ?? [])];
+  context.workingItemsByThread.set(threadId, writable);
+  return writable;
+};
+
+const getBatchItemIndex = (
+  state: ThreadState,
+  context: StreamDeltaBatchContext,
+  threadId: string,
+  itemId: string,
+) => {
+  let itemIndex = context.itemIndexByThread.get(threadId);
+  if (!itemIndex) {
+    itemIndex = new Map(
+      getBatchThreadItems(state, context, threadId).map((item, index) => [
+        item.id,
+        index,
+      ]),
+    );
+    context.itemIndexByThread.set(threadId, itemIndex);
+  }
+  return itemIndex.get(itemId) ?? -1;
+};
+
+const rememberBatchItemIndex = (
+  context: StreamDeltaBatchContext,
+  threadId: string,
+  itemId: string,
+  index: number,
+) => {
+  const itemIndex = context.itemIndexByThread.get(threadId);
+  itemIndex?.set(itemId, index);
+};
+
+const applyStreamDeltaToBatch = (
+  state: ThreadState,
+  context: StreamDeltaBatchContext,
+  action: StreamDeltaAction,
+) => {
+  switch (action.type) {
+    case "appendAgentDelta": {
+      const readableList = getBatchThreadItems(state, context, action.threadId);
+      const index = getBatchItemIndex(
+        state,
+        context,
+        action.threadId,
+        action.itemId,
+      );
+      const writableList = getWritableBatchThreadItems(
+        state,
+        context,
+        action.threadId,
+      );
+      if (index >= 0 && readableList[index].kind === "message") {
+        const existing = writableList[index];
+        if (existing.kind === "message") {
+          writableList[index] = {
+            ...existing,
+            text: mergeStreamingText(existing.text, action.delta),
+          };
+        }
+      } else {
+        writableList.push({
+          id: action.itemId,
+          kind: "message",
+          role: "assistant",
+          text: action.delta,
+        });
+        rememberBatchItemIndex(
+          context,
+          action.threadId,
+          action.itemId,
+          writableList.length - 1,
+        );
+        context.threadNeedsPrepare.add(action.threadId);
+      }
+      context.changedThreadIds.add(action.threadId);
+      context.threadsByWorkspace = maybeRenameThreadFromAgent({
+        workspaceId: action.workspaceId,
+        threadId: action.threadId,
+        items: writableList,
+        itemId: action.itemId,
+        hasCustomName: action.hasCustomName,
+        threadsByWorkspace: context.threadsByWorkspace,
+      });
+      break;
+    }
+    case "appendReasoningSummary":
+    case "appendReasoningContent": {
+      const index = getBatchItemIndex(
+        state,
+        context,
+        action.threadId,
+        action.itemId,
+      );
+      const writableList = getWritableBatchThreadItems(
+        state,
+        context,
+        action.threadId,
+      );
+      const base =
+        index >= 0 && writableList[index].kind === "reasoning"
+          ? (writableList[index] as ConversationItem)
+          : {
+              id: action.itemId,
+              kind: "reasoning",
+              summary: "",
+              content: "",
+            };
+      const updated: ConversationItem =
+        action.type === "appendReasoningSummary"
+          ? ({
+              ...base,
+              summary: mergeStreamingText(
+                "summary" in base ? base.summary : "",
+                action.delta,
+              ),
+            } as ConversationItem)
+          : ({
+              ...base,
+              content: mergeStreamingText(
+                "content" in base ? base.content : "",
+                action.delta,
+              ),
+            } as ConversationItem);
+      if (index >= 0) {
+        writableList[index] = updated;
+      } else {
+        writableList.push(updated);
+        rememberBatchItemIndex(
+          context,
+          action.threadId,
+          action.itemId,
+          writableList.length - 1,
+        );
+        context.threadNeedsPrepare.add(action.threadId);
+      }
+      context.changedThreadIds.add(action.threadId);
+      break;
+    }
+    case "appendPlanDelta": {
+      const index = getBatchItemIndex(
+        state,
+        context,
+        action.threadId,
+        action.itemId,
+      );
+      const writableList = getWritableBatchThreadItems(
+        state,
+        context,
+        action.threadId,
+      );
+      const base =
+        index >= 0 && writableList[index].kind === "tool"
+          ? writableList[index]
+          : {
+              id: action.itemId,
+              kind: "tool",
+              toolType: "plan",
+              title: "Plan",
+              detail: "",
+              status: "in_progress",
+              output: "",
+            };
+      const existingOutput = base.kind === "tool" ? (base.output ?? "") : "";
+      const updated: ConversationItem = {
+        ...(base as ConversationItem),
+        kind: "tool",
+        toolType: "plan",
+        title: "Plan",
+        detail: "Generating plan...",
+        status: "in_progress",
+        output: mergeStreamingText(existingOutput, action.delta),
+      } as ConversationItem;
+      if (index >= 0) {
+        writableList[index] = updated;
+      } else {
+        writableList.push(updated);
+        rememberBatchItemIndex(
+          context,
+          action.threadId,
+          action.itemId,
+          writableList.length - 1,
+        );
+        context.threadNeedsPrepare.add(action.threadId);
+      }
+      context.changedThreadIds.add(action.threadId);
+      break;
+    }
+    case "appendToolOutput": {
+      const readableList = getBatchThreadItems(state, context, action.threadId);
+      const index = getBatchItemIndex(
+        state,
+        context,
+        action.threadId,
+        action.itemId,
+      );
+      if (index < 0 || readableList[index].kind !== "tool") {
+        break;
+      }
+      const writableList = getWritableBatchThreadItems(
+        state,
+        context,
+        action.threadId,
+      );
+      const existing = writableList[index];
+      if (existing.kind === "tool") {
+        writableList[index] = {
+          ...existing,
+          output: mergeStreamingText(existing.output ?? "", action.delta),
+        } as ConversationItem;
+        context.changedThreadIds.add(action.threadId);
+      }
+      break;
+    }
+  }
+};
+
+const reduceStreamDeltaBatch = (
+  state: ThreadState,
+  deltas: StreamDeltaAction[],
+) => {
+  const context: StreamDeltaBatchContext = {
+    workingItemsByThread: new Map(),
+    itemIndexByThread: new Map(),
+    changedThreadIds: new Set(),
+    threadNeedsPrepare: new Set(),
+    threadsByWorkspace: state.threadsByWorkspace,
+  };
+
+  for (const delta of deltas) {
+    applyStreamDeltaToBatch(state, context, delta);
+  }
+
+  if (
+    context.changedThreadIds.size === 0 &&
+    context.threadsByWorkspace === state.threadsByWorkspace
+  ) {
+    return state;
+  }
+
+  let nextItemsByThread = state.itemsByThread;
+  for (const threadId of context.changedThreadIds) {
+    const items = context.workingItemsByThread.get(threadId);
+    if (!items) {
+      continue;
+    }
+    const nextItems = context.threadNeedsPrepare.has(threadId)
+      ? preparedThreadItems(state, items)
+      : items;
+    if (nextItemsByThread === state.itemsByThread) {
+      nextItemsByThread = { ...state.itemsByThread };
+    }
+    nextItemsByThread[threadId] = nextItems;
+  }
+
+  return {
+    ...state,
+    itemsByThread: nextItemsByThread,
+    threadsByWorkspace: context.threadsByWorkspace,
+  };
+};
+
 export function reduceThreadItems(state: ThreadState, action: ThreadAction): ThreadState {
   switch (action.type) {
+    case "appendStreamDeltasBatch":
+      return reduceStreamDeltaBatch(state, action.deltas);
     case "addAssistantMessage": {
       const list = state.itemsByThread[action.threadId] ?? [];
       const message: ConversationItem = {
@@ -48,13 +340,15 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
     case "addErrorItem": {
       const list = state.itemsByThread[action.threadId] ?? [];
       const itemType = action.itemType ?? "stream-error";
+      const title = action.title ?? (itemType === "system-error" ? "System error" : "Stream error");
+      const detail = action.detail ?? "error";
       const message: ConversationItem = {
         id: `${Date.now()}-${list.length}-${itemType}`,
         kind: "tool",
         toolType: "error",
         itemType,
-        title: action.title ?? (itemType === "system-error" ? "System error" : "Stream error"),
-        detail: action.detail ?? "error",
+        title,
+        detail,
         status: action.status ?? "failed",
         output: action.text,
       };

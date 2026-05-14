@@ -108,7 +108,7 @@ These arrive on the same frontend event stream but are not Codex v2
 - `serverRequest/resolved` (request lifecycle cleanup for approval and user-input queues)
 - `codex/backgroundThread` (CodexMonitor synthetic bridge event)
 - `codex/connected` (CodexMonitor synthetic bridge event)
-- `codex/stderr` (CodexMonitor synthetic bridge event; routed to the active thread as a `system-error` item)
+- `codex/stderr` (CodexMonitor synthetic bridge event; recorded in the debug log, not routed into the active thread transcript)
 - `codex/event/skills_update_available` (handled via
   `isSkillsUpdateAvailableEvent(...)` in `useSkills.ts`)
 

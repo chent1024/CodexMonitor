@@ -15,11 +15,15 @@ import {
   connectWorkspace,
   getAppBuildType,
   getAgentsSettings,
+  getCodexFeatureFlag,
   getConfigModel,
   getExperimentalFeatureList,
+  getLocalMemoryStatus,
   isMobileRuntime,
   getModelList,
   listWorkspaces,
+  setCodexFeatureFlag,
+  setLocalMemoryEnabled,
 } from "@services/tauri";
 import { DEFAULT_COMMIT_MESSAGE_PROMPT } from "@utils/commitMessagePrompt";
 import { SettingsView } from "./SettingsView";
@@ -39,26 +43,52 @@ vi.mock("@services/tauri", async () => {
     getAppBuildType: vi.fn(),
     getModelList: vi.fn(),
     getConfigModel: vi.fn(),
+    getCodexFeatureFlag: vi.fn(),
     getExperimentalFeatureList: vi.fn(),
+    getLocalMemoryStatus: vi.fn(),
     getAgentsSettings: vi.fn(),
     isMobileRuntime: vi.fn(),
     listWorkspaces: vi.fn(),
+    setCodexFeatureFlag: vi.fn(),
+    setLocalMemoryEnabled: vi.fn(),
   };
 });
 
 const connectWorkspaceMock = vi.mocked(connectWorkspace);
 const getAppBuildTypeMock = vi.mocked(getAppBuildType);
+const getCodexFeatureFlagMock = vi.mocked(getCodexFeatureFlag);
 const getConfigModelMock = vi.mocked(getConfigModel);
 const getModelListMock = vi.mocked(getModelList);
 const getExperimentalFeatureListMock = vi.mocked(getExperimentalFeatureList);
+const getLocalMemoryStatusMock = vi.mocked(getLocalMemoryStatus);
 const getAgentsSettingsMock = vi.mocked(getAgentsSettings);
 const isMobileRuntimeMock = vi.mocked(isMobileRuntime);
 const listWorkspacesMock = vi.mocked(listWorkspaces);
+const setCodexFeatureFlagMock = vi.mocked(setCodexFeatureFlag);
+const setLocalMemoryEnabledMock = vi.mocked(setLocalMemoryEnabled);
 connectWorkspaceMock.mockResolvedValue(undefined);
 getAppBuildTypeMock.mockResolvedValue("release");
+getCodexFeatureFlagMock.mockResolvedValue(false);
+getLocalMemoryStatusMock.mockResolvedValue({
+  enabled: false,
+  serverName: "local_memory",
+  configPath: "/Users/me/.codex/config.toml",
+  commandPath: "/tmp/codex-monitor-memory-mcp",
+  dbPath: "/Users/me/.codex/local-memory/memory.sqlite",
+  vectorBackend: "sqlite-vec",
+});
 getConfigModelMock.mockResolvedValue(null);
 isMobileRuntimeMock.mockResolvedValue(false);
 listWorkspacesMock.mockResolvedValue([]);
+setCodexFeatureFlagMock.mockResolvedValue(undefined);
+setLocalMemoryEnabledMock.mockResolvedValue({
+  enabled: true,
+  serverName: "local_memory",
+  configPath: "/Users/me/.codex/config.toml",
+  commandPath: "/tmp/codex-monitor-memory-mcp",
+  dbPath: "/Users/me/.codex/local-memory/memory.sqlite",
+  vectorBackend: "sqlite-vec",
+});
 getAgentsSettingsMock.mockResolvedValue({
   configPath: "/Users/me/.codex/config.toml",
   multiAgentEnabled: false,
@@ -316,11 +346,31 @@ const renderFeaturesSection = (
     appSettings?: Partial<AppSettings>;
     onUpdateAppSettings?: ComponentProps<typeof SettingsView>["onUpdateAppSettings"];
     experimentalFeaturesResponse?: unknown;
+    fastModeEnabled?: boolean;
+    localMemoryEnabled?: boolean;
   } = {},
 ) => {
   cleanup();
   const onUpdateAppSettings =
     options.onUpdateAppSettings ?? vi.fn().mockResolvedValue(undefined);
+  getCodexFeatureFlagMock.mockResolvedValue(options.fastModeEnabled ?? false);
+  setCodexFeatureFlagMock.mockResolvedValue(undefined);
+  getLocalMemoryStatusMock.mockResolvedValue({
+    enabled: options.localMemoryEnabled ?? false,
+    serverName: "local_memory",
+    configPath: "/Users/me/.codex/config.toml",
+    commandPath: "/tmp/codex-monitor-memory-mcp",
+    dbPath: "/Users/me/.codex/local-memory/memory.sqlite",
+    vectorBackend: "sqlite-vec",
+  });
+  setLocalMemoryEnabledMock.mockImplementation(async (enabled) => ({
+    enabled,
+    serverName: "local_memory",
+    configPath: "/Users/me/.codex/config.toml",
+    commandPath: "/tmp/codex-monitor-memory-mcp",
+    dbPath: "/Users/me/.codex/local-memory/memory.sqlite",
+    vectorBackend: "sqlite-vec",
+  }));
   getExperimentalFeatureListMock.mockResolvedValue(
     (options.experimentalFeaturesResponse as Record<string, unknown>) ?? {
       data: [
@@ -1737,6 +1787,60 @@ describe("SettingsView Features", () => {
         expect.objectContaining({ unifiedExecEnabled: false }),
       );
     });
+  });
+
+  it("shows Fast Mode as a stable config feature defaulted off", async () => {
+    renderFeaturesSection({
+      experimentalFeaturesResponse: { data: [], nextCursor: null },
+    });
+
+    const fastModeTitle = await screen.findByText("Fast Mode");
+    const fastModeRow = fastModeTitle.closest(".settings-toggle-row");
+    expect(fastModeRow).not.toBeNull();
+    expect(
+      within(fastModeRow as HTMLElement)
+        .getByRole("button")
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(
+      screen.getAllByText((_, element) =>
+        Boolean(element?.textContent?.includes("features.fast_mode")),
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("writes features.fast_mode when toggling Fast Mode", async () => {
+    renderFeaturesSection({
+      experimentalFeaturesResponse: { data: [], nextCursor: null },
+    });
+
+    const fastModeTitle = await screen.findByText("Fast Mode");
+    const fastModeRow = fastModeTitle.closest(".settings-toggle-row");
+    expect(fastModeRow).not.toBeNull();
+
+    fireEvent.click(within(fastModeRow as HTMLElement).getByRole("button"));
+
+    await waitFor(() => {
+      expect(setCodexFeatureFlagMock).toHaveBeenCalledWith("fast_mode", true);
+    });
+  });
+
+  it("toggles the local memory MCP server from settings", async () => {
+    renderFeaturesSection({
+      experimentalFeaturesResponse: { data: [], nextCursor: null },
+      localMemoryEnabled: false,
+    });
+
+    const localMemoryTitle = await screen.findByText("本地记忆");
+    const localMemoryRow = localMemoryTitle.closest(".settings-toggle-row");
+    expect(localMemoryRow).not.toBeNull();
+
+    fireEvent.click(within(localMemoryRow as HTMLElement).getByRole("button"));
+
+    await waitFor(() => {
+      expect(setLocalMemoryEnabledMock).toHaveBeenCalledWith(true);
+    });
+    expect(screen.getByText(/memory\.sqlite/)).toBeTruthy();
   });
 
   it("shows fallback description when Codex omits feature description", async () => {

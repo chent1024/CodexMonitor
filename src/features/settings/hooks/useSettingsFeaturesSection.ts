@@ -2,9 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { AppSettings, CodexFeature, CodexFeatureStage } from "@/types";
 import {
+  getCodexFeatureFlag,
   getCodexConfigPath,
   getExperimentalFeatureList,
+  getLocalMemoryStatus,
+  setLocalMemoryEnabled,
   setCodexFeatureFlag,
+  type LocalMemoryConfigStatus,
 } from "@services/tauri";
 
 type UseSettingsFeaturesSectionArgs = {
@@ -19,6 +23,20 @@ const HIDDEN_DYNAMIC_FEATURE_KEYS = new Set<string>([
   "steer",
 ]);
 
+const FAST_MODE_FEATURE_KEY = "fast_mode";
+
+function localFastModeFeature(enabled: boolean): CodexFeature {
+  return {
+    name: FAST_MODE_FEATURE_KEY,
+    stage: "stable",
+    enabled,
+    defaultEnabled: false,
+    displayName: "Fast Mode",
+    description: null,
+    announcement: null,
+  };
+}
+
 export type SettingsFeaturesSectionProps = {
   appSettings: AppSettings;
   hasFeatureWorkspace: boolean;
@@ -29,7 +47,12 @@ export type SettingsFeaturesSectionProps = {
   stableFeatures: CodexFeature[];
   experimentalFeatures: CodexFeature[];
   hasDynamicFeatureRows: boolean;
+  localMemoryStatus: LocalMemoryConfigStatus | null;
+  localMemoryLoading: boolean;
+  localMemoryUpdating: boolean;
+  localMemoryError: string | null;
   onOpenConfig: () => void;
+  onToggleLocalMemory: () => void;
   onToggleCodexFeature: (feature: CodexFeature) => void;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
 };
@@ -147,6 +170,12 @@ export const useSettingsFeaturesSection = ({
   const [featuresLoading, setFeaturesLoading] = useState(false);
   const [featureUpdatingKey, setFeatureUpdatingKey] = useState<string | null>(null);
   const [features, setFeatures] = useState<CodexFeature[]>([]);
+  const [fastModeEnabled, setFastModeEnabled] = useState(false);
+  const [localMemoryStatus, setLocalMemoryStatus] =
+    useState<LocalMemoryConfigStatus | null>(null);
+  const [localMemoryLoading, setLocalMemoryLoading] = useState(false);
+  const [localMemoryUpdating, setLocalMemoryUpdating] = useState(false);
+  const [localMemoryError, setLocalMemoryError] = useState<string | null>(null);
 
   const handleOpenConfig = useCallback(async () => {
     setOpenConfigError(null);
@@ -158,6 +187,55 @@ export const useSettingsFeaturesSection = ({
         error instanceof Error ? error.message : "Unable to open config.",
       );
     }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const enabled = await getCodexFeatureFlag(FAST_MODE_FEATURE_KEY);
+        if (active) {
+          setFastModeEnabled(enabled);
+        }
+      } catch {
+        if (active) {
+          setFastModeEnabled(false);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      setLocalMemoryLoading(true);
+      setLocalMemoryError(null);
+      try {
+        const status = await getLocalMemoryStatus();
+        if (active) {
+          setLocalMemoryStatus(status);
+        }
+      } catch (error) {
+        if (active) {
+          setLocalMemoryStatus(null);
+          setLocalMemoryError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load local memory status.",
+          );
+        }
+      } finally {
+        if (active) {
+          setLocalMemoryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -224,20 +302,34 @@ export const useSettingsFeaturesSection = ({
     };
   }, [featureWorkspaceId]);
 
-  const stableFeatures = useMemo(
-    () =>
-      features.filter(
-        (feature) =>
-          feature.stage === "stable" &&
-          !HIDDEN_DYNAMIC_FEATURE_KEYS.has(feature.name),
-      ),
-    [features],
-  );
+  const stableFeatures = useMemo(() => {
+    let sawFastMode = false;
+    const rows = features
+      .filter((feature) => feature.stage === "stable")
+      .filter((feature) => !HIDDEN_DYNAMIC_FEATURE_KEYS.has(feature.name))
+      .map((feature) => {
+        if (feature.name !== FAST_MODE_FEATURE_KEY) {
+          return feature;
+        }
+        sawFastMode = true;
+        return {
+          ...feature,
+          enabled: fastModeEnabled,
+          defaultEnabled: false,
+          displayName: feature.displayName ?? "Fast Mode",
+        };
+      });
+    if (!sawFastMode) {
+      rows.push(localFastModeFeature(fastModeEnabled));
+    }
+    return rows;
+  }, [features, fastModeEnabled]);
   const experimentalFeatures = useMemo(
     () =>
       features.filter(
         (feature) =>
           (feature.stage === "beta" || feature.stage === "under_development") &&
+          feature.name !== FAST_MODE_FEATURE_KEY &&
           !HIDDEN_DYNAMIC_FEATURE_KEYS.has(feature.name),
       ),
     [features],
@@ -261,6 +353,9 @@ export const useSettingsFeaturesSection = ({
           } else {
             await setCodexFeatureFlag(feature.name, nextEnabled);
           }
+          if (feature.name === FAST_MODE_FEATURE_KEY) {
+            setFastModeEnabled(nextEnabled);
+          }
           setFeatures((current) =>
             current.map((item) =>
               item.name === feature.name ? { ...item, enabled: nextEnabled } : item,
@@ -282,6 +377,26 @@ export const useSettingsFeaturesSection = ({
     [appSettings, onUpdateAppSettings],
   );
 
+  const onToggleLocalMemory = useCallback(() => {
+    void (async () => {
+      const nextEnabled = !(localMemoryStatus?.enabled ?? false);
+      setLocalMemoryUpdating(true);
+      setLocalMemoryError(null);
+      try {
+        const status = await setLocalMemoryEnabled(nextEnabled);
+        setLocalMemoryStatus(status);
+      } catch (error) {
+        setLocalMemoryError(
+          error instanceof Error
+            ? error.message
+            : "Unable to update local memory.",
+        );
+      } finally {
+        setLocalMemoryUpdating(false);
+      }
+    })();
+  }, [localMemoryStatus?.enabled]);
+
   return {
     appSettings,
     hasFeatureWorkspace: featureWorkspaceId != null,
@@ -292,9 +407,14 @@ export const useSettingsFeaturesSection = ({
     stableFeatures,
     experimentalFeatures,
     hasDynamicFeatureRows,
+    localMemoryStatus,
+    localMemoryLoading,
+    localMemoryUpdating,
+    localMemoryError,
     onOpenConfig: () => {
       void handleOpenConfig();
     },
+    onToggleLocalMemory,
     onToggleCodexFeature,
     onUpdateAppSettings,
   };

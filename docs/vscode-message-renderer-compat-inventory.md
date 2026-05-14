@@ -169,7 +169,7 @@ Raw history normalization owned by `src/utils/threadItems.conversion.ts`:
 - `update_plan`, `view_image`, `request_user_input`, `web_search_call`, `image_generation_call`, and unknown function calls are preserved as typed tools rather than dropped.
 - Normalized app-server item aliases cover `autoApprovalReview`, `imageGeneration`, `context_compaction`, `model_change`, and `model_reroute` variants before they enter the VS Code-compatible view model.
 - User `steeringStatus` is now preserved on `ConversationItem` so target `JE` persistent steering-message behavior is not approximated through `messageStatus`.
-- Error-like app-server signals now enter the same activity model: `error` and `thread/realtime/error` become `stream-error`, `codex/stderr` becomes `system-error`, and live reconnect failures become `stream-error`.
+- Error-like app-server signals now enter the same activity model: `error` and `thread/realtime/error` become `stream-error`, and live reconnect failures become `stream-error`. `codex/stderr` stays in debug/log output instead of the conversation transcript.
 
 Remaining app-server protocol gaps are outside renderer-only adaptation:
 

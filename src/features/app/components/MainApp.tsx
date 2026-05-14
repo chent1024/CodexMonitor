@@ -80,6 +80,7 @@ import {
 import { useAppShellOrchestration } from "@app/orchestration/useLayoutOrchestration";
 import { normalizeCodexArgsInput } from "@/utils/codexArgsInput";
 import { subscribeTrayOpenThread } from "@services/events";
+import { getLocalMemoryDebugStatus } from "@services/tauri";
 
 const SettingsView = lazy(() =>
   import("@settings/components/SettingsView").then((module) => ({
@@ -102,6 +103,7 @@ export default function MainApp() {
     debugOpen,
     setDebugOpen,
     debugEntries,
+    debugResetVersion,
     showDebugButton,
     addDebugEntry,
     handleCopyDebug,
@@ -119,6 +121,37 @@ export default function MainApp() {
   >("codex");
   const tabletTab =
     activeTab === "projects" || activeTab === "home" ? "codex" : activeTab;
+  const [localMemoryDebugLoading, setLocalMemoryDebugLoading] = useState(false);
+  const previousDebugOpenRef = useRef(false);
+  const refreshLocalMemoryDebug = useCallback(async () => {
+    setLocalMemoryDebugLoading(true);
+    try {
+      const snapshot = await getLocalMemoryDebugStatus();
+      addDebugEntry({
+        id: `local-memory-debug-${Date.now()}`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "local memory debug status",
+        payload: snapshot,
+      });
+    } catch (error) {
+      addDebugEntry({
+        id: `local-memory-debug-error-${Date.now()}`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "local memory debug status error",
+        payload: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setLocalMemoryDebugLoading(false);
+    }
+  }, [addDebugEntry]);
+  useEffect(() => {
+    if (debugOpen && !previousDebugOpenRef.current) {
+      void refreshLocalMemoryDebug();
+    }
+    previousDebugOpenRef.current = debugOpen;
+  }, [debugOpen, refreshLocalMemoryDebug]);
   const {
     workspaces,
     workspaceGroups,
@@ -1728,6 +1761,7 @@ export default function MainApp() {
     terminalOpen,
     debugOpen,
     debugEntries,
+    debugResetVersion,
     terminalTabs,
     activeTerminalId,
     onSelectTerminal,
@@ -1736,6 +1770,10 @@ export default function MainApp() {
     terminalState,
     onClearDebug: clearDebugEntries,
     onCopyDebug: handleCopyDebug,
+    onRefreshLocalMemoryDebug: () => {
+      void refreshLocalMemoryDebug();
+    },
+    localMemoryDebugLoading,
     onResizeDebug: onDebugPanelResizeStart,
     onResizeTerminal: onTerminalPanelResizeStart,
     isCompact,

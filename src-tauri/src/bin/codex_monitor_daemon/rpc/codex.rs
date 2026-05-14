@@ -303,6 +303,42 @@ pub(super) async fn try_handle(
                     .map(|_| json!({ "ok": true })),
             )
         }
+        "get_codex_feature_flag" => {
+            let feature_key = match parse_string(params, "featureKey") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .get_codex_feature_flag(feature_key)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "get_local_memory_status" => Some(
+            state
+                .get_local_memory_status()
+                .await
+                .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+        ),
+        "get_local_memory_debug_status" => Some(
+            state
+                .get_local_memory_debug_status()
+                .await
+                .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+        ),
+        "set_local_memory_enabled" => {
+            let enabled = match parse_optional_bool(params, "enabled") {
+                Some(value) => value,
+                None => return Some(Err("missing or invalid `enabled`".to_string())),
+            };
+            Some(
+                state
+                    .set_local_memory_enabled(enabled)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
         "get_agents_settings" => Some(
             state
                 .get_agents_settings()

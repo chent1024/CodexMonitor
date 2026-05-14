@@ -35,9 +35,11 @@ function buildTerminalPanelNode(terminalState: SecondaryLayoutNodesOptions["term
 }
 
 function buildDebugPanels(debugPanelProps: SecondaryLayoutNodesOptions["debugPanelProps"]) {
-  const debugPanelNode = <DebugPanel {...debugPanelProps} />;
+  const debugPanelKey = debugPanelProps.resetVersion ?? 0;
+  const debugPanelNode = <DebugPanel key={`debug-dock-${debugPanelKey}`} {...debugPanelProps} />;
   const debugPanelFullNode = (
     <DebugPanel
+      key={`debug-full-${debugPanelKey}`}
       {...debugPanelProps}
       isOpen
       variant="full"

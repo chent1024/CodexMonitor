@@ -125,7 +125,7 @@ Current normalized app-server item adapter coverage:
 - `imageGeneration` / `image_generation` / `imageGenerationCall` -> `generated-image`.
 - `contextCompaction` / `context_compaction` / `compaction` -> `context-compaction`.
 - `modelChanged` / `model_change` and `modelRerouted` / `model_reroute` -> their OpenAI item types.
-- App-server `error`, `thread/realtime/error`, `codex/stderr`, and live reconnect failures are surfaced as `stream-error` or `system-error` tool activity items rather than plain assistant prose.
+- App-server `error`, `thread/realtime/error`, and live reconnect failures are surfaced as `stream-error` or `system-error` tool activity items rather than plain assistant prose. `codex/stderr` is treated as debug/log output and is not rendered in the conversation transcript.
 
 Protocol gaps that still require app-server/thread-event work rather than renderer-only adaptation:
 

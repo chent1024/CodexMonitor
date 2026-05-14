@@ -2,9 +2,14 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
+import type { ThreadTokenUsage } from "../../../types";
 import { ComposerMetaBar } from "./ComposerMetaBar";
 
-function renderMetaBar() {
+function renderMetaBar({
+  contextUsage = null,
+}: {
+  contextUsage?: ThreadTokenUsage | null;
+} = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -33,6 +38,7 @@ function renderMetaBar() {
         reasoningSupported={false}
         accessMode="current"
         onSelectAccessMode={() => {}}
+        contextUsage={contextUsage}
       />,
     );
   });
@@ -58,6 +64,37 @@ describe("ComposerMetaBar", () => {
     ).map((option) => option.textContent);
 
     expect(options).toEqual(["5.5", "5.3 Codex Spark"]);
+
+    harness.unmount();
+  });
+
+  it("shows context as used percent in the composer status bar", () => {
+    const harness = renderMetaBar({
+      contextUsage: {
+        total: {
+          totalTokens: 4_100,
+          inputTokens: 4_100,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          reasoningOutputTokens: 0,
+        },
+        last: {
+          totalTokens: 0,
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          reasoningOutputTokens: 0,
+        },
+        modelContextWindow: 10_000,
+      },
+    });
+
+    const contextValue = harness.container.querySelector(
+      '[aria-label="Context used percent"]',
+    );
+
+    expect(contextValue?.textContent).toBe("已使用41%");
+    expect(harness.container.querySelector('[aria-label="Context free percent"]')).toBeNull();
 
     harness.unmount();
   });

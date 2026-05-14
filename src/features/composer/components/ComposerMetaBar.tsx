@@ -61,13 +61,9 @@ export function ComposerMetaBar({
   const lastTokens = contextUsage?.last.totalTokens ?? 0;
   const totalTokens = contextUsage?.total.totalTokens ?? 0;
   const usedTokens = lastTokens > 0 ? lastTokens : totalTokens;
-  const contextFreePercent =
+  const contextUsedPercent =
     contextWindow && contextWindow > 0 && usedTokens > 0
-      ? Math.max(
-          0,
-          100 -
-            Math.min(Math.max((usedTokens / contextWindow) * 100, 0), 100),
-        )
+      ? Math.min(Math.max((usedTokens / contextWindow) * 100, 0), 100)
       : null;
   const planMode =
     collaborationModes.find((mode) => mode.id === "plan") ?? null;
@@ -279,12 +275,13 @@ export function ComposerMetaBar({
         </div>
       </div>
       <div className="composer-context">
-        <div className="composer-context-value" aria-label="Context free percent">
-          {contextFreePercent === null ? (
+        <div className="composer-context-value" aria-label="Context used percent">
+          {contextUsedPercent === null ? (
             "--"
           ) : (
             <>
-              <span>{Math.round(contextFreePercent)}</span>
+              <span className="composer-context-label">已使用</span>
+              <span>{Math.round(contextUsedPercent)}</span>
               <span className="composer-context-percent-sign">%</span>
             </>
           )}

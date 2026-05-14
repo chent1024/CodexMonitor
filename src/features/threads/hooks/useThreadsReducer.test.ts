@@ -485,6 +485,87 @@ describe("threadReducer", () => {
     }
   });
 
+  it("applies stream delta batches in order", () => {
+    const commandItem: ConversationItem = {
+      id: "command-1",
+      kind: "tool",
+      toolType: "command",
+      title: "npm test",
+      detail: "npm test",
+      status: "running",
+      output: "start",
+    };
+    const next = threadReducer(
+      {
+        ...initialState,
+        itemsByThread: { "thread-1": [commandItem] },
+        threadsByWorkspace: {
+          "ws-1": [{ id: "thread-1", name: "New Agent", updatedAt: 1 }],
+        },
+      },
+      {
+        type: "appendStreamDeltasBatch",
+        deltas: [
+          {
+            type: "appendAgentDelta",
+            workspaceId: "ws-1",
+            threadId: "thread-1",
+            itemId: "assistant-1",
+            delta: "Assistant",
+            hasCustomName: false,
+          },
+          {
+            type: "appendAgentDelta",
+            workspaceId: "ws-1",
+            threadId: "thread-1",
+            itemId: "assistant-1",
+            delta: " note",
+            hasCustomName: false,
+          },
+          {
+            type: "appendToolOutput",
+            threadId: "thread-1",
+            itemId: "command-1",
+            delta: " done",
+          },
+          {
+            type: "appendReasoningSummary",
+            threadId: "thread-1",
+            itemId: "reasoning-1",
+            delta: "Thinking",
+          },
+          {
+            type: "appendPlanDelta",
+            threadId: "thread-1",
+            itemId: "plan-1",
+            delta: "- Step 1",
+          },
+        ],
+      },
+    );
+
+    const items = next.itemsByThread["thread-1"] ?? [];
+    expect(items).toHaveLength(4);
+    expect(items[0]).toMatchObject({ id: "command-1", output: "start done" });
+    expect(items[1]).toMatchObject({
+      id: "assistant-1",
+      kind: "message",
+      text: "Assistant note",
+    });
+    expect(items[2]).toMatchObject({
+      id: "reasoning-1",
+      kind: "reasoning",
+      summary: "Thinking",
+    });
+    expect(items[3]).toMatchObject({
+      id: "plan-1",
+      kind: "tool",
+      toolType: "plan",
+      output: "- Step 1",
+    });
+    expect(next.threadsByWorkspace["ws-1"]?.[0]?.name).toBe("Assistant");
+  });
+
   it("ignores tool output deltas when the item is not a tool", () => {
     const message: ConversationItem = {
       id: "tool-1",

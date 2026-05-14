@@ -74,7 +74,6 @@ type AppServerEventHandlers = {
     message: string,
     options?: { willRetry?: boolean },
   ) => void;
-  onWorkspaceStderr?: (workspaceId: string, message: string) => void;
   onTurnPlanUpdated?: (
     workspaceId: string,
     threadId: string,
@@ -310,10 +309,6 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
       }
 
       if (method === "codex/stderr") {
-        const message = String(params.message ?? "").trim();
-        if (message) {
-          currentHandlers.onWorkspaceStderr?.(workspace_id, message);
-        }
         return;
       }
 

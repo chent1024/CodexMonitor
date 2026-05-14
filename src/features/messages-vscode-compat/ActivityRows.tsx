@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import Check from "lucide-react/dist/esm/icons/check";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Diff from "lucide-react/dist/esm/icons/diff";
 import FileDiffIcon from "lucide-react/dist/esm/icons/file-diff";
@@ -59,6 +60,18 @@ type DiffStats = { additions: number; deletions: number };
 
 const DIFF_STATS_CACHE_LIMIT = 500;
 const diffStatsCache = new Map<string, DiffStats>();
+
+function isRunningStatus(status?: string | null) {
+  return /in[_\s-]*progress|running|started/.test((status ?? "").toLowerCase());
+}
+
+function isInterruptedStatus(status?: string | null) {
+  return /interrupt|stop|cancel/.test((status ?? "").toLowerCase());
+}
+
+function isFailedStatus(status?: string | null) {
+  return /fail|error/.test((status ?? "").toLowerCase());
+}
 
 function basename(path: string) {
   const normalized = path.replace(/\\/g, "/");
@@ -336,11 +349,13 @@ function contextCompactionLabel(tone: "completed" | "processing" | "failed") {
 const VscodeCommandOutput = memo(function VscodeCommandOutput({
   output,
   command,
+  status,
   commandExpanded,
   onExpandCommand,
 }: {
   output: string;
   command: string;
+  status?: string | null;
   commandExpanded: boolean;
   onExpandCommand: () => void;
 }) {
@@ -398,6 +413,9 @@ const VscodeCommandOutput = memo(function VscodeCommandOutput({
       data-command-expanded={commandExpanded ? "true" : "false"}
       data-output-expanded="true"
     >
+      <div className="oai-vscode-shell-header" data-vscode-shell-header>
+        <span>Shell</span>
+      </div>
       <div className="oai-vscode-command-panel" data-vscode-command-panel>
         <div className="oai-vscode-command-shell-row">
           <div
@@ -439,7 +457,12 @@ const VscodeCommandOutput = memo(function VscodeCommandOutput({
           data-vscode-command-output-lines
           ref={containerRef}
           onScroll={handleScroll}
-          style={{ maxHeight: `${VSCODE_COMMAND_OUTPUT_MAX_HEIGHT_PX}px` }}
+          style={{
+            justifyContent: "flex-start",
+            maxHeight: `${VSCODE_COMMAND_OUTPUT_MAX_HEIGHT_PX}px`,
+            overflowX: "auto",
+            overflowY: "auto",
+          }}
         >
           <div
             className={`oai-tool-terminal-line${hasOutput ? "" : " oai-vscode-no-output"}`}
@@ -461,6 +484,7 @@ const VscodeCommandOutput = memo(function VscodeCommandOutput({
           <span>{copiedOutput ? "Copied" : "Copy output"}</span>
         </button>
       </div>
+      <CommandFooter status={status} />
     </div>
   );
 });
@@ -789,6 +813,63 @@ function VscodeContextCompactionRow({ item }: { item: ToolItem }) {
   );
 }
 
+function CommandActivitySummaryText({
+  item,
+  command,
+}: {
+  item: ToolItem;
+  command: string;
+}) {
+  const cleanedCommand = command.trim();
+  const label = isRunningStatus(item.status)
+    ? "正在运行"
+    : isInterruptedStatus(item.status)
+      ? "已停止"
+      : "已运行";
+
+  return (
+    <>
+      <span className="oai-vscode-command-summary-status">{label}</span>
+      {cleanedCommand ? <span className="oai-vscode-command-summary-command"> {cleanedCommand}</span> : null}
+    </>
+  );
+}
+
+function CommandFooter({ status }: { status?: string | null }) {
+  if (isRunningStatus(status)) {
+    return <div className="oai-vscode-command-footer" data-vscode-command-footer />;
+  }
+
+  if (isInterruptedStatus(status)) {
+    return (
+      <div className="oai-vscode-command-footer" data-vscode-command-footer>
+        <span className="oai-vscode-command-footer-label" data-vscode-command-footer-status>
+          已停止
+        </span>
+      </div>
+    );
+  }
+
+  if (isFailedStatus(status)) {
+    return (
+      <div className="oai-vscode-command-footer" data-vscode-command-footer>
+        <span className="oai-vscode-command-footer-label" data-vscode-command-footer-status>
+          失败
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="oai-vscode-command-footer" data-vscode-command-footer>
+      <span className="oai-vscode-command-footer-label" data-vscode-command-footer-status>
+        <Check size={12} aria-hidden />
+        成功
+      </span>
+    </div>
+  );
+}
+
 function VscodeToolRow({
   item,
   isExpanded,
@@ -820,14 +901,19 @@ function VscodeToolRow({
   const hasChanges = fileChanges.length > 0;
   const summaryLabel = isFileChange || isCommand ? "" : summary.label;
   const summaryValue = useMemo(
-    () => (isFileChange ? formatFileChangeSummary(fileChanges) : summary.value),
+    () => {
+      if (isFileChange) {
+        return formatFileChangeSummary(fileChanges);
+      }
+      return summary.value;
+    },
     [fileChanges, isFileChange, summary.value],
   );
   const openAIItemTypeLabel = useMemo(() => openAIActivityTypeLabel(item), [item]);
   const tone = toolStatusTone(item, hasChanges);
   const ToolIcon = useMemo(() => toolIconForSummary(item, summary), [item, summary]);
   const normalizedStatus = (item.status ?? "").toLowerCase();
-  const isCommandRunning = isCommand && /in[_\s-]*progress|running|started/.test(normalizedStatus);
+  const isCommandRunning = isCommand && isRunningStatus(normalizedStatus);
   const isLongRunning = typeof item.durationMs === "number" && item.durationMs >= 1200;
   const [showLiveOutput, setShowLiveOutput] = useState(false);
   const [commandExpanded, setCommandExpanded] = useState(false);
@@ -962,21 +1048,39 @@ function VscodeToolRow({
     >
       <button
         type="button"
-        className="oai-vscode-activity-summary"
+        className={`oai-vscode-activity-summary${isCommand ? " oai-vscode-exec-summary" : ""}`}
         onClick={() => onToggle(item.id)}
         aria-expanded={isExpanded}
         aria-label={summaryAriaLabel}
         data-oai-activity-detail-summary
         data-oai-activity-detail-content
+        data-vscode-exec-summary={isCommand ? "true" : undefined}
       >
-        <ToolIcon className={`oai-vscode-activity-icon ${tone}`} size={13} aria-hidden />
+        {isCommand ? null : (
+          <ToolIcon className={`oai-vscode-activity-icon ${tone}`} size={13} aria-hidden />
+        )}
         {summaryLabel ? <span className="oai-vscode-activity-label">{summaryLabel}:</span> : null}
         {summaryValue ? (
           <span className={`oai-vscode-activity-title${isCommand ? " oai-vscode-command-text" : ""}`}>
-            {isFileChange ? <FileChangeSummaryText changes={fileChanges} /> : summaryValue}
+            {isFileChange ? (
+              <FileChangeSummaryText changes={fileChanges} />
+            ) : isCommand ? (
+              <CommandActivitySummaryText item={item} command={String(summaryValue)} />
+            ) : (
+              summaryValue
+            )}
           </span>
         ) : null}
-        {inlineStatus && !isFileChange ? (
+        {isCommand ? (
+          <span
+            className={`oai-vscode-command-chevron${isExpanded ? " is-expanded" : ""}`}
+            data-vscode-command-chevron
+            aria-hidden
+          >
+            <ChevronRight size={12} />
+          </span>
+        ) : null}
+        {inlineStatus && !isFileChange && !isCommand ? (
           <span className="oai-vscode-activity-status">{inlineStatus}</span>
         ) : null}
         {openAIItemTypeLabel ? (
@@ -986,9 +1090,9 @@ function VscodeToolRow({
         ) : null}
       </button>
       <AnimatedDisclosureBody
-          isExpanded={hasBody}
+          isExpanded={hasBody && isExpanded}
           className={`oai-vscode-activity-body${isMcpApp ? " pending-mcp-tool-calls-body" : ""}`}
-          aria-expanded={isMcpApp ? isExpanded : undefined}
+          aria-expanded={isExpanded}
           data-oai-activity-detail-body
           data-pending-mcp-tool-calls-body={isMcpApp ? "true" : undefined}
           data-pending-mcp-tool-calls-view-state={isMcpApp ? (isExpanded ? "expanded" : "collapsed") : undefined}
@@ -1138,6 +1242,7 @@ function VscodeToolRow({
             <VscodeCommandOutput
               command={commandText}
               output={summary.output ?? ""}
+              status={item.status}
               commandExpanded={commandExpanded}
               onExpandCommand={() => setCommandExpanded(true)}
             />

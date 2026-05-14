@@ -596,6 +596,29 @@ impl DaemonState {
         codex_config::write_feature_enabled(feature_key.as_str(), enabled)
     }
 
+    async fn get_codex_feature_flag(&self, feature_key: String) -> Result<bool, String> {
+        codex_config::read_feature_enabled(feature_key.as_str())
+    }
+
+    async fn get_local_memory_status(
+        &self,
+    ) -> Result<codex_config::LocalMemoryConfigStatus, String> {
+        codex_config::read_local_memory_status()
+    }
+
+    async fn get_local_memory_debug_status(
+        &self,
+    ) -> Result<codex_config::LocalMemoryDebugSnapshot, String> {
+        codex_config::read_local_memory_debug_status()
+    }
+
+    async fn set_local_memory_enabled(
+        &self,
+        enabled: bool,
+    ) -> Result<codex_config::LocalMemoryConfigStatus, String> {
+        codex_config::write_local_memory_enabled(enabled)
+    }
+
     async fn get_agents_settings(&self) -> Result<agents_config_core::AgentsSettingsDto, String> {
         agents_config_core::get_agents_settings_core()
     }
@@ -692,11 +715,7 @@ impl DaemonState {
         codex_core::resume_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
-    async fn read_thread(
-        &self,
-        workspace_id: String,
-        thread_id: String,
-    ) -> Result<Value, String> {
+    async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
         codex_core::read_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
@@ -765,8 +784,7 @@ impl DaemonState {
         limit: Option<u32>,
         sort_key: Option<String>,
     ) -> Result<Value, String> {
-        codex_core::list_threads_core(&self.sessions, workspace_id, cursor, limit, sort_key)
-            .await
+        codex_core::list_threads_core(&self.sessions, workspace_id, cursor, limit, sort_key).await
     }
 
     async fn list_mcp_server_status(

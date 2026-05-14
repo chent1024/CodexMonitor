@@ -1977,6 +1977,10 @@ describe("Messages", () => {
     await waitFor(() => {
       expect(container.querySelectorAll("[data-assistant-turn]").length).toBe(1);
     });
+    fireEvent.click(container.querySelector("[data-turn-collapse-summary]") as HTMLButtonElement);
+    await waitFor(() => {
+      expect(container.querySelector("[data-assistant-turn]")?.getAttribute("data-turn-collapsed")).toBe("false");
+    });
     const turnBlocks = Array.from(
       container.querySelectorAll(
         "[data-assistant-turn] > [data-collapsed-tool-activity], [data-assistant-turn-body-stack] > [data-message-author-role='assistant'], [data-assistant-turn-body-stack] > [data-collapsed-tool-activity-item]",
@@ -2611,8 +2615,14 @@ describe("Messages", () => {
 
     const collapsedTurn = container.querySelector("[data-assistant-turn]");
     expect(collapsedTurn?.getAttribute("data-turn-collapse-allowed")).toBe("true");
-    expect(collapsedTurn?.getAttribute("data-turn-collapsed")).toBe("false");
-    expect(container.querySelector("[data-turn-collapse-summary]")).toBeNull();
+    expect(collapsedTurn?.getAttribute("data-turn-collapsed")).toBe("true");
+    const turnSummary = container.querySelector("[data-turn-collapse-summary]") as HTMLButtonElement;
+    expect(turnSummary?.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(turnSummary);
+    await waitFor(() => {
+      expect(collapsedTurn?.getAttribute("data-turn-collapsed")).toBe("false");
+    });
+    expect(turnSummary.getAttribute("aria-expanded")).toBe("true");
 
     expect(
       container.querySelector(
@@ -2653,10 +2663,16 @@ describe("Messages", () => {
     ).toBe("0px");
 
     const commandPanel = container.querySelector("[data-vscode-command-output]");
+    const execSummary = container.querySelector("[data-vscode-exec-summary]");
+    expect(execSummary?.querySelector(".oai-vscode-activity-icon")).toBeNull();
+    expect(execSummary?.querySelector(".oai-vscode-activity-status")).toBeNull();
+    expect(execSummary?.querySelector("[data-vscode-command-chevron]")).toBeTruthy();
+    expect(commandPanel?.querySelector("[data-vscode-shell-header]")?.textContent).toBe("Shell");
     expect(commandPanel?.querySelector("[data-vscode-command-text]")?.getAttribute("data-command-line-clamp")).toBe("2");
     expect(
       (commandPanel?.querySelector("[data-vscode-command-output-lines]") as HTMLElement).style.maxHeight,
     ).toBe("140px");
+    expect(commandPanel?.querySelector("[data-vscode-command-footer-status]")?.textContent).toContain("成功");
     expect(commandPanel?.querySelector("[data-vscode-copy-command]")).toBeTruthy();
     expect(commandPanel?.querySelector("[data-vscode-copy-output]")).toBeTruthy();
     expect(commandPanel?.querySelector("[data-vscode-toggle-output]")).toBeNull();
@@ -2688,6 +2704,12 @@ describe("Messages", () => {
         output: "worked output should not render as an activity row",
         status: "completed",
         durationMs: 3_000,
+      },
+      {
+        id: "turn-intermediate-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "Intermediate renderer note should collapse.",
       },
       {
         id: "hidden-command",
@@ -2725,12 +2747,35 @@ describe("Messages", () => {
     );
 
     const assistantTurn = container.querySelector("[data-assistant-turn]");
-    expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("false");
+    expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("true");
     expect(assistantTurn?.getAttribute("data-turn-worked-for-item-id")).toBe("worked-for-item");
+    expect(screen.queryByText("Intermediate renderer note should collapse.")).toBeNull();
     expect(screen.getByText("Final assistant response remains readable.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /1 条前序内容/i })).toBeNull();
     expect(screen.queryByText(/npm run hidden-check/i)).toBeNull();
     expect(screen.queryByText("worked output should not render as an activity row")).toBeNull();
+    const turnSummary = container.querySelector("[data-turn-collapse-summary]") as HTMLButtonElement;
+    expect(turnSummary).toBeTruthy();
+    expect(turnSummary.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(turnSummary);
+    await waitFor(() => {
+      expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("false");
+    });
+    expect(screen.getByText("Intermediate renderer note should collapse.")).toBeTruthy();
+    expect(screen.getByText("Final assistant response remains readable.")).toBeTruthy();
+    expect(screen.queryByText(/npm run hidden-check/i)).toBeNull();
+
+    fireEvent.click(turnSummary);
+    await waitFor(() => {
+      expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("true");
+    });
+    expect(screen.queryByText("Intermediate renderer note should collapse.")).toBeNull();
+
+    fireEvent.click(turnSummary);
+    await waitFor(() => {
+      expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("false");
+    });
     clickFirst(container, "[data-oai-tool-activity-summary]");
     await waitFor(() => {
       expect(screen.getAllByText(/npm run hidden-check/i).length).toBeGreaterThan(0);
@@ -2738,7 +2783,66 @@ describe("Messages", () => {
     expect(screen.getByText("hidden command output")).toBeTruthy();
   });
 
-  it("keeps steering user messages persistent when a turn is collapsed", () => {
+  it("keeps the active most recent turn expanded and updates its elapsed summary", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-05-14T00:00:13.000Z"));
+      const items: ConversationItem[] = [
+        {
+          id: "active-user",
+          kind: "message",
+          role: "user",
+          text: "Run checks",
+        },
+        {
+          id: "active-command",
+          kind: "tool",
+          toolType: "commandExecution",
+          itemType: "exec",
+          title: "Command: npm run test",
+          detail: "/repo",
+          output: "still running",
+          status: "running",
+        },
+        {
+          id: "active-assistant",
+          kind: "message",
+          role: "assistant",
+          text: "I am checking the result.",
+        },
+      ];
+
+      const { container } = render(
+        <Messages
+          items={items}
+          threadId="thread-1"
+          workspaceId="ws-1"
+          isThinking={true}
+          processingStartedAt={Date.now() - 13_000}
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      const assistantTurn = container.querySelector("[data-assistant-turn]");
+      const turnSummary = container.querySelector("[data-turn-collapse-summary]");
+      expect(assistantTurn?.getAttribute("data-turn-collapse-allowed")).toBe("true");
+      expect(assistantTurn?.getAttribute("data-turn-prevent-auto-collapse")).toBe("true");
+      expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("false");
+      expect(turnSummary?.getAttribute("aria-expanded")).toBe("true");
+      expect(turnSummary?.textContent ?? "").toContain("已处理 13 秒");
+      expect(screen.getByText("I am checking the result.")).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+      expect(turnSummary?.textContent ?? "").toContain("已处理 14 秒");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps steering user messages persistent when a turn is collapsed", async () => {
     const items: ConversationItem[] = [
       {
         id: "steer-user-start",
@@ -2792,10 +2896,18 @@ describe("Messages", () => {
     const firstTurn = container.querySelector("[data-turn-key='user:steer-user-start']");
     const assistantTurn = firstTurn?.querySelector("[data-assistant-turn]");
     expect(assistantTurn?.getAttribute("data-turn-persistent-entry-count")).toBe("1");
-    expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("false");
+    fireEvent.click(firstTurn?.querySelector("[data-turn-collapse-summary]") as HTMLButtonElement);
+    await waitFor(() => {
+      expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("true");
+    });
+    expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("true");
     expect(firstTurn?.textContent ?? "").toContain("Keep this steering instruction visible.");
     expect(firstTurn?.textContent ?? "").toContain("Steered response.");
     expect(screen.queryByText(/npm run steer-hidden/i)).toBeNull();
+    fireEvent.click(firstTurn?.querySelector("[data-turn-collapse-summary]") as HTMLButtonElement);
+    await waitFor(() => {
+      expect(assistantTurn?.getAttribute("data-turn-collapsed")).toBe("false");
+    });
     clickFirst(container, "[data-oai-tool-activity-summary]");
     expect(screen.getAllByText(/npm run steer-hidden/i).length).toBeGreaterThan(0);
     expect(container.querySelectorAll("[data-turn-key]").length).toBe(2);
@@ -2976,6 +3088,148 @@ describe("Messages", () => {
     expect(container.querySelector('[data-mcp-app-instance="auto-expanded-mcp-app"]')?.getAttribute("data-mcp-app-expanded")).toBe("true");
   });
 
+  it("auto-expands live command activity groups until they finish", async () => {
+    const userMessage: Extract<ConversationItem, { kind: "message" }> = {
+      id: "live-command-user",
+      kind: "message",
+      role: "user",
+      text: "Run tests",
+    };
+    const assistantMessage: Extract<ConversationItem, { kind: "message" }> = {
+      id: "live-command-assistant",
+      kind: "message",
+      role: "assistant",
+      text: "Running tests.",
+    };
+    const liveCommand: Extract<ConversationItem, { kind: "tool" }> = {
+      id: "live-command",
+      kind: "tool",
+      toolType: "commandExecution",
+      itemType: "exec",
+      title: "Command: npm test",
+      detail: "npm test",
+      output: "live output",
+      status: "running",
+    };
+    const items: ConversationItem[] = [userMessage, assistantMessage, liveCommand];
+
+    const { container, rerender } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-collapsed-tool-activity-item]")).toBeTruthy();
+    });
+    const liveRow = container.querySelector("[data-collapsed-tool-activity-item]");
+    if (!liveRow) {
+      throw new Error("Expected live command activity row to render");
+    }
+    expect(liveRow.getAttribute("data-collapsed-tool-activity-item-expanded")).toBe("true");
+    expect(screen.getByText(/live output/i)).toBeTruthy();
+
+    rerender(
+      <Messages
+        items={[
+          userMessage,
+          assistantMessage,
+          {
+            ...liveCommand,
+            status: "completed",
+          },
+        ]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector("[data-collapsed-tool-activity-item]")
+          ?.getAttribute("data-collapsed-tool-activity-item-expanded"),
+      ).toBe("false");
+    });
+  });
+
+  it("toggles a mixed command activity group from its summary", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "mixed-command-user",
+        kind: "message",
+        role: "user",
+        text: "Run commands",
+      },
+      {
+        id: "mixed-command-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "Running commands.",
+      },
+      {
+        id: "mixed-command-running",
+        kind: "tool",
+        toolType: "commandExecution",
+        itemType: "exec",
+        title: "Command: npm run test",
+        detail: "npm run test",
+        output: "test output",
+        status: "running",
+      },
+      {
+        id: "mixed-command-completed",
+        kind: "tool",
+        toolType: "commandExecution",
+        itemType: "exec",
+        title: "Command: git diff -- src/features/messages",
+        detail: "git diff -- src/features/messages",
+        output: "diff output",
+        status: "completed",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-vscode-command-output]").length).toBe(2);
+    });
+
+    const summary = container.querySelector("[data-oai-tool-activity-summary]") as HTMLButtonElement | null;
+    expect(summary).toBeTruthy();
+    expect(summary?.getAttribute("aria-expanded")).toBe("true");
+    expect(summary?.querySelector("[data-oai-tool-activity-chevron]")).toBeTruthy();
+
+    fireEvent.click(summary as HTMLButtonElement);
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-vscode-command-output]").length).toBe(0);
+    });
+    expect(summary?.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(summary as HTMLButtonElement);
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-vscode-command-output]").length).toBe(2);
+    });
+    expect(summary?.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("renders reasoning status labels, strips duplicate headings, and cycles preview heights", async () => {
     const items: ConversationItem[] = [
       {
@@ -3098,6 +3352,11 @@ describe("Messages", () => {
       />,
     );
 
+    expect(container.querySelector("[data-turn-collapse-summary]")).toBeTruthy();
+    fireEvent.click(container.querySelector("[data-turn-collapse-summary]") as HTMLButtonElement);
+    await waitFor(() => {
+      expect(container.querySelector("[data-assistant-turn]")?.getAttribute("data-turn-collapsed")).toBe("false");
+    });
     expect(container.querySelector("[data-collapsed-tool-activity-summary]")).toBeNull();
     expect(container.querySelector("[data-vscode-command-output]")).toBeNull();
     fireEvent.click(
@@ -3111,6 +3370,15 @@ describe("Messages", () => {
     });
     const commandPanel = container.querySelector("[data-vscode-command-output]");
     const commandText = commandPanel?.querySelector("[data-vscode-command-text]") as HTMLButtonElement;
+    expect(
+      container.querySelector('[data-oai-tool-activity-kind="exec"] [data-oai-tool-activity-summary]')
+        ?.textContent ?? "",
+    ).toContain("已运行");
+    const execSummary = container.querySelector("[data-vscode-exec-summary]");
+    expect(execSummary?.querySelector(".oai-vscode-activity-icon")).toBeNull();
+    expect(execSummary?.querySelector(".oai-vscode-activity-status")).toBeNull();
+    expect(execSummary?.querySelector("[data-vscode-command-chevron]")).toBeTruthy();
+    expect(commandPanel?.querySelector("[data-vscode-shell-header]")?.textContent).toBe("Shell");
     expect(commandText.getAttribute("data-command-line-clamp")).toBe("2");
     expect(commandPanel?.querySelector("[data-vscode-command-full]")).toBeNull();
     fireEvent.click(commandText);
@@ -3118,13 +3386,82 @@ describe("Messages", () => {
     expect(commandPanel?.querySelector("[data-vscode-command-full]")).toBeNull();
     expect(commandText.textContent ?? "").toContain("npm run very-long-command");
     expect(commandPanel?.querySelector("[data-vscode-no-output]")?.textContent).toBe("No output");
+    expect(commandPanel?.querySelector("[data-vscode-command-footer-status]")?.textContent).toContain("成功");
     expect(commandPanel?.textContent ?? "").not.toContain("cwd:");
     expect((commandPanel?.querySelector("[data-vscode-copy-output]") as HTMLButtonElement).disabled).toBe(false);
     expect(commandPanel?.querySelector("[data-vscode-toggle-output]")).toBeNull();
     expect(commandPanel?.getAttribute("data-output-expanded")).toBe("true");
+
+    fireEvent.click(execSummary as Element);
+    await waitFor(() => {
+      expect(container.querySelector("[data-vscode-command-output]")).toBeNull();
+    });
+    expect(execSummary?.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(execSummary as Element);
+    await waitFor(() => {
+      expect(container.querySelector("[data-vscode-command-output]")).toBeTruthy();
+    });
+    expect(execSummary?.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("renders context compaction as Codex-style divider status rows", async () => {
+  it("keeps command output panels vertically scrollable from the top", async () => {
+    const output = Array.from({ length: 24 }, (_, index) => `line ${index + 1}`).join("\n");
+    const items: ConversationItem[] = [
+      {
+        id: "cmd-scroll-user",
+        kind: "message",
+        role: "user",
+        text: "Run verbose command",
+      },
+      {
+        id: "cmd-scroll-output",
+        kind: "tool",
+        toolType: "commandExecution",
+        itemType: "exec",
+        title: "Command: npm run verbose",
+        detail: "/repo",
+        output,
+        status: "completed",
+      },
+      {
+        id: "cmd-scroll-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "Verbose command finished.",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    fireEvent.click(
+      container.querySelector(
+        '[data-oai-tool-activity-kind="exec"] [data-oai-tool-activity-summary]',
+      ) as Element,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-vscode-command-output-lines]")).toBeTruthy();
+    });
+    const outputLines = container.querySelector("[data-vscode-command-output-lines]") as HTMLElement;
+    const style = getComputedStyle(outputLines);
+    expect(style.overflowX).toBe("auto");
+    expect(style.overflowY).toBe("auto");
+    expect(style.justifyContent).toBe("flex-start");
+    expect(outputLines.textContent ?? "").toContain("line 1");
+    expect(outputLines.textContent ?? "").toContain("line 24");
+  });
+
+  it("renders context compaction as standalone Codex-style divider status rows", async () => {
     const items: ConversationItem[] = [
       {
         id: "compact-running",
@@ -3157,11 +3494,11 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector("[data-context-compaction='true']")).toBeNull();
-    clickFirst(container, "[data-oai-tool-group] [data-oai-section-toggle]");
     await waitFor(() => {
       expect(container.querySelectorAll("[data-context-compaction='true']").length).toBe(2);
     });
+    expect(container.querySelector("[data-oai-tool-group]")).toBeNull();
+    expect(container.querySelector("[data-collapsed-tool-activity-item]")).toBeNull();
     expect(screen.getByText("上下文压缩中")).toBeTruthy();
     expect(screen.getByText("上下文已自动压缩")).toBeTruthy();
     expect(
@@ -3176,6 +3513,48 @@ describe("Messages", () => {
     ).toBe(2);
     expect(screen.queryByText("Context compaction")).toBeNull();
     expect(screen.queryByText("Context compacted")).toBeNull();
+  });
+
+  it("keeps Codex stderr chunks out of the visible transcript", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "stderr-1",
+        kind: "tool",
+        toolType: "error",
+        itemType: "system-error",
+        title: "Codex stderr",
+        detail: "stderr",
+        output: "Codex stderr: apply_patch verification failed",
+        status: "failed",
+      },
+      {
+        id: "stderr-2",
+        kind: "tool",
+        toolType: "error",
+        itemType: "system-error",
+        title: "Codex stderr",
+        detail: "stderr",
+        output: "Codex stderr: expected line",
+        status: "failed",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-system-error='true']").length).toBe(0);
+    });
+    expect(screen.queryByText(/apply_patch verification failed/)).toBeNull();
+    expect(screen.queryByText(/expected line/)).toBeNull();
   });
 
   it("renders OpenAI activity item type branches and generated image artifacts", async () => {

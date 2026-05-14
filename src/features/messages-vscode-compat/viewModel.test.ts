@@ -214,4 +214,111 @@ describe("VSCode-compatible message view model", () => {
       }),
     ]);
   });
+
+  it("splits context compaction out of tool groups and assistant activity blocks", () => {
+    const command: ConversationItem = {
+      id: "exec-1",
+      kind: "tool",
+      toolType: "commandExecution",
+      itemType: "exec",
+      title: "Command: npm test",
+      detail: "",
+    };
+    const compaction: ConversationItem = {
+      id: "compact-1",
+      kind: "tool",
+      toolType: "contextCompaction",
+      itemType: "context-compaction",
+      title: "Context compaction",
+      detail: "",
+      status: "completed",
+    };
+
+    const model = buildVscodeMessagesViewModel([
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "Run",
+      },
+      command,
+      compaction,
+      {
+        id: "assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "Done.",
+      },
+    ]);
+
+    const agentEntries = model.turns[0].renderedAgentEntries.map((entry) => entry.entry);
+    expect(agentEntries).toHaveLength(3);
+    expect(agentEntries[0]).toMatchObject({
+      kind: "assistantTurn",
+      turn: { blocks: [expect.objectContaining({ items: [command] })] },
+    });
+    expect(agentEntries[1]).toMatchObject({ kind: "item", item: compaction });
+    expect(agentEntries[2]).toMatchObject({ kind: "assistantTurn" });
+    expect(
+      agentEntries.some((entry) => entry.kind === "toolGroup"),
+    ).toBe(false);
+
+    expect(groupActivityItemsLikeOpenAI({
+      block: {
+        kind: "activity",
+        id: "activity-1",
+        summary: "",
+        items: [command, compaction],
+        toolCount: 2,
+        messageCount: 0,
+        durationMs: null,
+      },
+      isActivitySliceClosed: false,
+    })).toEqual([
+      expect.objectContaining({ kind: "exec", items: [command] }),
+      expect.objectContaining({ kind: "context-compaction", items: [compaction] }),
+    ]);
+  });
+
+  it("omits Codex stderr system errors from the transcript view model", () => {
+    const first: ConversationItem = {
+      id: "stderr-1",
+      kind: "tool",
+      toolType: "error",
+      itemType: "system-error",
+      title: "Codex stderr",
+      detail: "stderr",
+      output: "Codex stderr: apply_patch verification failed",
+      status: "failed",
+    };
+    const second: ConversationItem = {
+      id: "stderr-2",
+      kind: "tool",
+      toolType: "error",
+      itemType: "system-error",
+      title: "Codex stderr",
+      detail: "stderr",
+      output: "Codex stderr: expected line",
+      status: "failed",
+    };
+
+    const model = buildVscodeMessagesViewModel([
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "Patch",
+      },
+      first,
+      second,
+    ]);
+
+    const agentEntries = model.turns[0].renderedAgentEntries.map((entry) => entry.entry);
+    expect(agentEntries).toHaveLength(0);
+    expect(model.entries.some((entry) => (
+      entry.kind === "item" &&
+      entry.item.kind === "tool" &&
+      entry.item.title === "Codex stderr"
+    ))).toBe(false);
+  });
 });

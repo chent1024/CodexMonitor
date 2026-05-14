@@ -61,7 +61,47 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
   min-height: 0;
+}
+
+.debug-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 8px 16px 6px;
+  background: var(--surface-debug);
+}
+
+.debug-filter-button {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-control);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.debug-filter-button:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.debug-filter-button.active {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--surface-raised);
+}
+
+.debug-filter-count {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
 }
 
 .debug-empty {

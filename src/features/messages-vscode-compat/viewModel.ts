@@ -23,6 +23,7 @@ const TOOL_DETAIL_PARSE_CACHE_LIMIT = 500;
 const toolDetailParseCache = new Map<string, Record<string, unknown> | null>();
 
 export type VscodeActivityKind =
+  | "context-compaction"
   | "exploration"
   | "multi-agent-group"
   | "patch"
@@ -73,7 +74,7 @@ export function formatActivityDurationLabel(durationMs: number) {
 
 export function formatAssistantTurnActivityStatus(turn: AssistantTurn) {
   if (typeof turn.durationMs === "number") {
-    return `处理了 ${formatActivityDurationLabel(turn.durationMs)}`;
+    return `已处理 ${formatActivityDurationLabel(turn.durationMs)}`;
   }
   const collapsedCount = turn.toolCount + turn.messageCount;
   if (collapsedCount > 0) {
@@ -102,6 +103,9 @@ export function getToolActivityKind(item: ConversationItem): VscodeActivityKind 
   if (item.kind !== "tool") {
     return item.kind;
   }
+  if (isContextCompactionItem(item)) {
+    return "context-compaction";
+  }
   if (item.toolType === "collabToolCall") {
     return "multi-agent-group";
   }
@@ -118,6 +122,39 @@ export function getToolActivityKind(item: ConversationItem): VscodeActivityKind 
     return "pending-mcp-tool-calls";
   }
   return item.toolType;
+}
+
+export function isContextCompactionItem(item: ConversationItem) {
+  if (item.kind !== "tool") {
+    return false;
+  }
+  const itemType = normalizeActivityTypeName(item.itemType);
+  const toolType = normalizeActivityTypeName(item.toolType);
+  return (
+    itemType === "context-compaction" ||
+    toolType === "context-compaction" ||
+    toolType === "contextcompaction" ||
+    toolType === "compaction"
+  );
+}
+
+export function isCodexStderrTranscriptItem(
+  item: ConversationItem,
+): item is Extract<ConversationItem, { kind: "tool" }> {
+  return (
+    item.kind === "tool" &&
+    item.toolType === "error" &&
+    item.itemType === "system-error" &&
+    item.title === "Codex stderr" &&
+    item.detail === "stderr"
+  );
+}
+
+function normalizeActivityTypeName(value?: string | null) {
+  return (value ?? "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[_\s]+/g, "-")
+    .toLowerCase();
 }
 
 export function getOpenAIActivityItemType(item: ConversationItem) {
@@ -200,6 +237,11 @@ export function groupActivityItemsLikeOpenAI({
       kind === "pending-mcp-tool-calls" ||
       kind === "multi-agent-group" ||
       kind === "web-search-group";
+    if (kind === "context-compaction") {
+      flush();
+      groups.push(buildActivityGroup(block.id, kind, [item]));
+      return;
+    }
     if (!canGroup) {
       flush();
       groups.push({
@@ -374,6 +416,206 @@ function summarizeAssistantBlocks(blocks: AssistantTurnBlock[]) {
   return { toolCount, messageCount, durationMs };
 }
 
+function countActivityTools(items: ToolGroupItem[]) {
+  return items.reduce(
+    (total, item) => total + (item.kind === "tool" ? 1 : item.kind === "explore" ? item.entries.length : 0),
+    0,
+  );
+}
+
+function countActivityMessages(items: ToolGroupItem[]) {
+  return items.filter((item) => item.kind !== "tool" && item.kind !== "explore").length;
+}
+
+function sumActivityDuration(items: ToolGroupItem[]) {
+  return items.reduce<number | null>((total, item) => {
+    if (item.kind !== "tool" || typeof item.durationMs !== "number") {
+      return total;
+    }
+    return (total ?? 0) + item.durationMs;
+  }, null);
+}
+
+function appendErrorOutput(existing: string | undefined, next: string | undefined) {
+  if (!existing) {
+    return next ?? "";
+  }
+  if (!next) {
+    return existing;
+  }
+  return `${existing}\n${next}`;
+}
+
+function mergeConsecutiveCodexStderrItems(items: ToolGroupItem[]) {
+  const merged: ToolGroupItem[] = [];
+  items.forEach((item) => {
+    const previous = merged[merged.length - 1];
+    if (previous && isCodexStderrTranscriptItem(previous) && isCodexStderrTranscriptItem(item)) {
+      merged[merged.length - 1] = {
+        ...previous,
+        status: item.status ?? previous.status,
+        output: appendErrorOutput(previous.output, item.output),
+      };
+      return;
+    }
+    merged.push(item);
+  });
+  return merged;
+}
+
+function buildSplitToolGroupEntry(
+  source: Extract<MessageListEntry, { kind: "toolGroup" }>["group"],
+  items: ToolGroupItem[],
+  partIndex: number,
+): MessageListEntry {
+  if (items.length === 1) {
+    return { kind: "item", item: items[0] };
+  }
+  return {
+    kind: "toolGroup",
+    group: {
+      ...source,
+      id: partIndex === 0 ? source.id : `${source.id}:part-${partIndex}`,
+      items,
+      toolCount: countActivityTools(items),
+      messageCount: countActivityMessages(items),
+    },
+  };
+}
+
+function splitToolGroupContextCompactions(
+  entry: Extract<MessageListEntry, { kind: "toolGroup" }>,
+) {
+  const items = mergeConsecutiveCodexStderrItems(entry.group.items);
+  if (!items.some(isContextCompactionItem)) {
+    if (items === entry.group.items || items.length === entry.group.items.length) {
+      return [entry];
+    }
+    return [buildSplitToolGroupEntry(entry.group, items, 0)];
+  }
+  const entries: MessageListEntry[] = [];
+  let buffer: ToolGroupItem[] = [];
+  let partIndex = 0;
+  const flushBuffer = () => {
+    if (buffer.length === 0) {
+      return;
+    }
+    entries.push(buildSplitToolGroupEntry(entry.group, buffer, partIndex));
+    partIndex += 1;
+    buffer = [];
+  };
+
+  items.forEach((item) => {
+    if (isContextCompactionItem(item)) {
+      flushBuffer();
+      entries.push({ kind: "item", item });
+      return;
+    }
+    buffer.push(item);
+  });
+  flushBuffer();
+  return entries;
+}
+
+function buildSplitActivityBlock(
+  source: AssistantTurnActivityBlock,
+  items: ToolGroupItem[],
+  partIndex: number,
+): AssistantTurnActivityBlock {
+  return {
+    ...source,
+    id: partIndex === 0 ? source.id : `${source.id}:part-${partIndex}`,
+    summary: formatActivitySummary(items),
+    items,
+    toolCount: countActivityTools(items),
+    messageCount: countActivityMessages(items),
+    durationMs: sumActivityDuration(items),
+  };
+}
+
+function buildSplitAssistantTurnEntry(
+  turn: AssistantTurn,
+  blocks: AssistantTurnBlock[],
+  partIndex: number,
+): MessageListEntry {
+  const summary = summarizeAssistantBlocks(blocks);
+  return {
+    kind: "assistantTurn",
+    turn: {
+      ...turn,
+      id: partIndex === 0 ? turn.id : `${turn.id}:part-${partIndex}`,
+      blocks,
+      ...summary,
+    },
+  };
+}
+
+function splitAssistantTurnContextCompactions(
+  entry: Extract<MessageListEntry, { kind: "assistantTurn" }>,
+) {
+  const hasContextCompaction = entry.turn.blocks.some(
+    (block) => block.kind === "activity" && block.items.some(isContextCompactionItem),
+  );
+  if (!hasContextCompaction) {
+    return [entry];
+  }
+
+  const entries: MessageListEntry[] = [];
+  let blockBuffer: AssistantTurnBlock[] = [];
+  let turnPartIndex = 0;
+  const flushBlocks = () => {
+    if (blockBuffer.length === 0) {
+      return;
+    }
+    entries.push(buildSplitAssistantTurnEntry(entry.turn, blockBuffer, turnPartIndex));
+    turnPartIndex += 1;
+    blockBuffer = [];
+  };
+
+  entry.turn.blocks.forEach((block) => {
+    if (block.kind !== "activity") {
+      blockBuffer.push(block);
+      return;
+    }
+
+    let itemBuffer: ToolGroupItem[] = [];
+    let activityPartIndex = 0;
+    const flushActivity = () => {
+      if (itemBuffer.length === 0) {
+        return;
+      }
+      blockBuffer.push(buildSplitActivityBlock(block, itemBuffer, activityPartIndex));
+      activityPartIndex += 1;
+      itemBuffer = [];
+    };
+
+    mergeConsecutiveCodexStderrItems(block.items).forEach((item) => {
+      if (isContextCompactionItem(item)) {
+        flushActivity();
+        flushBlocks();
+        entries.push({ kind: "item", item });
+        return;
+      }
+      itemBuffer.push(item);
+    });
+    flushActivity();
+  });
+  flushBlocks();
+  return entries;
+}
+
+function splitContextCompactionEntries(entries: MessageListEntry[]) {
+  return entries.flatMap((entry): MessageListEntry[] => {
+    if (entry.kind === "toolGroup") {
+      return splitToolGroupContextCompactions(entry);
+    }
+    if (entry.kind === "assistantTurn") {
+      return splitAssistantTurnContextCompactions(entry);
+    }
+    return [entry];
+  });
+}
+
 export function mergeAssistantAgentEntries(entries: MessageListEntry[]): MessageListEntry[] {
   const merged: MessageListEntry[] = [];
   let assistantBuffer: AssistantTurn | null = null;
@@ -449,7 +691,8 @@ export function mergeAssistantAgentEntries(entries: MessageListEntry[]): Message
 export function buildVscodeViewModelFromEntries(
   entries: MessageListEntry[],
 ): VscodeMessagesViewModel {
-  const turns = buildVscodeConversationTurns(entries).map((turn, turnIndex) => {
+  const compatEntries = splitContextCompactionEntries(entries);
+  const turns = buildVscodeConversationTurns(compatEntries).map((turn, turnIndex) => {
     const assistantTurnSearchKey = getVscodeAssistantTurnSearchKey(turn.agentEntries);
     const renderedAgentEntries = mergeAssistantAgentEntries(turn.agentEntries).map(
       (entry, index) => {
@@ -471,11 +714,12 @@ export function buildVscodeViewModelFromEntries(
       renderedAgentEntries,
     };
   });
-  return { turns, entries };
+  return { turns, entries: compatEntries };
 }
 
 export function buildVscodeMessagesViewModel(
   items: ConversationItem[],
 ): VscodeMessagesViewModel {
-  return buildVscodeViewModelFromEntries(buildMessageEntries(items));
+  const transcriptItems = items.filter((item) => !isCodexStderrTranscriptItem(item));
+  return buildVscodeViewModelFromEntries(buildMessageEntries(transcriptItems));
 }

@@ -48,6 +48,50 @@ export type ThreadState = {
   lastAgentMessageByThread: Record<string, { text: string; timestamp: number }>;
 };
 
+export type AppendAgentDeltaAction = {
+  type: "appendAgentDelta";
+  workspaceId: string;
+  threadId: string;
+  itemId: string;
+  delta: string;
+  hasCustomName: boolean;
+};
+
+export type AppendReasoningSummaryAction = {
+  type: "appendReasoningSummary";
+  threadId: string;
+  itemId: string;
+  delta: string;
+};
+
+export type AppendReasoningContentAction = {
+  type: "appendReasoningContent";
+  threadId: string;
+  itemId: string;
+  delta: string;
+};
+
+export type AppendPlanDeltaAction = {
+  type: "appendPlanDelta";
+  threadId: string;
+  itemId: string;
+  delta: string;
+};
+
+export type AppendToolOutputAction = {
+  type: "appendToolOutput";
+  threadId: string;
+  itemId: string;
+  delta: string;
+};
+
+export type StreamDeltaAction =
+  | AppendAgentDeltaAction
+  | AppendReasoningSummaryAction
+  | AppendReasoningContentAction
+  | AppendPlanDeltaAction
+  | AppendToolOutputAction;
+
 export type ThreadAction =
   | { type: "setActiveThreadId"; workspaceId: string; threadId: string | null }
   | { type: "setMaxItemsPerThread"; maxItemsPerThread: number | null }
@@ -91,14 +135,7 @@ export type ThreadAction =
       threadId: string;
       timestamp: number;
     }
-  | {
-      type: "appendAgentDelta";
-      workspaceId: string;
-      threadId: string;
-      itemId: string;
-      delta: string;
-      hasCustomName: boolean;
-    }
+  | AppendAgentDeltaAction
   | {
       type: "completeAgentMessage";
       workspaceId: string;
@@ -116,19 +153,18 @@ export type ThreadAction =
     }
   | { type: "setThreadItems"; threadId: string; items: ConversationItem[] }
   | {
-      type: "appendReasoningSummary";
-      threadId: string;
-      itemId: string;
-      delta: string;
+      type: "appendStreamDeltasBatch";
+      deltas: StreamDeltaAction[];
     }
+  | AppendReasoningSummaryAction
   | {
       type: "appendReasoningSummaryBoundary";
       threadId: string;
       itemId: string;
     }
-  | { type: "appendReasoningContent"; threadId: string; itemId: string; delta: string }
-  | { type: "appendPlanDelta"; threadId: string; itemId: string; delta: string }
-  | { type: "appendToolOutput"; threadId: string; itemId: string; delta: string }
+  | AppendReasoningContentAction
+  | AppendPlanDeltaAction
+  | AppendToolOutputAction
   | {
       type: "setThreads";
       workspaceId: string;

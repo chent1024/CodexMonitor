@@ -10,6 +10,7 @@
   --markdown-wide-block-max-width: 64rem;
   --conversation-block-gap: 12px;
   --conversation-tool-assistant-gap: 16px;
+  --assistant-turn-item-gap: 16px;
   --message-code-font-size: var(--codex-chat-code-font-size);
   --message-codeblock-font-size: var(--message-code-font-size);
   --message-codeblock-line-height: 1.5;
@@ -358,7 +359,7 @@
   min-width: 0;
   flex-direction: column;
   gap: 0;
-  margin: 0 0 18px;
+  margin: 0;
 }
 
 .oai-tool-activity-offset {
@@ -407,6 +408,26 @@
 .oai-tool-activity-icon {
   flex: 0 0 auto;
   color: var(--codex-foreground-tertiary);
+}
+
+.oai-tool-activity-chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-token-input-placeholder-foreground);
+  opacity: 0;
+  transition: opacity 200ms ease, transform 300ms ease;
+}
+
+.oai-tool-activity-summary:hover .oai-tool-activity-chevron,
+.oai-tool-activity-summary:focus-visible .oai-tool-activity-chevron,
+.oai-tool-activity-chevron.is-expanded {
+  opacity: 1;
+}
+
+.oai-tool-activity-chevron.is-expanded {
+  transform: rotate(90deg);
 }
 
 .oai-tool-activity-body {
@@ -2090,6 +2111,44 @@
   cursor: pointer;
 }
 
+.oai-vscode-exec-summary {
+  width: 100%;
+  max-width: 100%;
+  align-self: stretch;
+  gap: 6px;
+}
+
+.oai-vscode-exec-summary .oai-vscode-activity-title {
+  flex: 1 1 auto;
+  max-width: none;
+}
+
+.oai-vscode-activity-row[data-exec="true"].is-expanded .oai-vscode-activity-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oai-vscode-command-chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-token-input-placeholder-foreground);
+  opacity: 0;
+  transition: opacity 200ms ease, transform 300ms ease;
+}
+
+.oai-vscode-exec-summary:hover .oai-vscode-command-chevron,
+.oai-vscode-exec-summary:focus-visible .oai-vscode-command-chevron,
+.oai-vscode-command-chevron.is-expanded {
+  opacity: 1;
+}
+
+.oai-vscode-command-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+
 .oai-vscode-activity-summary:hover:not(:disabled),
 .oai-vscode-activity-summary:active:not(:disabled) {
   background: transparent;
@@ -2133,6 +2192,11 @@
   font-size: var(--message-ui-font-size-sm);
   font-weight: 500;
   line-height: 22px;
+}
+
+.oai-context-compaction-slot {
+  width: 100%;
+  min-width: 0;
 }
 
 .oai-context-compaction-divider {
@@ -2224,6 +2288,15 @@
   line-height: var(--message-codeblock-line-height);
 }
 
+.oai-vscode-command-summary-status {
+  font-family: var(--font-sans, inherit);
+  color: var(--codex-foreground-secondary);
+}
+
+.oai-vscode-command-summary-command {
+  font-family: var(--code-font-family);
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -2290,6 +2363,16 @@
   color: var(--codex-foreground-secondary);
 }
 
+.oai-vscode-activity-row[data-stream-error="true"] .oai-vscode-activity-body,
+.oai-vscode-activity-row[data-system-error="true"] .oai-vscode-activity-body {
+  padding-left: 0;
+}
+
+.oai-vscode-activity-row[data-exec="true"] .oai-vscode-activity-body {
+  gap: 0;
+  padding-left: 0;
+}
+
 .oai-vscode-activity-body[data-disclosure-body-mounted="true"],
 .oai-tool-activity-body[data-disclosure-body-mounted="true"] {
   transition: max-height 220ms ease, opacity 180ms ease;
@@ -2318,10 +2401,29 @@
 
 .oai-vscode-terminal {
   width: 100%;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--codex-border) 42%, transparent);
+  border-radius: 8px;
+  background: var(--codex-code-surface);
   box-shadow: none;
+}
+
+.oai-vscode-activity-row[data-exec="true"] .oai-vscode-terminal {
+  margin-top: 8px;
+}
+
+.oai-vscode-shell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  padding: 4px 8px;
+  color: var(--color-token-description-foreground);
+  font-family: var(--font-sans, inherit);
+  font-size: var(--message-ui-font-size-sm);
+  font-weight: 500;
+  user-select: none;
 }
 
 .oai-vscode-command-panel,
@@ -2334,7 +2436,7 @@
 
 .oai-vscode-command-panel {
   display: block;
-  padding: 8px 8px 0;
+  padding: 6px 8px 0;
   border-bottom: 0;
 }
 
@@ -2464,6 +2566,7 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   gap: 6px;
   min-height: 1.25rem;
   max-height: 140px;
@@ -2477,6 +2580,26 @@
   line-height: 1.45;
   white-space: pre;
   transition: max-height 180ms ease, opacity 160ms ease;
+}
+
+.oai-vscode-command-footer {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 2px 10px 6px;
+  color: var(--color-token-input-placeholder-foreground);
+  font-family: var(--font-sans, inherit);
+  font-size: var(--message-ui-font-size-sm);
+  line-height: 1.4;
+}
+
+.oai-vscode-command-footer-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .oai-vscode-terminal-lines .oai-tool-terminal-line {
@@ -2776,11 +2899,15 @@
   border-radius: 10px;
 }
 
-.oai-tool-activity-stack .oai-vscode-terminal {
+.oai-tool-activity-stack .oai-vscode-terminal:not([data-vscode-command-output]) {
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.oai-tool-activity-stack .oai-vscode-terminal[data-vscode-command-output] {
+  padding: 0;
 }
 
 .oai-reasoning-detail-body {
@@ -2796,13 +2923,61 @@
 
 .messages .oai-agent-turn-slot {
   gap: 16px;
+  --assistant-nontext-offset: 10px;
+}
+
+.messages .oai-agent-turn-slot > [data-oai-tool-group],
+.messages .oai-assistant-turn > [data-turn-collapse-summary-shell],
+.messages .oai-assistant-turn > [data-collapsed-tool-activity],
+.messages .oai-assistant-turn-body-stack > [data-collapsed-tool-activity-item] {
+  box-sizing: border-box;
+  padding-inline-start: var(--assistant-nontext-offset);
+}
+
+.messages .oai-turn-collapse-summary {
+  border: 0;
+  box-shadow: none;
+  transform: none;
+}
+
+.messages .oai-turn-collapse-summary:hover,
+.messages .oai-turn-collapse-summary:active {
+  background: transparent;
+  box-shadow: none;
+  color: var(--codex-foreground-secondary);
+  transform: none;
+}
+
+.messages .oai-assistant-turn-footer > .oai-review-diff-summary-card {
+  box-sizing: border-box;
+  width: calc(100% - var(--assistant-nontext-offset));
+  margin-inline-start: var(--assistant-nontext-offset);
+}
+
+.messages .oai-tool-group-header {
+  padding: 0;
+}
+
+.messages [data-message-author-role="assistant"] .markdown > :where(ul, ol) {
+  padding-left: 1rem;
+  list-style-position: outside;
+}
+
+.messages [data-message-author-role="assistant"] .markdown > :where(ul, ol) :where(ul, ol) {
+  margin-left: 6px;
+  padding-left: 14px;
+  list-style-position: outside;
 }
 
 .messages .oai-assistant-turn {
   gap: 0;
 }
 
-  .messages .oai-collapsed-tool-activity-offset {
+.messages .oai-assistant-turn-body-stack {
+  gap: var(--assistant-turn-item-gap);
+}
+
+.messages .oai-collapsed-tool-activity-offset {
   margin: 0;
 }
 
@@ -2835,7 +3010,7 @@
 
 .messages .oai-tool-activity-row {
   gap: 0;
-  margin: 0 0 18px;
+  margin: 0;
 }
 
 .messages .oai-tool-activity-body {

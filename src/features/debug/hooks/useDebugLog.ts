@@ -2,6 +2,98 @@ import { useCallback, useRef, useState } from "react";
 import type { DebugEntry } from "../../../types";
 
 const MAX_DEBUG_ENTRIES = 200;
+const MAX_MERGED_STDERR_LINES = 80;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getCodexStderrPayloadInfo(payload: unknown): {
+  workspaceId: string | null;
+  message: string;
+  mergedCount: number;
+} | null {
+  const root = asRecord(payload);
+  const messageRoot = asRecord(root?.message);
+  const params = asRecord(messageRoot?.params);
+  const message = typeof params?.message === "string" ? params.message : "";
+  if (!message) {
+    return null;
+  }
+  return {
+    workspaceId: typeof root?.workspace_id === "string" ? root.workspace_id : null,
+    message,
+    mergedCount:
+      typeof params?.mergedCount === "number" && Number.isFinite(params.mergedCount)
+        ? Math.max(1, params.mergedCount)
+        : 1,
+  };
+}
+
+function withMergedCodexStderrPayload(
+  payload: unknown,
+  message: string,
+  mergedCount: number,
+) {
+  const root = asRecord(payload);
+  const messageRoot = asRecord(root?.message);
+  const params = asRecord(messageRoot?.params);
+  if (!root || !messageRoot || !params) {
+    return payload;
+  }
+  return {
+    ...root,
+    message: {
+      ...messageRoot,
+      params: {
+        ...params,
+        message,
+        mergedCount,
+        truncatedMergedLines: mergedCount > MAX_MERGED_STDERR_LINES,
+      },
+    },
+  };
+}
+
+function mergeConsecutiveCodexStderr(
+  previous: DebugEntry | undefined,
+  next: DebugEntry,
+): DebugEntry | null {
+  if (
+    !previous ||
+    previous.source !== "stderr" ||
+    next.source !== "stderr" ||
+    previous.label !== "codex/stderr" ||
+    next.label !== "codex/stderr"
+  ) {
+    return null;
+  }
+  const previousInfo = getCodexStderrPayloadInfo(previous.payload);
+  const nextInfo = getCodexStderrPayloadInfo(next.payload);
+  if (
+    !previousInfo ||
+    !nextInfo ||
+    previousInfo.workspaceId !== nextInfo.workspaceId
+  ) {
+    return null;
+  }
+
+  const mergedCount = previousInfo.mergedCount + 1;
+  const mergedLines = [...previousInfo.message.split("\n"), nextInfo.message].slice(
+    -MAX_MERGED_STDERR_LINES,
+  );
+  return {
+    ...next,
+    id: previous.id,
+    payload: withMergedCodexStderrPayload(
+      next.payload,
+      mergedLines.join("\n"),
+      mergedCount,
+    ),
+  };
+}
 
 function summarizePayload(payload: unknown): unknown {
   if (Array.isArray(payload)) {
@@ -26,7 +118,7 @@ export function useDebugLog() {
   const [debugOpen, setDebugOpenState] = useState(false);
   const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([]);
   const [hasDebugAlerts, setHasDebugAlerts] = useState(false);
-  const [debugPinned, setDebugPinned] = useState(false);
+  const [debugResetVersion, setDebugResetVersion] = useState(0);
   const debugOpenRef = useRef(debugOpen);
   debugOpenRef.current = debugOpen;
 
@@ -55,7 +147,13 @@ export function useDebugLog() {
         setHasDebugAlerts(true);
       }
       const compactEntry = { ...entry, payload: summarizePayload(entry.payload) };
-      setDebugEntries((prev) => [...prev, compactEntry].slice(-MAX_DEBUG_ENTRIES));
+      setDebugEntries((prev) => {
+        const merged = mergeConsecutiveCodexStderr(prev[prev.length - 1], compactEntry);
+        if (merged) {
+          return [...prev.slice(0, -1), merged].slice(-MAX_DEBUG_ENTRIES);
+        }
+        return [...prev, compactEntry].slice(-MAX_DEBUG_ENTRIES);
+      });
     },
     [isAlertEntry],
   );
@@ -83,27 +181,25 @@ export function useDebugLog() {
   const clearDebugEntries = useCallback(() => {
     setDebugEntries([]);
     setHasDebugAlerts(false);
+    setDebugResetVersion((version) => version + 1);
   }, []);
 
   const setDebugOpen = useCallback(
     (next: boolean | ((prev: boolean) => boolean)) => {
       setDebugOpenState((prev) => {
-        const resolved = typeof next === "function" ? next(prev) : next;
-        if (resolved) {
-          setDebugPinned(true);
-        }
-        return resolved;
+        return typeof next === "function" ? next(prev) : next;
       });
     },
     [],
   );
 
-  const showDebugButton = hasDebugAlerts || debugOpen || debugPinned;
+  const showDebugButton = true;
 
   return {
     debugOpen,
     setDebugOpen,
     debugEntries,
+    debugResetVersion,
     hasDebugAlerts,
     showDebugButton,
     addDebugEntry,

@@ -508,14 +508,7 @@ pub(crate) async fn start_review(
         .await;
     }
 
-    codex_core::start_review_core(
-        &state.sessions,
-        workspace_id,
-        thread_id,
-        target,
-        delivery,
-    )
-    .await
+    codex_core::start_review_core(&state.sessions, workspace_id, thread_id, target, delivery).await
 }
 
 #[tauri::command]
@@ -584,6 +577,75 @@ pub(crate) async fn set_codex_feature_flag(
     }
 
     config::write_feature_enabled(feature_key.as_str(), enabled)
+}
+
+#[tauri::command]
+pub(crate) async fn get_codex_feature_flag(
+    feature_key: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<bool, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "get_codex_feature_flag",
+            json!({ "featureKey": feature_key }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    config::read_feature_enabled(feature_key.as_str())
+}
+
+#[tauri::command]
+pub(crate) async fn get_local_memory_status(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<config::LocalMemoryConfigStatus, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "get_local_memory_status", json!({})).await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    config::read_local_memory_status()
+}
+
+#[tauri::command]
+pub(crate) async fn get_local_memory_debug_status(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<config::LocalMemoryDebugSnapshot, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "get_local_memory_debug_status", json!({}))
+                .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    config::read_local_memory_debug_status()
+}
+
+#[tauri::command]
+pub(crate) async fn set_local_memory_enabled(
+    enabled: bool,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<config::LocalMemoryConfigStatus, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "set_local_memory_enabled",
+            json!({ "enabled": enabled }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    config::write_local_memory_enabled(enabled)
 }
 
 #[tauri::command]

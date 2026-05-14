@@ -184,6 +184,9 @@ type UseMainAppLayoutSurfacesArgs = {
   terminalOpen: boolean;
   debugOpen: boolean;
   debugEntries: LayoutNodesOptions["secondary"]["debugPanelProps"]["entries"];
+  debugResetVersion: NonNullable<
+    LayoutNodesOptions["secondary"]["debugPanelProps"]["resetVersion"]
+  >;
   terminalTabs: LayoutNodesOptions["secondary"]["terminalDockProps"]["terminals"];
   activeTerminalId: LayoutNodesOptions["secondary"]["terminalDockProps"]["activeTerminalId"];
   onSelectTerminal: LayoutNodesOptions["secondary"]["terminalDockProps"]["onSelectTerminal"];
@@ -192,6 +195,12 @@ type UseMainAppLayoutSurfacesArgs = {
   terminalState: LayoutNodesOptions["secondary"]["terminalState"];
   onClearDebug: () => void;
   onCopyDebug: () => void;
+  onRefreshLocalMemoryDebug: NonNullable<
+    LayoutNodesOptions["secondary"]["debugPanelProps"]["onRefreshLocalMemoryDebug"]
+  >;
+  localMemoryDebugLoading: NonNullable<
+    LayoutNodesOptions["secondary"]["debugPanelProps"]["localMemoryDebugLoading"]
+  >;
   onResizeDebug: LayoutNodesOptions["secondary"]["debugPanelProps"]["onResizeStart"];
   onResizeTerminal: LayoutNodesOptions["secondary"]["terminalDockProps"]["onResizeStart"];
   isCompact: boolean;
@@ -844,6 +853,7 @@ function buildSecondarySurface({
   terminalOpen,
   debugOpen,
   debugEntries,
+  debugResetVersion,
   terminalTabs,
   activeTerminalId,
   onSelectTerminal,
@@ -852,6 +862,8 @@ function buildSecondarySurface({
   terminalState,
   onClearDebug,
   onCopyDebug,
+  onRefreshLocalMemoryDebug,
+  localMemoryDebugLoading,
   onResizeDebug,
   onResizeTerminal,
   isPhone,
@@ -875,8 +887,11 @@ function buildSecondarySurface({
     debugPanelProps: {
       entries: debugEntries,
       isOpen: debugOpen,
+      resetVersion: debugResetVersion,
       onClear: onClearDebug,
       onCopy: onCopyDebug,
+      onRefreshLocalMemoryDebug,
+      localMemoryDebugLoading,
       onResizeStart: onResizeDebug,
     },
     compactNavProps: {
@@ -1031,6 +1046,7 @@ export function useMainAppLayoutSurfaces({
   terminalOpen,
   debugOpen,
   debugEntries,
+  debugResetVersion,
   terminalTabs,
   activeTerminalId,
   onSelectTerminal,
@@ -1039,6 +1055,8 @@ export function useMainAppLayoutSurfaces({
   terminalState,
   onClearDebug,
   onCopyDebug,
+  onRefreshLocalMemoryDebug,
+  localMemoryDebugLoading,
   onResizeDebug,
   onResizeTerminal,
   isCompact,
@@ -1184,6 +1202,7 @@ export function useMainAppLayoutSurfaces({
     terminalOpen,
     debugOpen,
     debugEntries,
+    debugResetVersion,
     terminalTabs,
     activeTerminalId,
     onSelectTerminal,
@@ -1192,6 +1211,8 @@ export function useMainAppLayoutSurfaces({
     terminalState,
     onClearDebug,
     onCopyDebug,
+    onRefreshLocalMemoryDebug,
+    localMemoryDebugLoading,
     onResizeDebug,
     onResizeTerminal,
     isCompact,

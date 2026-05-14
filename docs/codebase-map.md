@@ -6,6 +6,8 @@ Related docs:
 
 - Setup/build/release: `README.md`
 - iOS remote over Tailscale (TCP): `docs/mobile-ios-tailscale-blueprint.md`
+- Local memory architecture: `docs/local-memory-architecture.md`
+- Restart-safe sessions: `docs/restart-safe-sessions.md`
 
 ## Start Here: How Changes Flow
 
@@ -36,6 +38,8 @@ If a behavior must work in both app and daemon, implement it in `src-tauri/src/s
 | Change Git/GitHub backend behavior | `src/features/git/hooks/*`, `src/services/tauri.ts`, `src-tauri/src/git/mod.rs`, `src-tauri/src/shared/git_ui_core.rs`, `src-tauri/src/shared/git_ui_core/*`, `src-tauri/src/shared/git_core.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc/git.rs` |
 | Change prompts CRUD/listing behavior | `src/features/prompts/hooks/useCustomPrompts.ts`, `src/features/prompts/components/PromptPanel.tsx`, `src/services/tauri.ts`, `src-tauri/src/prompts.rs`, `src-tauri/src/shared/prompts_core.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc.rs` |
 | Change file read/write for Agents/config | `src/services/tauri.ts`, `src-tauri/src/files/mod.rs`, `src-tauri/src/shared/files_core.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc.rs` |
+| Add/change local memory behavior | Start with `docs/local-memory-architecture.md`, then edit `src-tauri/src/shared/local_memory_core.rs`, `src-tauri/src/shared/local_memory_core/*`, `src-tauri/src/bin/codex_monitor_memory_mcp.rs`, app/daemon adapters, and `src/services/tauri.ts` |
+| Make active Codex sessions survive app restart | Start with `docs/restart-safe-sessions.md`, then edit shared session/journal logic under `src-tauri/src/shared/*`, app-server adapters, daemon RPC/session state, `src/services/tauri.ts`, `src/services/events.ts`, and thread event reducers |
 | Add/change daemon JSON-RPC surface | `src-tauri/src/bin/codex_monitor_daemon/rpc.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc/*`, `src-tauri/src/bin/codex_monitor_daemon.rs`, matching shared core |
 
 ## Frontend Navigation
@@ -126,6 +130,7 @@ All cross-runtime domain behavior belongs in `src-tauri/src/shared/*`:
 - Git and GitHub logic: `src-tauri/src/shared/git_core.rs`, `src-tauri/src/shared/git_ui_core.rs`, `src-tauri/src/shared/git_ui_core/*`
 - Prompts CRUD/listing: `src-tauri/src/shared/prompts_core.rs`
 - Usage snapshot and aggregation: `src-tauri/src/shared/local_usage_core.rs`
+- Local memory storage/retrieval: `src-tauri/src/shared/local_memory_core.rs`, `src-tauri/src/shared/local_memory_core/*`
 - Process helpers: `src-tauri/src/shared/process_core.rs`
 
 ## Events Map (Backend -> Frontend)
