@@ -6,14 +6,13 @@ type CenterMode = "chat" | "diff";
 
 function shouldRenderDiffViewer({
   splitChatDiffView,
-  preloadGitDiffs,
   centerMode,
 }: {
   splitChatDiffView: boolean;
   preloadGitDiffs: boolean;
   centerMode: CenterMode;
 }) {
-  return splitChatDiffView || preloadGitDiffs || centerMode === "diff";
+  return splitChatDiffView || centerMode === "diff";
 }
 
 function isActiveLayer(centerMode: CenterMode, layer: CenterMode) {

@@ -115,7 +115,7 @@ const baseSettings: AppSettings = {
   ],
   activeRemoteBackendId: "remote-default",
   keepDaemonRunningAfterAppClose: false,
-  restartSafeSessions: false,
+  restartSafeSessions: true,
   defaultAccessMode: "current",
   reviewDeliveryMode: "inline",
   composerModelShortcut: null,
@@ -155,7 +155,7 @@ const baseSettings: AppSettings = {
   systemNotificationsEnabled: true,
   subagentSystemNotificationsEnabled: true,
   splitChatDiffView: false,
-  preloadGitDiffs: true,
+  preloadGitDiffs: false,
   gitDiffIgnoreWhitespaceChanges: false,
   commitMessagePrompt: DEFAULT_COMMIT_MESSAGE_PROMPT,
   commitMessageModelId: null,
@@ -1878,7 +1878,7 @@ describe("SettingsView Composer", () => {
       },
     });
 
-    const hintTitle = await screen.findByText("处理中显示追问提示");
+    const hintTitle = await screen.findByText("处理中显示下发说明");
     const hintRow = hintTitle.closest(".settings-toggle-row");
     expect(hintRow).not.toBeNull();
     fireEvent.click(within(hintRow as HTMLElement).getByRole("button"));

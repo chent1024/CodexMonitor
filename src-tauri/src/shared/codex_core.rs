@@ -268,9 +268,14 @@ pub(crate) async fn resume_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspace_id: String,
     thread_id: String,
+    exclude_turns: Option<bool>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "threadId": thread_id });
+    let params = json!({
+        "threadId": thread_id,
+        "history": Value::Null,
+        "excludeTurns": exclude_turns.unwrap_or(false)
+    });
     session
         .send_request_for_workspace(&workspace_id, "thread/resume", params)
         .await
@@ -285,6 +290,39 @@ pub(crate) async fn read_thread_core(
     let params = json!({ "threadId": thread_id });
     session
         .send_request_for_workspace(&workspace_id, "thread/read", params)
+        .await
+}
+
+pub(crate) async fn list_thread_turns_core(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+    cursor: Option<String>,
+    limit: Option<u32>,
+) -> Result<Value, String> {
+    let session = get_session_clone(sessions, &workspace_id).await?;
+    let params = json!({
+        "threadId": thread_id,
+        "cursor": cursor,
+        "limit": limit
+    });
+    session
+        .send_request_for_workspace(&workspace_id, "thread/turns/list", params)
+        .await
+}
+
+pub(crate) async fn thread_unsubscribe_core(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+) -> Result<Value, String> {
+    if thread_id.trim().is_empty() {
+        return Err("threadId is required".to_string());
+    }
+    let session = get_session_clone(sessions, &workspace_id).await?;
+    let params = json!({ "threadId": thread_id });
+    session
+        .send_request_for_workspace(&workspace_id, "thread/unsubscribe", params)
         .await
 }
 
@@ -305,10 +343,7 @@ pub(crate) async fn thread_live_unsubscribe_core(
     workspace_id: String,
     thread_id: String,
 ) -> Result<(), String> {
-    if thread_id.trim().is_empty() {
-        return Err("threadId is required".to_string());
-    }
-    let _ = get_session_clone(sessions, &workspace_id).await?;
+    let _ = thread_unsubscribe_core(sessions, workspace_id, thread_id).await?;
     Ok(())
 }
 

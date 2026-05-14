@@ -14,6 +14,20 @@
   --terminal-font-family: var(--code-font-family);
 }
 
+.main:has(.terminal-panel.is-fullscreen) .content,
+.main:has(.terminal-panel.is-fullscreen) .debug-panel {
+  display: none;
+}
+
+.terminal-panel.is-fullscreen {
+  grid-column: 1;
+  grid-row: 2 / -1;
+  height: auto;
+  min-height: 0;
+  border-top: 1px solid var(--cm-border-default);
+  z-index: 3;
+}
+
 .terminal-panel-resizer {
   height: 6px;
   cursor: row-resize;
@@ -39,62 +53,172 @@
 .terminal-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
+  gap: 0;
+  padding: 0 8px 0 10px;
   font-size: 12px;
+  min-height: 36px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-debug);
 }
 
 .terminal-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   flex: 1;
   min-width: 0;
   overflow-x: auto;
-  padding: 2px 0;
+  align-self: stretch;
+  padding: 0;
+  scrollbar-width: none;
+}
+
+.terminal-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .terminal-tab {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
-  border: 1px solid transparent;
+  align-self: stretch;
+  min-width: 0;
+  max-width: 360px;
+  border: 0;
+  border-right: 1px solid var(--border-muted);
   background: transparent;
   color: var(--text-muted);
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  padding: 0 10px;
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.terminal-tab:hover {
+  color: var(--text-stronger);
+  background: var(--surface-hover);
 }
 
 .terminal-tab.active {
   color: var(--text-stronger);
-  border-color: var(--border-strong);
   background: rgba(255, 255, 255, 0.06);
 }
 
+.terminal-tab-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+
 .terminal-tab-label {
-  max-width: 140px;
+  min-width: 0;
+  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .terminal-tab-close {
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  margin-right: -2px;
+  border-radius: 4px;
+  font-size: 20px;
+  font-weight: 300;
+  line-height: 1;
   color: var(--text-faint);
+  opacity: 0.88;
+}
+
+.terminal-tab-close:hover {
+  background: var(--surface-control-hover);
+  color: var(--text-stronger);
+  opacity: 1;
 }
 
 .terminal-tab-add {
-  border: 1px dashed var(--border-strong);
+  width: 24px;
+  height: 24px;
+  margin: 0 6px;
+  border: 0;
   background: transparent;
   color: var(--text-muted);
-  padding: 4px 12px;
+  padding: 0;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 16px;
   cursor: pointer;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.terminal-tab-add:hover {
+  background: var(--surface-hover);
+  color: var(--text-stronger);
+}
+
+.terminal-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.terminal-header-action {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+  line-height: 0;
+  box-shadow: none;
+  transform: none;
+  filter: none;
+  transition: none;
+}
+
+.terminal-header-action svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  opacity: 1;
+}
+
+.terminal-header-action-icon {
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
+.terminal-header-action:hover:not(:disabled),
+.terminal-header-action:focus-visible,
+.terminal-header-action:active:not(:disabled) {
+  color: var(--text-muted);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  filter: none;
+  outline: none;
 }
 
 .terminal-body {

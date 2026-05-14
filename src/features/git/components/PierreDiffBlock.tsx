@@ -10,6 +10,7 @@ import {
 } from "../../design-system/diff/diffViewerTheme";
 import {
   isFallbackRawDiffLineHighlightable,
+  limitRenderedDiff,
   normalizePatchName,
   parseRawDiffLines,
 } from "./GitDiffViewer.utils";
@@ -277,12 +278,13 @@ export function PierreDiffBlock({
     () => DIFF_VIEWER_HIGHLIGHTER_OPTIONS,
     [],
   );
+  const limitedDiff = useMemo(() => limitRenderedDiff(diff), [diff]);
 
   const fileDiff = useMemo(() => {
-    if (!diff.trim()) {
+    if (!limitedDiff.diff.trim() || limitedDiff.isTruncated) {
       return null;
     }
-    const patch = parsePatchFiles(buildParseablePatch(diff, displayPath));
+    const patch = parsePatchFiles(buildParseablePatch(limitedDiff.diff, displayPath));
     const parsed = patch[0]?.files[0];
     if (!parsed) {
       return null;
@@ -299,15 +301,15 @@ export function PierreDiffBlock({
       oldLines,
       newLines,
     } satisfies FileDiffMetadata;
-  }, [diff, displayPath, oldLines, newLines]);
+  }, [displayPath, limitedDiff.diff, limitedDiff.isTruncated, newLines, oldLines]);
 
   const parsedLines = useMemo(() => {
-    const parsed = parseDiff(diff);
+    const parsed = parseDiff(limitedDiff.diff);
     if (parsed.length > 0) {
       return parsed;
     }
-    return parseRawDiffLines(diff);
-  }, [diff]);
+    return parseRawDiffLines(limitedDiff.diff);
+  }, [limitedDiff.diff]);
   const fallbackLanguage = useMemo(
     () => languageFromPath(displayPath),
     [displayPath],
@@ -399,6 +401,12 @@ export function PierreDiffBlock({
         </div>
       ) : (
         <div className="diff-viewer-output diff-viewer-output-flat diff-viewer-output-raw">
+          {limitedDiff.isTruncated ? (
+            <div className="diff-viewer-placeholder">
+              Showing first {parsedLines.length} of {limitedDiff.totalLines} diff lines.
+              {` ${limitedDiff.hiddenLines} lines hidden for performance.`}
+            </div>
+          ) : null}
           {parsedLines.map((line, index) => {
             const highlighted = highlightLine(
               line.text,

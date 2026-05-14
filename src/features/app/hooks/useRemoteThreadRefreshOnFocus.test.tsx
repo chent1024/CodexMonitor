@@ -328,7 +328,7 @@ describe("useRemoteThreadRefreshOnFocus", () => {
     );
 
     await act(async () => {
-      vi.advanceTimersByTime(11_999);
+      vi.advanceTimersByTime(19_999);
       await Promise.resolve();
     });
     expect(refreshThread).toHaveBeenCalledTimes(0);

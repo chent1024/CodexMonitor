@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppMention,
   ComposerSendIntent,
@@ -76,6 +76,15 @@ export function useComposerController({
   const [prefillDraft, setPrefillDraft] = useState<QueuedMessage | null>(null);
   const [composerInsert, setComposerInsert] = useState<QueuedMessage | null>(
     null,
+  );
+  const guideSendTimersRef = useRef<Set<number>>(new Set());
+
+  useEffect(
+    () => () => {
+      guideSendTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      guideSendTimersRef.current.clear();
+    },
+    [],
   );
 
   const {
@@ -159,6 +168,26 @@ export function useComposerController({
     [activeThreadId, removeQueuedMessage, setImagesForThread],
   );
 
+  const handleGuideQueued = useCallback(
+    (item: QueuedMessage) => {
+      if (!activeThreadId) {
+        return;
+      }
+      removeQueuedMessage(activeThreadId, item.id);
+      const timer = window.setTimeout(() => {
+        guideSendTimersRef.current.delete(timer);
+        void handleSend(
+          item.text,
+          item.images ?? [],
+          item.appMentions ?? [],
+          "steer",
+        );
+      }, 0);
+      guideSendTimersRef.current.add(timer);
+    },
+    [activeThreadId, handleSend, removeQueuedMessage],
+  );
+
   const handleDeleteQueued = useCallback(
     (id: string) => {
       if (!activeThreadId) {
@@ -198,6 +227,7 @@ export function useComposerController({
     activeDraft,
     handleDraftChange,
     handleSendPrompt,
+    handleGuideQueued,
     handleEditQueued,
     handleDeleteQueued,
     clearDraftForThread,

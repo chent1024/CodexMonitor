@@ -80,11 +80,11 @@ export function SettingsComposerSection({
           </label>
         </div>
         <div className="settings-help">
-          设置任务运行中的默认行为。按 {followUpShortcutLabel} 可为单条消息临时使用相反行为。
+          设置任务运行中再次下发消息的默认处理方式：排队会等当前回复结束后发送，Steer 会立即补充到当前回复。按 {followUpShortcutLabel} 可为单条消息临时使用相反行为。
         </div>
         <SettingsToggleRow
-          title="处理中显示追问提示"
-          subtitle="在输入框上方显示 queue/steer 的快捷键提示。"
+          title="处理中显示下发说明"
+          subtitle="任务运行时，在输入框上方说明本次发送会排队还是立即 Steer。"
         >
           <SettingsToggleSwitch
             pressed={appSettings.composerFollowUpHintEnabled}

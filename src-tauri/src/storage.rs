@@ -521,6 +521,18 @@ mod tests {
     }
 
     #[test]
+    fn read_settings_defaults_restart_safe_sessions_to_true() {
+        let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let path = temp_dir.join("settings.json");
+
+        std::fs::write(&path, r#"{"theme":"dark"}"#).expect("write settings");
+
+        let settings = read_settings(&path).expect("read settings");
+        assert!(settings.restart_safe_sessions);
+    }
+
+    #[test]
     fn read_settings_migrates_missing_automatic_app_update_checks_to_false() {
         let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");

@@ -49,7 +49,7 @@ describe("useWorkspaceRefreshOnFocus", () => {
     expect(listThreadsForWorkspaces).toHaveBeenCalledTimes(1);
     expect(listThreadsForWorkspaces).toHaveBeenCalledWith(
       [expect.objectContaining({ id: "ws-1" })],
-      { preserveState: true },
+      { preserveState: true, maxPages: 2 },
     );
   });
 

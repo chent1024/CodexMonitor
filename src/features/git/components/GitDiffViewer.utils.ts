@@ -10,11 +10,42 @@ const DIFF_METADATA_PREFIXES = [
   "\\ No newline",
 ] as const;
 
+export const MAX_RENDERED_DIFF_LINES = 1_500;
+
+export type LimitedDiffPreview = {
+  diff: string;
+  totalLines: number;
+  hiddenLines: number;
+  isTruncated: boolean;
+};
+
 export function normalizePatchName(name: string) {
   if (!name) {
     return name;
   }
   return name.replace(/^(?:a|b)\//, "");
+}
+
+export function limitRenderedDiff(
+  diff: string,
+  maxLines = MAX_RENDERED_DIFF_LINES,
+): LimitedDiffPreview {
+  const lines = diff.split("\n");
+  if (lines.length <= maxLines) {
+    return {
+      diff,
+      totalLines: lines.length,
+      hiddenLines: 0,
+      isTruncated: false,
+    };
+  }
+
+  return {
+    diff: lines.slice(0, maxLines).join("\n"),
+    totalLines: lines.length,
+    hiddenLines: lines.length - maxLines,
+    isTruncated: true,
+  };
 }
 
 export function parseRawDiffLines(diff: string): ParsedDiffLine[] {

@@ -31,6 +31,9 @@ export function useLocalUsage(enabled: boolean, workspacePath: string | null) {
 
   useEffect(() => {
     workspaceRef.current = workspacePath;
+    if (!workspacePath) {
+      setState(emptyState);
+    }
   }, [workspacePath]);
 
   const refresh = useCallback(() => {
@@ -57,7 +60,7 @@ export function useLocalUsage(enabled: boolean, workspacePath: string | null) {
   }, []);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !workspacePath) {
       return;
     }
     refresh()?.catch(() => {});

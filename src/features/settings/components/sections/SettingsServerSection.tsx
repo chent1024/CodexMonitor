@@ -7,6 +7,7 @@ import type {
   TailscaleStatus,
   TcpDaemonStatus,
 } from "@/types";
+import type { RestartSafeDebugStatus } from "@services/tauri";
 import { ModalShell } from "@/features/design-system/components/modal/ModalShell";
 import {
   SettingsSection,
@@ -45,6 +46,9 @@ type SettingsServerSectionProps = {
   tailscaleCommandError: string | null;
   tcpDaemonStatus: TcpDaemonStatus | null;
   tcpDaemonBusyAction: "start" | "stop" | "status" | null;
+  restartSafeSessionStatus: RestartSafeDebugStatus | null;
+  restartSafeSessionLoading: boolean;
+  restartSafeSessionError: string | null;
   onSetRemoteNameDraft: Dispatch<SetStateAction<string>>;
   onSetRemoteHostDraft: Dispatch<SetStateAction<string>>;
   onSetRemoteTokenDraft: Dispatch<SetStateAction<string>>;
@@ -61,8 +65,25 @@ type SettingsServerSectionProps = {
   onTcpDaemonStart: () => Promise<void>;
   onTcpDaemonStop: () => Promise<void>;
   onTcpDaemonStatus: () => Promise<void>;
+  onRefreshRestartSafeSessionStatus: () => void;
   onMobileConnectTest: () => void;
 };
+
+function formatRestartSafeSessionStatus(
+  status: RestartSafeDebugStatus | null,
+): string {
+  if (!status) {
+    return "daemon 未连接，暂时无法读取会话状态。";
+  }
+  const processingSessionCount = status.processingSessionCount ?? 0;
+  return [
+    `已保留 ${status.retainedSessionCount}`,
+    `处理中 ${processingSessionCount}`,
+    `待处理 ${status.pendingRequestCount}`,
+    `已缓存事件 ${status.journalEventCount}`,
+    status.idleShutdownAllowed ? "空闲后可自动退出" : "daemon 将继续保留",
+  ].join(" · ");
+}
 
 export function SettingsServerSection({
   appSettings,
@@ -89,6 +110,9 @@ export function SettingsServerSection({
   tailscaleCommandError,
   tcpDaemonStatus,
   tcpDaemonBusyAction,
+  restartSafeSessionStatus,
+  restartSafeSessionLoading,
+  restartSafeSessionError,
   onSetRemoteNameDraft,
   onSetRemoteHostDraft,
   onSetRemoteTokenDraft,
@@ -105,6 +129,7 @@ export function SettingsServerSection({
   onTcpDaemonStart,
   onTcpDaemonStop,
   onTcpDaemonStatus,
+  onRefreshRestartSafeSessionStatus,
   onMobileConnectTest,
 }: SettingsServerSectionProps) {
   const [pendingDeleteRemoteId, setPendingDeleteRemoteId] = useState<string | null>(
@@ -334,8 +359,60 @@ export function SettingsServerSection({
 
         {!isMobileSimplified && (
           <SettingsToggleRow
-            title="应用关闭后继续运行 daemon"
-            subtitle="关闭后，CodexMonitor 会在退出前停止其管理的 TCP daemon 进程。"
+            title="重启后继续会话"
+            subtitle={
+              <>
+                默认开启。新建 Codex 会话会由本机 daemon 托管；关闭或重启 App 后，正在运行的任务继续执行，重新打开后会补回最近输出并恢复实时接收。
+                {appSettings.restartSafeSessions ? (
+                  <>
+                    <br />
+                    {restartSafeSessionLoading
+                      ? "正在读取 daemon 会话状态..."
+                      : formatRestartSafeSessionStatus(restartSafeSessionStatus)}
+                  </>
+                ) : (
+                  <>
+                    <br />
+                    关闭后，App 退出时不会保留本机 daemon，运行中的本地会话无法保证重启恢复。
+                  </>
+                )}
+              </>
+            }
+          >
+            <div className="settings-inline-actions">
+              {appSettings.restartSafeSessions ? (
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={onRefreshRestartSafeSessionStatus}
+                  disabled={restartSafeSessionLoading}
+                >
+                  {restartSafeSessionLoading ? "正在刷新..." : "刷新会话状态"}
+                </button>
+              ) : null}
+              <SettingsToggleSwitch
+                pressed={appSettings.restartSafeSessions}
+                onClick={() =>
+                  void onUpdateAppSettings({
+                    ...appSettings,
+                    restartSafeSessions: !appSettings.restartSafeSessions,
+                    keepDaemonRunningAfterAppClose:
+                      !appSettings.restartSafeSessions ||
+                      appSettings.keepDaemonRunningAfterAppClose,
+                  })
+                }
+              />
+            </div>
+          </SettingsToggleRow>
+        )}
+        {!isMobileSimplified && restartSafeSessionError && (
+          <div className="settings-help">{restartSafeSessionError}</div>
+        )}
+
+        {!isMobileSimplified && (
+          <SettingsToggleRow
+            title="应用关闭后继续提供远端访问"
+            subtitle="用于移动端或远端客户端访问。重启后继续会话开启时，即使这里关闭，本机会话 daemon 也会保留到任务结束。"
           >
             <SettingsToggleSwitch
               pressed={appSettings.keepDaemonRunningAfterAppClose}

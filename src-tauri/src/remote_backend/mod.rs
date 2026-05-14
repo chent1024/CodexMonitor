@@ -19,7 +19,9 @@ use self::protocol::{build_request_line, DEFAULT_REMOTE_HOST, DISCONNECTED_MESSA
 use self::tcp_transport::TcpTransport;
 use self::transport::{PendingMap, RemoteTransport, RemoteTransportConfig, RemoteTransportKind};
 
-const REMOTE_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+const REMOTE_DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+const REMOTE_INTERACTIVE_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+const REMOTE_QUICK_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const REMOTE_SEND_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub(crate) fn normalize_path_for_remote(path: String) -> String {
@@ -94,17 +96,43 @@ impl RemoteBackend {
             }
         }
 
-        match timeout(REMOTE_REQUEST_TIMEOUT, rx).await {
+        let request_timeout = request_timeout_for_method(method);
+        match timeout(request_timeout, rx).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => Err(DISCONNECTED_MESSAGE.to_string()),
             Err(_) => {
                 self.inner.pending.lock().await.remove(&id);
                 Err(format!(
                     "remote backend request timed out after {} seconds",
-                    REMOTE_REQUEST_TIMEOUT.as_secs()
+                    request_timeout.as_secs()
                 ))
             }
         }
+    }
+}
+
+fn request_timeout_for_method(method: &str) -> Duration {
+    match method {
+        "list_thread_turns"
+        | "read_thread"
+        | "thread_unsubscribe"
+        | "list_threads"
+        | "list_mcp_server_status"
+        | "session/attach"
+        | "session/debug_status"
+        | "session/detach"
+        | "session/list"
+        | "session/pending_requests"
+        | "session/replay_events"
+        | "session/status"
+        | "local_usage_snapshot"
+        | "account_read"
+        | "account_rate_limits"
+        | "model_list"
+        | "skills_list"
+        | "apps_list" => REMOTE_QUICK_REQUEST_TIMEOUT,
+        "resume_thread" | "connect_workspace" => REMOTE_INTERACTIVE_REQUEST_TIMEOUT,
+        _ => REMOTE_DEFAULT_REQUEST_TIMEOUT,
     }
 }
 
@@ -151,8 +179,11 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "apps_list"
             | "collaboration_mode_list"
             | "connect_workspace"
+            | "codex_doctor"
             | "experimental_feature_list"
+            | "get_codex_config_path"
             | "get_codex_feature_flag"
+            | "get_open_app_icon"
             | "get_local_memory_status"
             | "get_local_memory_debug_status"
             | "set_local_memory_enabled"
@@ -174,6 +205,7 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "list_git_roots"
             | "list_mcp_server_status"
             | "list_threads"
+            | "list_thread_turns"
             | "local_usage_snapshot"
             | "list_workspace_files"
             | "list_workspaces"
@@ -189,6 +221,7 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "session/pending_requests"
             | "session/replay_events"
             | "session/status"
+            | "thread_unsubscribe"
             | "thread_live_subscribe"
             | "thread_live_unsubscribe"
             | "skills_list"
@@ -284,9 +317,10 @@ fn resolve_transport_config(
 
 #[cfg(test)]
 mod tests {
-    use super::{can_retry_after_disconnect, resolve_transport_config};
+    use super::{can_retry_after_disconnect, request_timeout_for_method, resolve_transport_config};
     use crate::remote_backend::transport::RemoteTransportConfig;
     use crate::types::AppSettings;
+    use std::time::Duration;
 
     #[test]
     fn resolve_tcp_transport_uses_remote_host() {
@@ -304,9 +338,35 @@ mod tests {
     fn retries_only_retry_safe_methods_after_disconnect() {
         assert!(can_retry_after_disconnect("resume_thread"));
         assert!(can_retry_after_disconnect("list_threads"));
+        assert!(can_retry_after_disconnect("list_thread_turns"));
+        assert!(can_retry_after_disconnect("thread_unsubscribe"));
         assert!(can_retry_after_disconnect("local_usage_snapshot"));
         assert!(!can_retry_after_disconnect("send_user_message"));
         assert!(!can_retry_after_disconnect("start_thread"));
         assert!(!can_retry_after_disconnect("remove_workspace"));
+    }
+
+    #[test]
+    fn uses_shorter_timeouts_for_interactive_remote_requests() {
+        assert_eq!(
+            request_timeout_for_method("list_thread_turns"),
+            Duration::from_secs(20)
+        );
+        assert_eq!(
+            request_timeout_for_method("thread_unsubscribe"),
+            Duration::from_secs(20)
+        );
+        assert_eq!(
+            request_timeout_for_method("session/attach"),
+            Duration::from_secs(20)
+        );
+        assert_eq!(
+            request_timeout_for_method("resume_thread"),
+            Duration::from_secs(60)
+        );
+        assert_eq!(
+            request_timeout_for_method("send_user_message"),
+            Duration::from_secs(300)
+        );
     }
 }

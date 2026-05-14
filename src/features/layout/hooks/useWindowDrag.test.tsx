@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const isTauriMock = vi.hoisted(() => vi.fn());
 const getCurrentWindowMock = vi.hoisted(() => vi.fn());
+const toggleWindowZoomWithinCurrentDisplayMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: isTauriMock,
@@ -11,6 +12,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: getCurrentWindowMock,
+}));
+
+vi.mock("../utils/windowZoom", () => ({
+  toggleWindowZoomWithinCurrentDisplay: toggleWindowZoomWithinCurrentDisplayMock,
 }));
 
 import { useWindowDrag } from "./useWindowDrag";
@@ -27,6 +32,17 @@ function setRect(el: Element, rect: Pick<DOMRect, "left" | "right" | "top" | "bo
   });
 }
 
+function movePastDragThreshold(clientX: number, clientY: number) {
+  document.dispatchEvent(
+    new MouseEvent("mousemove", {
+      bubbles: true,
+      buttons: 1,
+      clientX: clientX + 8,
+      clientY: clientY + 2,
+    }),
+  );
+}
+
 describe("useWindowDrag", () => {
   const startDragging = vi.fn();
 
@@ -35,6 +51,7 @@ describe("useWindowDrag", () => {
     document.body.innerHTML = "";
     isTauriMock.mockReturnValue(true);
     getCurrentWindowMock.mockReturnValue({ startDragging });
+    toggleWindowZoomWithinCurrentDisplayMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -60,20 +77,21 @@ describe("useWindowDrag", () => {
         clientY: 12,
       }),
     );
+    movePastDragThreshold(12, 12);
 
     expect(startDragging).toHaveBeenCalledTimes(1);
   });
 
-  it("starts dragging on Windows when click is inside the main topbar", () => {
-    const topbar = document.createElement("div");
-    topbar.className = "main-topbar";
-    document.body.appendChild(topbar);
-    setRect(topbar, { left: 0, top: 0, right: 800, bottom: 44 });
+  it("starts dragging when click is inside the main topbar left area", () => {
+    const topbarLeft = document.createElement("div");
+    topbarLeft.className = "main-topbar-left";
+    document.body.appendChild(topbarLeft);
+    setRect(topbarLeft, { left: 0, top: 0, right: 680, bottom: 44 });
 
     renderHook(() => useWindowDrag("titlebar"));
 
     const target = document.createElement("span");
-    topbar.appendChild(target);
+    topbarLeft.appendChild(target);
     target.dispatchEvent(
       new MouseEvent("mousedown", {
         bubbles: true,
@@ -82,19 +100,20 @@ describe("useWindowDrag", () => {
         clientY: 20,
       }),
     );
+    movePastDragThreshold(120, 20);
 
     expect(startDragging).toHaveBeenCalledTimes(1);
   });
 
   it("starts dragging on Windows when mousedown target is a text node in topbar", () => {
-    const topbar = document.createElement("div");
-    topbar.className = "main-topbar";
-    document.body.appendChild(topbar);
-    setRect(topbar, { left: 0, top: 0, right: 800, bottom: 44 });
+    const topbarLeft = document.createElement("div");
+    topbarLeft.className = "main-topbar-left";
+    document.body.appendChild(topbarLeft);
+    setRect(topbarLeft, { left: 0, top: 0, right: 680, bottom: 44 });
 
     const label = document.createElement("span");
     label.textContent = "Project Name";
-    topbar.appendChild(label);
+    topbarLeft.appendChild(label);
 
     renderHook(() => useWindowDrag("titlebar"));
 
@@ -108,20 +127,21 @@ describe("useWindowDrag", () => {
         clientY: 20,
       }),
     );
+    movePastDragThreshold(140, 20);
 
     expect(startDragging).toHaveBeenCalledTimes(1);
   });
 
   it("does not start dragging when text node is inside an interactive target", () => {
-    const topbar = document.createElement("div");
-    topbar.className = "main-topbar";
-    document.body.appendChild(topbar);
-    setRect(topbar, { left: 0, top: 0, right: 800, bottom: 44 });
+    const topbarLeft = document.createElement("div");
+    topbarLeft.className = "main-topbar-left";
+    document.body.appendChild(topbarLeft);
+    setRect(topbarLeft, { left: 0, top: 0, right: 680, bottom: 44 });
 
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = "Terminal";
-    topbar.appendChild(button);
+    topbarLeft.appendChild(button);
 
     renderHook(() => useWindowDrag("titlebar"));
 
@@ -135,6 +155,7 @@ describe("useWindowDrag", () => {
         clientY: 20,
       }),
     );
+    movePastDragThreshold(200, 20);
 
     expect(startDragging).not.toHaveBeenCalled();
   });
@@ -158,6 +179,7 @@ describe("useWindowDrag", () => {
         clientY: 20,
       }),
     );
+    movePastDragThreshold(20, 20);
 
     expect(startDragging).not.toHaveBeenCalled();
   });
@@ -180,6 +202,7 @@ describe("useWindowDrag", () => {
         clientY: 500,
       }),
     );
+    movePastDragThreshold(500, 500);
 
     expect(startDragging).not.toHaveBeenCalled();
   });
@@ -200,7 +223,121 @@ describe("useWindowDrag", () => {
         clientY: 12,
       }),
     );
+    movePastDragThreshold(12, 12);
 
     expect(startDragging).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles safe zoom when double-clicking the middle topbar area", () => {
+    const topbarLeft = document.createElement("div");
+    topbarLeft.className = "main-topbar-left";
+    document.body.appendChild(topbarLeft);
+    setRect(topbarLeft, { left: 0, top: 0, right: 680, bottom: 44 });
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    topbarLeft.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 200,
+        clientY: 20,
+      }),
+    );
+
+    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start dragging before a middle topbar double-click", () => {
+    const topbarLeft = document.createElement("div");
+    topbarLeft.className = "main-topbar-left";
+    document.body.appendChild(topbarLeft);
+    setRect(topbarLeft, { left: 0, top: 0, right: 680, bottom: 44 });
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    topbarLeft.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 200,
+        clientY: 20,
+      }),
+    );
+    topbarLeft.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    topbarLeft.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 200,
+        clientY: 20,
+      }),
+    );
+    topbarLeft.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    topbarLeft.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 200,
+        clientY: 20,
+      }),
+    );
+
+    expect(startDragging).not.toHaveBeenCalled();
+    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not safe zoom when double-clicking an interactive target", () => {
+    const topbarLeft = document.createElement("div");
+    topbarLeft.className = "main-topbar-left";
+    document.body.appendChild(topbarLeft);
+    setRect(topbarLeft, { left: 0, top: 0, right: 680, bottom: 44 });
+
+    const button = document.createElement("button");
+    button.type = "button";
+    topbarLeft.appendChild(button);
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    button.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 200,
+        clientY: 20,
+      }),
+    );
+
+    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
+  });
+
+  it("does not safe zoom or drag inside the right actions area", () => {
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    document.body.appendChild(actions);
+    setRect(actions, { left: 680, top: 0, right: 800, bottom: 44 });
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    actions.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 720,
+        clientY: 20,
+      }),
+    );
+    movePastDragThreshold(720, 20);
+    actions.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 720,
+        clientY: 20,
+      }),
+    );
+
+    expect(startDragging).not.toHaveBeenCalled();
+    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
   });
 });

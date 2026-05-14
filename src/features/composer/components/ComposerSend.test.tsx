@@ -231,7 +231,7 @@ describe("Composer send triggers", () => {
 
     expect(
       screen.getByText(
-        "Default: Queue (Steer unavailable). Both Enter and Shift+Ctrl+Enter will queue this message.",
+        "当前 Codex 不支持 Steer。本条消息会先排队，等当前回复结束后自动下发；Enter 和 Shift+Ctrl+Enter 都会使用排队。",
       ),
     ).toBeTruthy();
     expect(onSend).toHaveBeenCalledTimes(1);

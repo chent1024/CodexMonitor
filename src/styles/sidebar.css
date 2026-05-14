@@ -1861,6 +1861,7 @@
 }
 
 .sidebar-bottom-actions {
+  position: relative;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -2101,6 +2102,110 @@
 .sidebar-utility-button svg {
   width: 14px;
   height: 14px;
+}
+
+.sidebar-daemon-status {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.sidebar-daemon-status-button {
+  width: 22px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.sidebar-daemon-status-button:hover,
+.sidebar-daemon-status-button:focus-visible {
+  background: color-mix(in srgb, var(--surface-hover) 58%, transparent);
+  outline: none;
+}
+
+.sidebar-daemon-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+
+.sidebar-daemon-status-button.is-checking .sidebar-daemon-status-dot {
+  background: var(--text-faint);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.sidebar-daemon-status-button.is-healthy .sidebar-daemon-status-dot {
+  background: var(--status-success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-success) 18%, transparent);
+}
+
+.sidebar-daemon-status-button.is-warning .sidebar-daemon-status-dot {
+  background: var(--status-warning);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-warning) 20%, transparent);
+}
+
+.sidebar-daemon-status-button.is-stopped .sidebar-daemon-status-dot {
+  background: var(--text-faint);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-faint) 18%, transparent);
+}
+
+.sidebar-daemon-status-button.is-error .sidebar-daemon-status-dot {
+  background: var(--status-error);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-error) 20%, transparent);
+}
+
+.sidebar-daemon-status-tooltip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: min(calc(var(--sidebar-width, 280px) - 40px), calc(100vw - 24px));
+  padding: 12px 14px;
+  color: var(--text-stronger);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(4px);
+  animation: none;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    visibility 120ms ease;
+}
+
+.sidebar-daemon-status:hover + .sidebar-daemon-status-tooltip,
+.sidebar-daemon-status:focus-within + .sidebar-daemon-status-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.sidebar-daemon-status-tooltip-title {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-stronger);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.sidebar-daemon-status-tooltip-line {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--sidebar-font-size-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 

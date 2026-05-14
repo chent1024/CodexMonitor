@@ -6,11 +6,9 @@ import {
   getCodexConfigPath,
   getExperimentalFeatureList,
   getLocalMemoryStatus,
-  getRestartSafeSessionDebugStatus,
   setLocalMemoryEnabled,
   setCodexFeatureFlag,
   type LocalMemoryConfigStatus,
-  type RestartSafeDebugStatus,
 } from "@services/tauri";
 
 type UseSettingsFeaturesSectionArgs = {
@@ -53,12 +51,8 @@ export type SettingsFeaturesSectionProps = {
   localMemoryLoading: boolean;
   localMemoryUpdating: boolean;
   localMemoryError: string | null;
-  restartSafeSessionStatus: RestartSafeDebugStatus | null;
-  restartSafeSessionLoading: boolean;
-  restartSafeSessionError: string | null;
   onOpenConfig: () => void;
   onToggleLocalMemory: () => void;
-  onRefreshRestartSafeSessionStatus: () => void;
   onToggleCodexFeature: (feature: CodexFeature) => void;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
 };
@@ -182,12 +176,6 @@ export const useSettingsFeaturesSection = ({
   const [localMemoryLoading, setLocalMemoryLoading] = useState(false);
   const [localMemoryUpdating, setLocalMemoryUpdating] = useState(false);
   const [localMemoryError, setLocalMemoryError] = useState<string | null>(null);
-  const [restartSafeSessionStatus, setRestartSafeSessionStatus] =
-    useState<RestartSafeDebugStatus | null>(null);
-  const [restartSafeSessionLoading, setRestartSafeSessionLoading] = useState(false);
-  const [restartSafeSessionError, setRestartSafeSessionError] = useState<string | null>(
-    null,
-  );
 
   const handleOpenConfig = useCallback(async () => {
     setOpenConfigError(null);
@@ -219,36 +207,6 @@ export const useSettingsFeaturesSection = ({
       active = false;
     };
   }, []);
-
-  const refreshRestartSafeSessionStatus = useCallback(() => {
-    if (!appSettings.restartSafeSessions) {
-      setRestartSafeSessionStatus(null);
-      setRestartSafeSessionError(null);
-      setRestartSafeSessionLoading(false);
-      return;
-    }
-    void (async () => {
-      setRestartSafeSessionLoading(true);
-      setRestartSafeSessionError(null);
-      try {
-        const status = await getRestartSafeSessionDebugStatus();
-        setRestartSafeSessionStatus(status);
-      } catch (error) {
-        setRestartSafeSessionStatus(null);
-        setRestartSafeSessionError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load restart-safe session status.",
-        );
-      } finally {
-        setRestartSafeSessionLoading(false);
-      }
-    })();
-  }, [appSettings.restartSafeSessions]);
-
-  useEffect(() => {
-    refreshRestartSafeSessionStatus();
-  }, [refreshRestartSafeSessionStatus]);
 
   useEffect(() => {
     let active = true;
@@ -453,14 +411,10 @@ export const useSettingsFeaturesSection = ({
     localMemoryLoading,
     localMemoryUpdating,
     localMemoryError,
-    restartSafeSessionStatus,
-    restartSafeSessionLoading,
-    restartSafeSessionError,
     onOpenConfig: () => {
       void handleOpenConfig();
     },
     onToggleLocalMemory,
-    onRefreshRestartSafeSessionStatus: refreshRestartSafeSessionStatus,
     onToggleCodexFeature,
     onUpdateAppSettings,
   };

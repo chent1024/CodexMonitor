@@ -546,10 +546,12 @@ pub(crate) async fn list_workspace_files_core<F>(
     list_files: F,
 ) -> Result<Vec<String>, String>
 where
-    F: Fn(&PathBuf) -> Vec<String>,
+    F: Fn(&PathBuf) -> Vec<String> + Send + 'static,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    Ok(list_files(&root))
+    tokio::task::spawn_blocking(move || list_files(&root))
+        .await
+        .map_err(|err| err.to_string())
 }
 
 pub(crate) async fn read_workspace_file_core<F, T>(
@@ -559,8 +561,12 @@ pub(crate) async fn read_workspace_file_core<F, T>(
     read_file: F,
 ) -> Result<T, String>
 where
-    F: Fn(&PathBuf, &str) -> Result<T, String>,
+    F: Fn(&PathBuf, &str) -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    read_file(&root, path)
+    let path = path.to_string();
+    tokio::task::spawn_blocking(move || read_file(&root, &path))
+        .await
+        .map_err(|err| err.to_string())?
 }

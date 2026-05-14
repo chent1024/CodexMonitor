@@ -8,5 +8,6 @@ export function useGlobalCodexConfigToml() {
     write: writeGlobalCodexConfigToml,
     readErrorTitle: "Couldn’t load global config.toml",
     writeErrorTitle: "Couldn’t save global config.toml",
+    toastOnReadError: false,
   });
 }

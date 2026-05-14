@@ -40,6 +40,9 @@ type UseMainAppLayoutSurfacesArgs = {
   threadParentById: SidebarProps["threadParentById"];
   threadStatusById: ThreadState["threadStatusById"];
   threadResumeLoadingById: Record<string, boolean>;
+  threadTurnsPagingById: ThreadState["threadTurnsPagingById"];
+  threadTurnsCursorById: ThreadState["threadTurnsCursorById"];
+  threadTurnsHasLoadedOldestById: ThreadState["threadTurnsHasLoadedOldestById"];
   threadListLoadingByWorkspace: SidebarProps["threadListLoadingByWorkspace"];
   threadListPagingByWorkspace: SidebarProps["threadListPagingByWorkspace"];
   threadListCursorByWorkspace: SidebarProps["threadListCursorByWorkspace"];
@@ -67,6 +70,10 @@ type UseMainAppLayoutSurfacesArgs = {
   onUserInputSubmit: LayoutNodesOptions["primary"]["messagesProps"]["onUserInputSubmit"];
   onPlanAccept: LayoutNodesOptions["primary"]["messagesProps"]["onPlanAccept"];
   onPlanSubmitChanges: LayoutNodesOptions["primary"]["messagesProps"]["onPlanSubmitChanges"];
+  onLoadOlderThreadTurns: (
+    workspaceId: string,
+    threadId: string,
+  ) => void | Promise<void>;
   activePlan: LayoutNodesOptions["secondary"]["planPanelProps"]["plan"];
   activeTokenUsage: ComposerProps["contextUsage"];
   latestAgentRuns: LayoutNodesOptions["primary"]["homeProps"]["latestAgentRuns"];
@@ -187,6 +194,12 @@ type UseMainAppLayoutSurfacesArgs = {
   debugResetVersion: NonNullable<
     LayoutNodesOptions["secondary"]["debugPanelProps"]["resetVersion"]
   >;
+  debugFilter: NonNullable<
+    LayoutNodesOptions["secondary"]["debugPanelProps"]["debugFilter"]
+  >;
+  onDebugFilterChange: NonNullable<
+    LayoutNodesOptions["secondary"]["debugPanelProps"]["onDebugFilterChange"]
+  >;
   terminalTabs: LayoutNodesOptions["secondary"]["terminalDockProps"]["terminals"];
   activeTerminalId: LayoutNodesOptions["secondary"]["terminalDockProps"]["activeTerminalId"];
   onSelectTerminal: LayoutNodesOptions["secondary"]["terminalDockProps"]["onSelectTerminal"];
@@ -238,6 +251,9 @@ function buildPrimarySurface({
   threadParentById,
   threadStatusById,
   threadResumeLoadingById,
+  threadTurnsPagingById,
+  threadTurnsCursorById,
+  threadTurnsHasLoadedOldestById,
   threadListLoadingByWorkspace,
   threadListPagingByWorkspace,
   threadListCursorByWorkspace,
@@ -265,6 +281,7 @@ function buildPrimarySurface({
   onUserInputSubmit,
   onPlanAccept,
   onPlanSubmitChanges,
+  onLoadOlderThreadTurns,
   activeTokenUsage,
   latestAgentRuns,
   isLoadingLatestAgents,
@@ -442,6 +459,17 @@ function buildPrimarySurface({
       isLoadingMessages: activeThreadId
         ? threadResumeLoadingById[activeThreadId] ?? false
         : false,
+      hasOlderTurns: activeThreadId
+        ? Boolean(threadTurnsCursorById[activeThreadId]) &&
+          !threadTurnsHasLoadedOldestById[activeThreadId]
+        : false,
+      isLoadingOlderTurns: activeThreadId
+        ? threadTurnsPagingById[activeThreadId] ?? false
+        : false,
+      onLoadOlderTurns:
+        activeWorkspace?.id && activeThreadId
+          ? () => onLoadOlderThreadTurns(activeWorkspace.id, activeThreadId)
+          : undefined,
       processingStartedAt: activeThreadId
         ? threadStatusById[activeThreadId]?.processingStartedAt ?? null
         : null,
@@ -484,6 +512,7 @@ function buildPrimarySurface({
               composerWorkspaceState.setComposerInsert(null);
             }
           },
+          onGuideQueued: composerWorkspaceState.handleGuideQueued,
           onEditQueued: composerWorkspaceState.handleEditQueued,
           onDeleteQueued: composerWorkspaceState.handleDeleteQueued,
           collaborationModes,
@@ -854,6 +883,8 @@ function buildSecondarySurface({
   debugOpen,
   debugEntries,
   debugResetVersion,
+  debugFilter,
+  onDebugFilterChange,
   terminalTabs,
   activeTerminalId,
   onSelectTerminal,
@@ -888,6 +919,8 @@ function buildSecondarySurface({
       entries: debugEntries,
       isOpen: debugOpen,
       resetVersion: debugResetVersion,
+      debugFilter,
+      onDebugFilterChange,
       onClear: onClearDebug,
       onCopy: onCopyDebug,
       onRefreshLocalMemoryDebug,
@@ -934,6 +967,9 @@ export function useMainAppLayoutSurfaces({
   threadParentById,
   threadStatusById,
   threadResumeLoadingById,
+  threadTurnsPagingById,
+  threadTurnsCursorById,
+  threadTurnsHasLoadedOldestById,
   threadListLoadingByWorkspace,
   threadListPagingByWorkspace,
   threadListCursorByWorkspace,
@@ -961,6 +997,7 @@ export function useMainAppLayoutSurfaces({
   onUserInputSubmit,
   onPlanAccept,
   onPlanSubmitChanges,
+  onLoadOlderThreadTurns,
   activePlan,
   activeTokenUsage,
   latestAgentRuns,
@@ -1047,6 +1084,8 @@ export function useMainAppLayoutSurfaces({
   debugOpen,
   debugEntries,
   debugResetVersion,
+  debugFilter,
+  onDebugFilterChange,
   terminalTabs,
   activeTerminalId,
   onSelectTerminal,
@@ -1090,6 +1129,9 @@ export function useMainAppLayoutSurfaces({
     threadParentById,
     threadStatusById,
     threadResumeLoadingById,
+    threadTurnsPagingById,
+    threadTurnsCursorById,
+    threadTurnsHasLoadedOldestById,
     threadListLoadingByWorkspace,
     threadListPagingByWorkspace,
     threadListCursorByWorkspace,
@@ -1117,6 +1159,7 @@ export function useMainAppLayoutSurfaces({
     onUserInputSubmit,
     onPlanAccept,
     onPlanSubmitChanges,
+    onLoadOlderThreadTurns,
     activePlan,
     activeTokenUsage,
     latestAgentRuns,
@@ -1203,6 +1246,8 @@ export function useMainAppLayoutSurfaces({
     debugOpen,
     debugEntries,
     debugResetVersion,
+    debugFilter,
+    onDebugFilterChange,
     terminalTabs,
     activeTerminalId,
     onSelectTerminal,

@@ -384,7 +384,12 @@ pub(crate) fn handle_menu_event<R: tauri::Runtime>(
         }
         "window_maximize" => {
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.maximize();
+                match crate::window::perform_webview_window_zoom(&window) {
+                    Ok(true) => {}
+                    _ => {
+                        let _ = window.maximize();
+                    }
+                }
             }
         }
         _ => {}

@@ -2122,6 +2122,62 @@ describe("Messages", () => {
     expect(scrollNode.scrollTop).toBe(900);
   });
 
+  it("loads older turns when scrolled near the top and preserves viewport position", async () => {
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+    const onLoadOlderTurns = vi.fn(async () => {});
+    const items: ConversationItem[] = [
+      {
+        id: "msg-tail",
+        kind: "message",
+        role: "assistant",
+        text: "Current tail",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        hasOlderTurns
+        onLoadOlderTurns={onLoadOlderTurns}
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 600,
+    });
+    scrollNode.scrollTop = 60;
+    onLoadOlderTurns.mockImplementation(async () => {
+      Object.defineProperty(scrollNode, "scrollHeight", {
+        configurable: true,
+        value: 900,
+      });
+    });
+
+    fireEvent.scroll(scrollNode);
+
+    await waitFor(() => {
+      expect(onLoadOlderTurns).toHaveBeenCalledTimes(1);
+    });
+    expect(scrollNode.scrollTop).toBe(360);
+    requestAnimationFrameSpy.mockRestore();
+  });
+
   it("shows a plan-ready follow-up prompt after a completed plan tool item", () => {
     const onPlanAccept = vi.fn();
     const onPlanSubmitChanges = vi.fn();

@@ -473,6 +473,31 @@ describe("Markdown file-like href behavior", () => {
     expect(container.querySelector("code")?.textContent).toBe("/workspace/reviews#L9");
   });
 
+  it("hides host control git directives from rendered markdown", () => {
+    const { container } = render(
+      <Markdown
+        value={'Done.\n\n::git-stage{cwd="youtube"}::git-commit{cwd="youtube"}::git-push{cwd="youtube" branch="master"}'}
+        className="markdown"
+      />,
+    );
+
+    expect(container.textContent).toBe("Done.");
+    expect(container.querySelector(".oai-message-file-link")).toBeNull();
+  });
+
+  it("keeps explanatory host control directives inside assistant text", () => {
+    const { container } = render(
+      <Markdown
+        value={'- assistant 消息里的 `::git-stage{cwd="youtube"}` 不应该展示成路径 chip。'}
+        className="markdown"
+      />,
+    );
+
+    expect(container.textContent).toContain('::git-stage{cwd="youtube"}');
+    expect(container.querySelector("code")?.textContent).toBe('::git-stage{cwd="youtube"}');
+    expect(container.querySelector(".oai-message-file-link")).toBeNull();
+  });
+
   it("still opens mounted file links when the workspace basename is settings", () => {
     const onOpenFileLink = vi.fn();
     render(

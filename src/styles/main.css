@@ -34,7 +34,7 @@
   gap: 20px;
   min-width: 0;
   flex: 1;
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
 }
 
 .main-header,
@@ -410,7 +410,7 @@
   padding: 4px var(--main-topbar-side-padding) 4px var(--main-topbar-left-padding);
   border-bottom: 1px solid var(--cm-border-default);
   background: var(--surface-messages);
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
   grid-column: 1;
   grid-row: 1;
   position: sticky;

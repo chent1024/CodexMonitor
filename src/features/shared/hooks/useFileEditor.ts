@@ -13,6 +13,7 @@ type UseFileEditorOptions = {
   write: (content: string) => Promise<void>;
   readErrorTitle: string;
   writeErrorTitle: string;
+  toastOnReadError?: boolean;
 };
 
 type FileEditorState = {
@@ -39,6 +40,7 @@ export function useFileEditor({
   write,
   readErrorTitle,
   writeErrorTitle,
+  toastOnReadError = true,
 }: UseFileEditorOptions) {
   const [state, setState] = useState<FileEditorState>(EMPTY_STATE);
   const lastLoadedContentRef = useRef<string>("");
@@ -82,14 +84,16 @@ export function useFileEditor({
       }
       const message = error instanceof Error ? error.message : String(error);
       setState((prev) => ({ ...prev, isLoading: false, error: message }));
-      pushErrorToast({
-        title: readErrorTitle,
-        message,
-      });
+      if (toastOnReadError) {
+        pushErrorToast({
+          title: readErrorTitle,
+          message,
+        });
+      }
     } finally {
       inFlightRef.current = false;
     }
-  }, [read, readErrorTitle]);
+  }, [read, readErrorTitle, toastOnReadError]);
 
   const save = useCallback(async () => {
     if (!latestKeyRef.current) {
@@ -153,4 +157,3 @@ export function useFileEditor({
     save,
   };
 }
-

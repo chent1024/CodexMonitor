@@ -33,6 +33,9 @@ export type ThreadState = {
   threadParentById: Record<string, string>;
   threadStatusById: Record<string, ThreadActivityStatus>;
   threadResumeLoadingById: Record<string, boolean>;
+  threadTurnsPagingById: Record<string, boolean>;
+  threadTurnsCursorById: Record<string, string | null>;
+  threadTurnsHasLoadedOldestById: Record<string, boolean>;
   threadListLoadingByWorkspace: Record<string, boolean>;
   threadListPagingByWorkspace: Record<string, boolean>;
   threadListCursorByWorkspace: Record<string, string | null>;
@@ -152,6 +155,13 @@ export type ThreadAction =
       hasCustomName?: boolean;
     }
   | { type: "setThreadItems"; threadId: string; items: ConversationItem[] }
+  | { type: "setThreadTurnsPaging"; threadId: string; isLoading: boolean }
+  | { type: "setThreadTurnsCursor"; threadId: string; cursor: string | null }
+  | {
+      type: "setThreadTurnsHasLoadedOldest";
+      threadId: string;
+      hasLoadedOldest: boolean;
+    }
   | {
       type: "appendStreamDeltasBatch";
       deltas: StreamDeltaAction[];
@@ -233,6 +243,9 @@ export const initialState: ThreadState = {
   threadParentById: {},
   threadStatusById: {},
   threadResumeLoadingById: {},
+  threadTurnsPagingById: {},
+  threadTurnsCursorById: {},
+  threadTurnsHasLoadedOldestById: {},
   threadListLoadingByWorkspace: {},
   threadListPagingByWorkspace: {},
   threadListCursorByWorkspace: {},

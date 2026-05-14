@@ -16,32 +16,31 @@ describe("ComposerQueue", () => {
     cleanup();
   });
 
-  it("opens inline menu on queue item action tap", () => {
-    render(<ComposerQueue queuedMessages={[queuedItem]} />);
-
-    expect(screen.queryByText("Edit")).toBeNull();
-    fireEvent.click(screen.getByLabelText("Queue item menu"));
-    expect(screen.getByText("Edit")).toBeTruthy();
-    expect(screen.getByText("Delete")).toBeTruthy();
-  });
-
-  it("calls edit callback for selected queued item", () => {
+  it("calls edit callback from the inline edit action", () => {
     const onEditQueued = vi.fn();
     render(<ComposerQueue queuedMessages={[queuedItem]} onEditQueued={onEditQueued} />);
 
-    fireEvent.click(screen.getByLabelText("Queue item menu"));
-    fireEvent.click(screen.getByText("Edit"));
+    fireEvent.click(screen.getByLabelText("Edit queued message"));
 
     expect(onEditQueued).toHaveBeenCalledTimes(1);
     expect(onEditQueued).toHaveBeenCalledWith(queuedItem);
+  });
+
+  it("calls guide callback from the inline guide action", () => {
+    const onGuideQueued = vi.fn();
+    render(<ComposerQueue queuedMessages={[queuedItem]} onGuideQueued={onGuideQueued} />);
+
+    fireEvent.click(screen.getByLabelText("Guide queued message"));
+
+    expect(onGuideQueued).toHaveBeenCalledTimes(1);
+    expect(onGuideQueued).toHaveBeenCalledWith(queuedItem);
   });
 
   it("calls delete callback for selected queued item", () => {
     const onDeleteQueued = vi.fn();
     render(<ComposerQueue queuedMessages={[queuedItem]} onDeleteQueued={onDeleteQueued} />);
 
-    fireEvent.click(screen.getByLabelText("Queue item menu"));
-    fireEvent.click(screen.getByText("Delete"));
+    fireEvent.click(screen.getByLabelText("Delete queued message"));
 
     expect(onDeleteQueued).toHaveBeenCalledTimes(1);
     expect(onDeleteQueued).toHaveBeenCalledWith(queuedItem.id);

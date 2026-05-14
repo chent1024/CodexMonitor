@@ -1,8 +1,11 @@
 use super::rpc::{
-    build_error_response, build_result_response, forward_events, parse_auth_token,
-    spawn_rpc_response_task,
+    build_error_response, build_result_response, forward_events, parse_auth_token, send_outbound,
+    spawn_rpc_response_task, RpcConnectionState,
 };
 use super::*;
+
+const DAEMON_CLIENT_OUTBOUND_QUEUE_CAPACITY: usize = 4096;
+const DAEMON_RPC_QUEUE_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub(super) async fn handle_client(
     socket: TcpStream,
@@ -13,7 +16,7 @@ pub(super) async fn handle_client(
     let (reader, mut writer) = socket.into_split();
     let mut lines = BufReader::new(reader).lines();
 
-    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
+    let (out_tx, mut out_rx) = mpsc::channel::<String>(DAEMON_CLIENT_OUTBOUND_QUEUE_CAPACITY);
     let write_task = tokio::spawn(async move {
         while let Some(message) = out_rx.recv().await {
             if writer.write_all(message.as_bytes()).await.is_err() {
@@ -28,6 +31,7 @@ pub(super) async fn handle_client(
     let mut authenticated = config.token.is_none();
     let mut events_task: Option<tokio::task::JoinHandle<()>> = None;
     let request_limiter = Arc::new(Semaphore::new(MAX_IN_FLIGHT_RPC_PER_CONNECTION));
+    let connection_state = Arc::new(RpcConnectionState::new());
     let client_version = format!("daemon-{}", env!("CARGO_PKG_VERSION"));
 
     if authenticated {
@@ -58,7 +62,9 @@ pub(super) async fn handle_client(
         if !authenticated {
             if method != "auth" {
                 if let Some(response) = build_error_response(id, "unauthorized") {
-                    let _ = out_tx.send(response);
+                    if send_outbound(&out_tx, response).await.is_err() {
+                        break;
+                    }
                 }
                 continue;
             }
@@ -67,14 +73,18 @@ pub(super) async fn handle_client(
             let provided = parse_auth_token(&params).unwrap_or_default();
             if expected != provided {
                 if let Some(response) = build_error_response(id, "invalid token") {
-                    let _ = out_tx.send(response);
+                    if send_outbound(&out_tx, response).await.is_err() {
+                        break;
+                    }
                 }
                 continue;
             }
 
             authenticated = true;
             if let Some(response) = build_result_response(id, json!({ "ok": true })) {
-                let _ = out_tx.send(response);
+                if send_outbound(&out_tx, response).await.is_err() {
+                    break;
+                }
             }
 
             let rx = events.subscribe();
@@ -84,6 +94,26 @@ pub(super) async fn handle_client(
             continue;
         }
 
+        let permit = match tokio::time::timeout(
+            DAEMON_RPC_QUEUE_TIMEOUT,
+            Arc::clone(&request_limiter).acquire_owned(),
+        )
+        .await
+        {
+            Ok(Ok(permit)) => permit,
+            Ok(Err(_)) => break,
+            Err(_) => {
+                if let Some(response) =
+                    build_error_response(id, "daemon RPC queue is full; retry later")
+                {
+                    if send_outbound(&out_tx, response).await.is_err() {
+                        break;
+                    }
+                }
+                continue;
+            }
+        };
+
         spawn_rpc_response_task(
             Arc::clone(&state),
             out_tx.clone(),
@@ -91,7 +121,8 @@ pub(super) async fn handle_client(
             method,
             params,
             client_version.clone(),
-            Arc::clone(&request_limiter),
+            permit,
+            Arc::clone(&connection_state),
         );
     }
 
@@ -99,5 +130,6 @@ pub(super) async fn handle_client(
     if let Some(task) = events_task {
         task.abort();
     }
+    connection_state.close_and_detach(&state).await;
     write_task.abort();
 }

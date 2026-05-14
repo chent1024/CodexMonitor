@@ -586,6 +586,35 @@ describe("threadReducer", () => {
     expect(next).toBe(base);
   });
 
+  it("caps very large live tool output deltas", () => {
+    const commandItem: ConversationItem = {
+      id: "command-1",
+      kind: "tool",
+      toolType: "commandExecution",
+      title: "Command",
+      detail: "",
+      status: "inProgress",
+      output: "start",
+    };
+    const base: ThreadState = {
+      ...initialState,
+      itemsByThread: { "thread-1": [commandItem] },
+    };
+    const next = threadReducer(base, {
+      type: "appendToolOutput",
+      threadId: "thread-1",
+      itemId: "command-1",
+      delta: "x".repeat(250_000),
+    });
+
+    const updated = next.itemsByThread["thread-1"]?.[0];
+    expect(updated?.kind).toBe("tool");
+    if (updated?.kind === "tool") {
+      expect(updated.output?.length).toBeLessThanOrEqual(200_000);
+      expect(updated.output).toContain("output truncated by CodexMonitor");
+    }
+  });
+
   it("adds and removes user input requests by workspace and id", () => {
     const requestA = {
       workspace_id: "ws-1",
@@ -663,6 +692,29 @@ describe("threadReducer", () => {
     });
 
     expect(next.turnDiffByThread["thread-1"]).toBeUndefined();
+  });
+
+  it("clears thread turn pagination state when a thread is removed", () => {
+    const base: ThreadState = {
+      ...initialState,
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-1", name: "Agent 1", updatedAt: 1 }],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "thread-1" },
+      threadTurnsPagingById: { "thread-1": true },
+      threadTurnsCursorById: { "thread-1": "older-cursor" },
+      threadTurnsHasLoadedOldestById: { "thread-1": false },
+    };
+
+    const next = threadReducer(base, {
+      type: "removeThread",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+    });
+
+    expect(next.threadTurnsPagingById["thread-1"]).toBeUndefined();
+    expect(next.threadTurnsCursorById["thread-1"]).toBeUndefined();
+    expect(next.threadTurnsHasLoadedOldestById["thread-1"]).toBeUndefined();
   });
 
   it("hides background threads and keeps them hidden on future syncs", () => {

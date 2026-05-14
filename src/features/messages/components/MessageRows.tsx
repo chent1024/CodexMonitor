@@ -133,9 +133,64 @@ type FileChangeSummaryEntry = FileChangeEntry & {
   displayPath: string;
 };
 
+type MemoryCitationInfo = {
+  citationEntries: string[];
+  rolloutIds: string[];
+};
+
 type CommandOutputProps = {
   output: string;
 };
+
+function extractMemoryCitationSection(value: string, tag: string) {
+  const match = value.match(new RegExp(`<${tag}>\\s*([\\s\\S]*?)\\s*</${tag}>`, "i"));
+  if (!match) {
+    return [];
+  }
+  return match[1]
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function extractMemoryCitationInfo(value: string): MemoryCitationInfo | null {
+  const match = value.match(/<oai-mem-citation>[\s\S]*?<\/oai-mem-citation>\s*$/i);
+  if (!match) {
+    return null;
+  }
+  return {
+    citationEntries: extractMemoryCitationSection(match[0], "citation_entries"),
+    rolloutIds: extractMemoryCitationSection(match[0], "rollout_ids"),
+  };
+}
+
+function MemoryCitationPanel({ citation }: { citation: MemoryCitationInfo }) {
+  const count = citation.citationEntries.length || citation.rolloutIds.length;
+  return (
+    <details className="oai-memory-citation" data-memory-citation>
+      <summary className="oai-memory-citation-summary">
+        <Search size={13} aria-hidden />
+        <span>记忆引用 {count}</span>
+      </summary>
+      <div className="oai-memory-citation-body">
+        {citation.citationEntries.length > 0 ? (
+          <div className="oai-memory-citation-list">
+            {citation.citationEntries.map((entry, index) => (
+              <div className="oai-memory-citation-entry" key={`${index}-${entry}`}>
+                {entry}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {citation.rolloutIds.length > 0 ? (
+          <div className="oai-memory-citation-rollouts">
+            Rollouts: {citation.rolloutIds.join(", ")}
+          </div>
+        ) : null}
+      </div>
+    </details>
+  );
+}
 
 function buildUserMessageMetadata(item: Extract<ConversationItem, { kind: "message" }>) {
   const text = item.text.toLowerCase();
@@ -1175,6 +1230,10 @@ export const MessageRow = memo(function MessageRow({
     imageItems.length === 0 &&
     isStandaloneMarkdownTable(item.text);
   const isUserMessage = item.role === "user";
+  const memoryCitation = useMemo(
+    () => (isUserMessage ? null : extractMemoryCitationInfo(displayItem.text)),
+    [displayItem.text, isUserMessage],
+  );
   const attachmentItems = item.attachments ?? [];
   const userMetadata = useMemo(() => buildUserMessageMetadata(displayItem), [displayItem]);
   const richUserAttachments = useMemo(
@@ -1302,6 +1361,9 @@ export const MessageRow = memo(function MessageRow({
         )}
         {!isUserMessage && <MessageArtifacts item={displayItem} />}
       </div>
+      {!isUserMessage && memoryCitation ? (
+        <MemoryCitationPanel citation={memoryCitation} />
+      ) : null}
       {lightboxIndex !== null && imageItems.length > 0 && (
         <ImageLightbox
           images={imageItems}
@@ -1379,11 +1441,11 @@ export const MessageRow = memo(function MessageRow({
             data-message-part="actions"
           >
             <div
-              className="mr-1 ms-1 flex items-center gap-2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+              className="mr-1 ms-1 flex items-center gap-2 opacity-0 group-hover:opacity-100"
               data-message-actions-row
             >
               <span
-                className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 oai-message-action-metadata"
+                className="opacity-0 group-hover:opacity-100 oai-message-action-metadata"
                 data-message-action-metadata
                 aria-hidden
               />

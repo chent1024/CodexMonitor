@@ -18,6 +18,10 @@
   margin-inline: auto;
 }
 
+.composer:has(.composer-queue) {
+  gap: 0;
+}
+
 .app.reduced-transparency .composer {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -26,76 +30,117 @@
 .composer-queue {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 16px;
-  background: var(--cm-surface-panel);
-  border: 1px solid var(--cm-border-emphasis);
-}
-
-.composer-queue-title {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-fainter);
+  position: relative;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--cm-border-heavy);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: var(--surface-messages);
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--shadow-soft, rgba(15, 23, 42, 0.16)) 20%, transparent),
+    0 1px 2px color-mix(in srgb, var(--shadow-soft, rgba(15, 23, 42, 0.16)) 10%, transparent);
+  overflow: visible;
+  z-index: 2;
 }
 
 .composer-queue-hint {
+  margin: 8px 18px 0;
   font-size: 11px;
   line-height: 1.4;
   color: var(--text-faint);
-}
-
-.composer-queue-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .composer-queue-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  background: var(--surface-item);
-  color: var(--text-quiet);
-  font-size: 11px;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.composer-queue-item + .composer-queue-item {
+  margin-top: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 62%, transparent);
+}
+
+.composer-queue-leading-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--text-faint);
 }
 
 .composer-queue-text {
+  min-width: 0;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.composer-queue-menu {
+.composer-queue-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+}
+
+.composer-queue-guide,
+.composer-queue-action-icon {
+  display: inline-flex;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
   border: none;
+  border-radius: 0;
   background: transparent;
   color: var(--text-faint);
-  font-size: 11px;
-  padding: 2px 4px;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
   cursor: pointer;
+  transition: color 120ms ease;
 }
 
-.composer-queue-menu-wrap {
-  position: relative;
-  flex: 0 0 auto;
+.composer .composer-queue-guide:hover:not(:disabled),
+.composer .composer-queue-guide:active:not(:disabled),
+.composer .composer-queue-action-icon:hover:not(:disabled),
+.composer .composer-queue-action-icon:active:not(:disabled) {
+  background: transparent;
+  box-shadow: none;
+  filter: none;
+  transform: none;
 }
 
-.composer-queue-menu:hover,
-.composer-queue-menu.is-open {
-  color: var(--text-stronger);
+.composer-queue-guide {
+  width: auto;
+  gap: 4px;
+  padding-inline: 0;
+  font-size: 13px;
 }
 
-.composer-queue-item-popover {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 4px);
-  min-width: 110px;
-  padding: 4px;
-  z-index: 40;
+.composer-queue-action-icon {
+  width: 26px;
+}
+
+.composer-queue-guide:hover,
+.composer-queue-action-icon:hover {
+  color: var(--text-muted);
+}
+
+.composer-queue-guide:focus-visible,
+.composer-queue-action-icon:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  outline-offset: 2px;
 }
 
 .composer-followup-hint {
@@ -155,6 +200,11 @@
   box-shadow:
     0 8px 20px color-mix(in srgb, var(--shadow-soft, rgba(15, 23, 42, 0.16)) 42%, transparent),
     0 1px 2px color-mix(in srgb, var(--shadow-soft, rgba(15, 23, 42, 0.16)) 18%, transparent);
+}
+
+.composer:has(.composer-queue) .composer-input-area {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .composer-input-area.is-drag-over {
@@ -859,8 +909,7 @@
     align-self: flex-end;
   }
 
-  .app.layout-phone .composer-attach,
-  .app.layout-phone .composer-action--expand {
+  .app.layout-phone .composer-attach {
     display: none;
   }
 

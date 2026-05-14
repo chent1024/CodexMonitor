@@ -164,22 +164,40 @@ export function useThreads({
   const threadsByWorkspaceRef = useRef(state.threadsByWorkspace);
   const activeThreadIdByWorkspaceRef = useRef(state.activeThreadIdByWorkspace);
   const threadStatusByIdRef = useRef(state.threadStatusById);
+  const threadTurnsCursorByIdRef = useRef(state.threadTurnsCursorById);
+  const threadTurnsPagingByIdRef = useRef(state.threadTurnsPagingById);
+  const threadTurnsHasLoadedOldestByIdRef = useRef(
+    state.threadTurnsHasLoadedOldestById,
+  );
   const activeTurnIdByThreadRef = useRef(state.activeTurnIdByThread);
   const subagentThreadByWorkspaceThreadRef = useRef<Record<string, true>>({});
   const threadParentByIdRef = useRef(state.threadParentById);
   const cascadeArchiveSkipRef = useRef<Record<string, number>>({});
   const subagentHydrationInFlightRef = useRef<Record<string, true>>({});
   const hiddenThreadIdsByWorkspaceRef = useRef(state.hiddenThreadIdsByWorkspace);
+  const selectionRefreshTimerByKeyRef = useRef<Record<string, number>>({});
   planByThreadRef.current = state.planByThread;
   itemsByThreadRef.current = state.itemsByThread;
   threadsByWorkspaceRef.current = state.threadsByWorkspace;
   activeThreadIdByWorkspaceRef.current = state.activeThreadIdByWorkspace;
   threadStatusByIdRef.current = state.threadStatusById;
+  threadTurnsCursorByIdRef.current = state.threadTurnsCursorById;
+  threadTurnsPagingByIdRef.current = state.threadTurnsPagingById;
+  threadTurnsHasLoadedOldestByIdRef.current = state.threadTurnsHasLoadedOldestById;
   activeTurnIdByThreadRef.current = state.activeTurnIdByThread;
   threadParentByIdRef.current = state.threadParentById;
   hiddenThreadIdsByWorkspaceRef.current = state.hiddenThreadIdsByWorkspace;
   const rateLimitsByWorkspaceRef = useRef(state.rateLimitsByWorkspace);
   rateLimitsByWorkspaceRef.current = state.rateLimitsByWorkspace;
+  useEffect(
+    () => () => {
+      Object.values(selectionRefreshTimerByKeyRef.current).forEach((timer) => {
+        window.clearTimeout(timer);
+      });
+      selectionRefreshTimerByKeyRef.current = {};
+    },
+    [],
+  );
   const { approvalAllowlistRef, handleApprovalDecision, handleApprovalRemember } =
     useThreadApprovals({ dispatch, onDebug });
   const { handleUserInputSubmit } = useThreadUserInput({ dispatch });
@@ -649,6 +667,8 @@ export function useThreads({
     listThreadsForWorkspaces,
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
+    loadOlderThreadTurns,
+    hydrateInitialThreadTurnsPage,
     archiveThread,
   } = useThreadActions({
     dispatch,
@@ -656,6 +676,9 @@ export function useThreads({
     threadsByWorkspace: state.threadsByWorkspace,
     activeThreadIdByWorkspace: state.activeThreadIdByWorkspace,
     activeTurnIdByThread: state.activeTurnIdByThread,
+    threadTurnsCursorById: state.threadTurnsCursorById,
+    threadTurnsPagingById: state.threadTurnsPagingById,
+    threadTurnsHasLoadedOldestById: state.threadTurnsHasLoadedOldestById,
     threadParentById: state.threadParentById,
     threadListCursorByWorkspace: state.threadListCursorByWorkspace,
     threadStatusById: state.threadStatusById,
@@ -998,10 +1021,11 @@ export function useThreads({
       }
       return (
         loadedThreadsRef.current[threadId] === true ||
-        (itemsByThreadRef.current[threadId]?.length ?? 0) > 0
+        (Boolean(threadStatusByIdRef.current[threadId]?.isProcessing) &&
+          (itemsByThreadRef.current[threadId]?.length ?? 0) > 0)
       );
     },
-    [itemsByThreadRef, loadedThreadsRef],
+    [itemsByThreadRef, loadedThreadsRef, threadStatusByIdRef],
   );
 
   const setActiveThreadId = useCallback(
@@ -1026,6 +1050,7 @@ export function useThreads({
         void (async () => {
           const hasLocalSnapshot = hasLocalThreadSnapshot(threadId);
           if (hasLocalSnapshot) {
+            void hydrateInitialThreadTurnsPage(targetId, threadId);
             const summaryUpdatedAt =
               threadsByWorkspaceRef.current[targetId]?.find((thread) => thread.id === threadId)
                 ?.updatedAt ?? 0;
@@ -1033,7 +1058,22 @@ export function useThreads({
             const isProcessing =
               threadStatusByIdRef.current[threadId]?.isProcessing ?? false;
             if (summaryUpdatedAt > loadedUpdatedAt && !isProcessing) {
-              await refreshThread(targetId, threadId);
+              loadedThreadsRef.current[threadId] = true;
+              const key = `${targetId}:${threadId}`;
+              const existingTimer = selectionRefreshTimerByKeyRef.current[key];
+              if (existingTimer !== undefined) {
+                window.clearTimeout(existingTimer);
+              }
+              selectionRefreshTimerByKeyRef.current[key] = window.setTimeout(() => {
+                delete selectionRefreshTimerByKeyRef.current[key];
+                if (
+                  (activeThreadIdByWorkspaceRef.current[targetId] ?? null) !== threadId ||
+                  threadStatusByIdRef.current[threadId]?.isProcessing
+                ) {
+                  return;
+                }
+                void refreshThread(targetId, threadId, { bypassCooldown: true });
+              }, 0);
               return;
             }
             loadedThreadsRef.current[threadId] = true;
@@ -1054,10 +1094,23 @@ export function useThreads({
       hasProcessingThreadInWorkspace,
       loadedThreadUpdatedAtRef,
       loadedThreadsRef,
+      hydrateInitialThreadTurnsPage,
       refreshThread,
       resumeThreadForWorkspace,
     ],
   );
+
+  useEffect(() => {
+    if (!activeWorkspaceId || !activeThreadId || !hasLocalThreadSnapshot(activeThreadId)) {
+      return;
+    }
+    void hydrateInitialThreadTurnsPage(activeWorkspaceId, activeThreadId);
+  }, [
+    activeThreadId,
+    activeWorkspaceId,
+    hasLocalThreadSnapshot,
+    hydrateInitialThreadTurnsPage,
+  ]);
 
   const removeThread = useCallback(
     (workspaceId: string, threadId: string) => {
@@ -1080,6 +1133,9 @@ export function useThreads({
     isSubagentThread,
     threadStatusById: state.threadStatusById,
     threadResumeLoadingById: state.threadResumeLoadingById,
+    threadTurnsPagingById: state.threadTurnsPagingById,
+    threadTurnsCursorById: state.threadTurnsCursorById,
+    threadTurnsHasLoadedOldestById: state.threadTurnsHasLoadedOldestById,
     threadListLoadingByWorkspace: state.threadListLoadingByWorkspace,
     threadListPagingByWorkspace: state.threadListPagingByWorkspace,
     threadListCursorByWorkspace: state.threadListCursorByWorkspace,
@@ -1107,6 +1163,7 @@ export function useThreads({
     listThreadsForWorkspaces,
     listThreadsForWorkspace,
     refreshThread,
+    loadOlderThreadTurns,
     resetWorkspaceThreads,
     loadOlderThreadsForWorkspace,
     sendUserMessage,

@@ -9,13 +9,16 @@ import type {
 import {
   archiveThread as archiveThreadService,
   forkThread as forkThreadService,
+  listThreadTurns as listThreadTurnsService,
   listThreads as listThreadsService,
   listWorkspaces as listWorkspacesService,
   resumeThread as resumeThreadService,
   startThread as startThreadService,
 } from "@services/tauri";
 import {
+  buildItemsFromThread,
   getThreadTimestamp,
+  mergeThreadItems,
 } from "@utils/threadItems";
 import { extractThreadCodexMetadata } from "@threads/utils/threadCodexMetadata";
 import {
@@ -42,6 +45,10 @@ const THREAD_LIST_PAGE_SIZE = 100;
 const THREAD_LIST_MAX_PAGES_OLDER = 6;
 const THREAD_LIST_MAX_PAGES_DEFAULT = 6;
 const THREAD_LIST_CURSOR_PAGE_START = "__codex_monitor_page_start__";
+const THREAD_TURNS_INITIAL_LIMIT = 20;
+const THREAD_TURNS_PAGE_LIMIT = 20;
+const THREAD_RESUME_REFRESH_COOLDOWN_MS = 1_500;
+const THREAD_TURNS_OLDER_RETRY_COOLDOWN_MS = 1_500;
 
 type UseThreadActionsOptions = {
   dispatch: Dispatch<ThreadAction>;
@@ -49,6 +56,9 @@ type UseThreadActionsOptions = {
   threadsByWorkspace: ThreadState["threadsByWorkspace"];
   activeThreadIdByWorkspace: ThreadState["activeThreadIdByWorkspace"];
   activeTurnIdByThread: ThreadState["activeTurnIdByThread"];
+  threadTurnsCursorById: ThreadState["threadTurnsCursorById"];
+  threadTurnsPagingById: ThreadState["threadTurnsPagingById"];
+  threadTurnsHasLoadedOldestById: ThreadState["threadTurnsHasLoadedOldestById"];
   threadParentById: ThreadState["threadParentById"];
   threadListCursorByWorkspace: ThreadState["threadListCursorByWorkspace"];
   threadStatusById: ThreadState["threadStatusById"];
@@ -79,6 +89,9 @@ export function useThreadActions({
   threadsByWorkspace,
   activeThreadIdByWorkspace,
   activeTurnIdByThread,
+  threadTurnsCursorById,
+  threadTurnsPagingById,
+  threadTurnsHasLoadedOldestById,
   threadParentById,
   threadListCursorByWorkspace,
   threadStatusById,
@@ -95,10 +108,128 @@ export function useThreadActions({
   onThreadCodexMetadataDetected,
 }: UseThreadActionsOptions) {
   const resumeInFlightByThreadRef = useRef<Record<string, number>>({});
+  const resumePromiseByThreadRef = useRef<Record<string, Promise<string | null>>>({});
+  const resumeLastStartedAtByThreadRef = useRef<Record<string, number>>({});
+  const initialTurnsPagePromiseByThreadRef = useRef<Record<string, Promise<void>>>({});
+  const initialTurnsAttemptedByThreadRef = useRef<Record<string, boolean>>({});
+  const olderTurnsRetryAfterByThreadRef = useRef<Record<string, number>>({});
   const threadStatusByIdRef = useRef(threadStatusById);
   const activeTurnIdByThreadRef = useRef(activeTurnIdByThread);
   threadStatusByIdRef.current = threadStatusById;
   activeTurnIdByThreadRef.current = activeTurnIdByThread;
+
+  const extractThreadTurnsPage = useCallback((response: unknown) => {
+    const result = (
+      response && typeof response === "object" && "result" in response
+        ? (response as Record<string, unknown>).result
+        : response
+    ) as Record<string, unknown> | null;
+    const turns = Array.isArray(result?.data)
+      ? (result.data as Record<string, unknown>[])
+      : null;
+    if (!turns) {
+      return null;
+    }
+    const nextCursor =
+      typeof result?.nextCursor === "string"
+        ? result.nextCursor
+        : typeof result?.next_cursor === "string"
+          ? result.next_cursor
+          : null;
+    return { turns, nextCursor };
+  }, []);
+
+  const hydrateInitialThreadTurnsPage = useCallback(
+    async (workspaceId: string, threadId: string) => {
+      if (
+        threadTurnsCursorById[threadId] !== undefined ||
+        threadTurnsPagingById[threadId] ||
+        threadTurnsHasLoadedOldestById[threadId] ||
+        initialTurnsAttemptedByThreadRef.current[threadId]
+      ) {
+        return;
+      }
+      const existingPromise = initialTurnsPagePromiseByThreadRef.current[threadId];
+      if (existingPromise) {
+        return existingPromise;
+      }
+      initialTurnsAttemptedByThreadRef.current[threadId] = true;
+
+      const promise = (async () => {
+        dispatch({ type: "setThreadTurnsPaging", threadId, isLoading: true });
+        onDebug?.({
+          id: `${Date.now()}-client-thread-turns-list-initial`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "thread/turns/list initial",
+          payload: { workspaceId, threadId },
+        });
+        try {
+          const page = extractThreadTurnsPage(
+            await listThreadTurnsService(
+              workspaceId,
+              threadId,
+              null,
+              THREAD_TURNS_INITIAL_LIMIT,
+            ),
+          );
+          if (!page) {
+            return;
+          }
+
+          const pagedItems = buildItemsFromThread({
+            id: threadId,
+            turns: page.turns,
+          });
+          const localItems = itemsByThread[threadId] ?? [];
+          const mergedItems =
+            pagedItems.length > 0
+              ? mergeThreadItems(pagedItems, localItems)
+              : localItems;
+          if (mergedItems.length > 0) {
+            dispatch({
+              type: "setThreadItems",
+              threadId,
+              items: mergedItems,
+            });
+          }
+          dispatch({
+            type: "setThreadTurnsCursor",
+            threadId,
+            cursor: page.nextCursor,
+          });
+          dispatch({
+            type: "setThreadTurnsHasLoadedOldest",
+            threadId,
+            hasLoadedOldest: page.nextCursor === null,
+          });
+        } catch (error) {
+          onDebug?.({
+            id: `${Date.now()}-client-thread-turns-list-initial-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "thread/turns/list initial error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
+        } finally {
+          dispatch({ type: "setThreadTurnsPaging", threadId, isLoading: false });
+          delete initialTurnsPagePromiseByThreadRef.current[threadId];
+        }
+      })();
+
+      initialTurnsPagePromiseByThreadRef.current[threadId] = promise;
+      return promise;
+    },
+    [
+      dispatch,
+      extractThreadTurnsPage,
+      itemsByThread,
+      onDebug,
+      threadTurnsCursorById,
+      threadTurnsHasLoadedOldestById,
+      threadTurnsPagingById,
+    ],
+  );
 
   const applyThreadMetadata = useCallback(
     (
@@ -196,15 +327,18 @@ export function useThreadActions({
       threadId: string,
       force = false,
       replaceLocal = false,
+      options?: { bypassCooldown?: boolean },
     ) => {
       if (!threadId) {
         return null;
       }
       if (!force && loadedThreadsRef.current[threadId]) {
+        await hydrateInitialThreadTurnsPage(workspaceId, threadId);
         return threadId;
       }
       const status = threadStatusByIdRef.current[threadId];
       if (status?.isProcessing && loadedThreadsRef.current[threadId] && !force) {
+        await hydrateInitialThreadTurnsPage(workspaceId, threadId);
         onDebug?.({
           id: `${Date.now()}-client-thread-resume-skipped`,
           timestamp: Date.now(),
@@ -214,6 +348,28 @@ export function useThreadActions({
         });
         return threadId;
       }
+      const existingResumePromise = resumePromiseByThreadRef.current[threadId];
+      if (existingResumePromise) {
+        return existingResumePromise;
+      }
+      const now = Date.now();
+      const lastResumeStartedAt = resumeLastStartedAtByThreadRef.current[threadId] ?? 0;
+      if (
+        force &&
+        loadedThreadsRef.current[threadId] &&
+        !options?.bypassCooldown &&
+        now - lastResumeStartedAt < THREAD_RESUME_REFRESH_COOLDOWN_MS
+      ) {
+        onDebug?.({
+          id: `${Date.now()}-client-thread-resume-coalesced`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "thread/resume coalesced",
+          payload: { workspaceId, threadId, reason: "cooldown" },
+        });
+        return threadId;
+      }
+      resumeLastStartedAtByThreadRef.current[threadId] = now;
       onDebug?.({
         id: `${Date.now()}-client-thread-resume`,
         timestamp: Date.now(),
@@ -227,130 +383,175 @@ export function useThreadActions({
       if (inFlightCount === 1) {
         dispatch({ type: "setThreadResumeLoading", threadId, isLoading: true });
       }
-      try {
-        const response =
-          (await resumeThreadService(workspaceId, threadId)) as
-            | Record<string, unknown>
-            | null;
-        onDebug?.({
-          id: `${Date.now()}-server-thread-resume`,
-          timestamp: Date.now(),
-          source: "server",
-          label: "thread/resume response",
-          payload: response,
-        });
-        const thread = extractThreadFromResponse(response);
-        if (thread) {
-          const remoteUpdatedAt = getThreadTimestamp(thread);
-          dispatch({ type: "ensureThread", workspaceId, threadId });
-          applyThreadMetadata(workspaceId, threadId, thread, {
-            notifySubagent: true,
-          });
-          applyCollabThreadLinksFromThread(workspaceId, threadId, thread);
-          const localItems = itemsByThread[threadId] ?? [];
-          const shouldReplace =
-            replaceLocal || replaceOnResumeRef.current[threadId] === true;
-          if (shouldReplace) {
-            replaceOnResumeRef.current[threadId] = false;
+      const resumePromise = (async (): Promise<string | null> => {
+        try {
+          let turnsPage: {
+            turns: Record<string, unknown>[];
+            nextCursor: string | null;
+          } | null = null;
+          try {
+            turnsPage = extractThreadTurnsPage(
+              await listThreadTurnsService(
+                workspaceId,
+                threadId,
+                null,
+                THREAD_TURNS_INITIAL_LIMIT,
+              ),
+            );
+          } catch (error) {
+            onDebug?.({
+              id: `${Date.now()}-client-thread-turns-list-error`,
+              timestamp: Date.now(),
+              source: "error",
+              label: "thread/turns/list error",
+              payload: error instanceof Error ? error.message : String(error),
+            });
           }
-          const hydrationPlan = buildResumeHydrationPlan({
-            thread,
-            workspaceId,
-            threadId,
-            replaceLocal: shouldReplace,
-            localItems,
-            localStatus: threadStatusByIdRef.current[threadId],
-            localActiveTurnId: activeTurnIdByThreadRef.current[threadId] ?? null,
-            getCustomName,
+          const response =
+            (turnsPage !== null
+              ? await resumeThreadService(workspaceId, threadId, { excludeTurns: true })
+              : await resumeThreadService(workspaceId, threadId)) as
+              | Record<string, unknown>
+              | null;
+          onDebug?.({
+            id: `${Date.now()}-server-thread-resume`,
+            timestamp: Date.now(),
+            source: "server",
+            label: "thread/resume response",
+            payload: response,
           });
-          if (!hydrationPlan.shouldHydrate) {
-            loadedThreadsRef.current[threadId] = true;
+          const thread = extractThreadFromResponse(response);
+          if (thread) {
+            const remoteUpdatedAt = getThreadTimestamp(thread);
+            dispatch({ type: "ensureThread", workspaceId, threadId });
+            applyThreadMetadata(workspaceId, threadId, thread, {
+              notifySubagent: true,
+            });
+            applyCollabThreadLinksFromThread(workspaceId, threadId, thread);
+            if (turnsPage) {
+              dispatch({
+                type: "setThreadTurnsCursor",
+                threadId,
+                cursor: turnsPage.nextCursor,
+              });
+              dispatch({
+                type: "setThreadTurnsHasLoadedOldest",
+                threadId,
+                hasLoadedOldest: turnsPage.nextCursor === null,
+              });
+            }
+            const hydrationThread =
+              turnsPage && turnsPage.turns.length > 0
+                ? { ...thread, turns: turnsPage.turns }
+                : thread;
+            const localItems = itemsByThread[threadId] ?? [];
+            const shouldReplace =
+              replaceLocal || replaceOnResumeRef.current[threadId] === true;
+            if (shouldReplace) {
+              replaceOnResumeRef.current[threadId] = false;
+            }
+            const hydrationPlan = buildResumeHydrationPlan({
+              thread: hydrationThread,
+              workspaceId,
+              threadId,
+              replaceLocal: shouldReplace,
+              localItems,
+              localStatus: threadStatusByIdRef.current[threadId],
+              localActiveTurnId: activeTurnIdByThreadRef.current[threadId] ?? null,
+              getCustomName,
+            });
+            if (!hydrationPlan.shouldHydrate) {
+              loadedThreadsRef.current[threadId] = true;
+              loadedThreadUpdatedAtRef.current[threadId] = Math.max(
+                loadedThreadUpdatedAtRef.current[threadId] ?? 0,
+                remoteUpdatedAt,
+              );
+              return threadId;
+            }
+            if (hydrationPlan.keepLocalProcessing) {
+              onDebug?.({
+                id: `${Date.now()}-client-thread-resume-keep-processing`,
+                timestamp: Date.now(),
+                source: "client",
+                label: "thread/resume keep-processing",
+                payload: { workspaceId, threadId },
+              });
+            }
+            dispatch({
+              type: "markProcessing",
+              threadId,
+              isProcessing: hydrationPlan.shouldMarkProcessing,
+              timestamp: hydrationPlan.processingTimestamp,
+            });
+            dispatch({
+              type: "setActiveTurnId",
+              threadId,
+              turnId: hydrationPlan.resumedActiveTurnId,
+            });
+            dispatch({
+              type: "markReviewing",
+              threadId,
+              isReviewing: hydrationPlan.reviewing,
+            });
+            if (hydrationPlan.mergedItems.length > 0) {
+              dispatch({
+                type: "setThreadItems",
+                threadId,
+                items: hydrationPlan.mergedItems,
+              });
+            }
+            if (hydrationPlan.threadName) {
+              dispatch({
+                type: "setThreadName",
+                workspaceId,
+                threadId,
+                name: hydrationPlan.threadName,
+              });
+            }
+            if (
+              hydrationPlan.lastMessageText &&
+              hydrationPlan.lastMessageTimestamp !== null
+            ) {
+              dispatchPreviewMessage(
+                threadId,
+                hydrationPlan.lastMessageText,
+                hydrationPlan.lastMessageTimestamp,
+              );
+            }
             loadedThreadUpdatedAtRef.current[threadId] = Math.max(
               loadedThreadUpdatedAtRef.current[threadId] ?? 0,
               remoteUpdatedAt,
             );
-            return threadId;
+          } else {
+            loadedThreadUpdatedAtRef.current[threadId] = Date.now();
           }
-          if (hydrationPlan.keepLocalProcessing) {
-            onDebug?.({
-              id: `${Date.now()}-client-thread-resume-keep-processing`,
-              timestamp: Date.now(),
-              source: "client",
-              label: "thread/resume keep-processing",
-              payload: { workspaceId, threadId },
-            });
-          }
-          dispatch({
-            type: "markProcessing",
-            threadId,
-            isProcessing: hydrationPlan.shouldMarkProcessing,
-            timestamp: hydrationPlan.processingTimestamp,
+          loadedThreadsRef.current[threadId] = true;
+          return threadId;
+        } catch (error) {
+          onDebug?.({
+            id: `${Date.now()}-client-thread-resume-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "thread/resume error",
+            payload: error instanceof Error ? error.message : String(error),
           });
-          dispatch({
-            type: "setActiveTurnId",
-            threadId,
-            turnId: hydrationPlan.resumedActiveTurnId,
-          });
-          dispatch({
-            type: "markReviewing",
-            threadId,
-            isReviewing: hydrationPlan.reviewing,
-          });
-          if (hydrationPlan.mergedItems.length > 0) {
-            dispatch({
-              type: "setThreadItems",
-              threadId,
-              items: hydrationPlan.mergedItems,
-            });
-          }
-          if (hydrationPlan.threadName) {
-            dispatch({
-              type: "setThreadName",
-              workspaceId,
-              threadId,
-              name: hydrationPlan.threadName,
-            });
-          }
-          if (
-            hydrationPlan.lastMessageText &&
-            hydrationPlan.lastMessageTimestamp !== null
-          ) {
-            dispatchPreviewMessage(
-              threadId,
-              hydrationPlan.lastMessageText,
-              hydrationPlan.lastMessageTimestamp,
-            );
-          }
-          loadedThreadUpdatedAtRef.current[threadId] = Math.max(
-            loadedThreadUpdatedAtRef.current[threadId] ?? 0,
-            remoteUpdatedAt,
+          return null;
+        } finally {
+          const nextCount = Math.max(
+            0,
+            (resumeInFlightByThreadRef.current[threadId] ?? 1) - 1,
           );
-        } else {
-          loadedThreadUpdatedAtRef.current[threadId] = Date.now();
+          if (nextCount === 0) {
+            delete resumeInFlightByThreadRef.current[threadId];
+            delete resumePromiseByThreadRef.current[threadId];
+            dispatch({ type: "setThreadResumeLoading", threadId, isLoading: false });
+          } else {
+            resumeInFlightByThreadRef.current[threadId] = nextCount;
+          }
         }
-        loadedThreadsRef.current[threadId] = true;
-        return threadId;
-      } catch (error) {
-        onDebug?.({
-          id: `${Date.now()}-client-thread-resume-error`,
-          timestamp: Date.now(),
-          source: "error",
-          label: "thread/resume error",
-          payload: error instanceof Error ? error.message : String(error),
-        });
-        return null;
-      } finally {
-        const nextCount = Math.max(
-          0,
-          (resumeInFlightByThreadRef.current[threadId] ?? 1) - 1,
-        );
-        if (nextCount === 0) {
-          delete resumeInFlightByThreadRef.current[threadId];
-          dispatch({ type: "setThreadResumeLoading", threadId, isLoading: false });
-        } else {
-          resumeInFlightByThreadRef.current[threadId] = nextCount;
-        }
-      }
+      })();
+      resumePromiseByThreadRef.current[threadId] = resumePromise;
+      return resumePromise;
     },
     [
       applyThreadMetadata,
@@ -358,6 +559,7 @@ export function useThreadActions({
       dispatchPreviewMessage,
       dispatch,
       getCustomName,
+      hydrateInitialThreadTurnsPage,
       itemsByThread,
       loadedThreadUpdatedAtRef,
       loadedThreadsRef,
@@ -428,12 +630,16 @@ export function useThreadActions({
   );
 
   const refreshThread = useCallback(
-    async (workspaceId: string, threadId: string) => {
+    async (
+      workspaceId: string,
+      threadId: string,
+      options?: { bypassCooldown?: boolean },
+    ) => {
       if (!threadId) {
         return null;
       }
       replaceOnResumeRef.current[threadId] = true;
-      return resumeThreadForWorkspace(workspaceId, threadId, true, true);
+      return resumeThreadForWorkspace(workspaceId, threadId, true, true, options);
     },
     [replaceOnResumeRef, resumeThreadForWorkspace],
   );
@@ -864,6 +1070,92 @@ export function useThreadActions({
     ],
   );
 
+  const loadOlderThreadTurns = useCallback(
+    async (workspaceId: string, threadId: string) => {
+      const cursor = threadTurnsCursorById[threadId] ?? null;
+      const retryAfter = olderTurnsRetryAfterByThreadRef.current[threadId] ?? 0;
+      if (
+        !cursor ||
+        threadTurnsPagingById[threadId] ||
+        threadTurnsHasLoadedOldestById[threadId] ||
+        Date.now() < retryAfter
+      ) {
+        return;
+      }
+      dispatch({ type: "setThreadTurnsPaging", threadId, isLoading: true });
+      onDebug?.({
+        id: `${Date.now()}-client-thread-turns-list-older`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "thread/turns/list older",
+        payload: { workspaceId, threadId, cursor },
+      });
+      try {
+        const page = extractThreadTurnsPage(
+          await listThreadTurnsService(
+            workspaceId,
+            threadId,
+            cursor,
+            THREAD_TURNS_PAGE_LIMIT,
+          ),
+        );
+        if (!page) {
+          dispatch({ type: "setThreadTurnsCursor", threadId, cursor: null });
+          dispatch({
+            type: "setThreadTurnsHasLoadedOldest",
+            threadId,
+            hasLoadedOldest: true,
+          });
+          return;
+        }
+        const olderItems = buildItemsFromThread({
+          id: threadId,
+          turns: page.turns,
+        });
+        const localItems = itemsByThread[threadId] ?? [];
+        const mergedItems =
+          olderItems.length > 0 ? mergeThreadItems(olderItems, localItems) : localItems;
+        dispatch({
+          type: "setThreadItems",
+          threadId,
+          items: mergedItems,
+        });
+        dispatch({
+          type: "setThreadTurnsCursor",
+          threadId,
+          cursor: page.nextCursor,
+        });
+        dispatch({
+          type: "setThreadTurnsHasLoadedOldest",
+          threadId,
+          hasLoadedOldest: page.nextCursor === null,
+        });
+        delete olderTurnsRetryAfterByThreadRef.current[threadId];
+      } catch (error) {
+        olderTurnsRetryAfterByThreadRef.current[threadId] =
+          Date.now() + THREAD_TURNS_OLDER_RETRY_COOLDOWN_MS;
+        onDebug?.({
+          id: `${Date.now()}-client-thread-turns-list-older-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "thread/turns/list older error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        dispatch({ type: "setThreadTurnsPaging", threadId, isLoading: false });
+      }
+    },
+    [
+      dispatch,
+      extractThreadTurnsPage,
+      itemsByThread,
+      onDebug,
+      threadTurnsHasLoadedOldestById,
+      threadTurnsCursorById,
+      threadTurnsPagingById,
+    ],
+  );
+
   const archiveThread = useCallback(
     async (workspaceId: string, threadId: string) => {
       try {
@@ -885,11 +1177,13 @@ export function useThreadActions({
     startThreadForWorkspace,
     forkThreadForWorkspace,
     resumeThreadForWorkspace,
+    hydrateInitialThreadTurnsPage,
     refreshThread,
     resetWorkspaceThreads,
     listThreadsForWorkspaces,
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
+    loadOlderThreadTurns,
     archiveThread,
   };
 }

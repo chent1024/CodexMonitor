@@ -115,6 +115,112 @@
   gap: 6px;
 }
 
+.debug-memory-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+}
+
+.debug-memory-summary-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.debug-memory-title {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.debug-memory-subtitle {
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.debug-memory-status {
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: var(--surface-control);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.debug-memory-status.enabled {
+  color: var(--status-success);
+  background: color-mix(in srgb, var(--status-success) 14%, transparent);
+}
+
+.debug-memory-status.disabled {
+  color: var(--text-faint);
+}
+
+.debug-memory-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.debug-memory-metrics span {
+  border-radius: 6px;
+  padding: 3px 7px;
+  background: var(--surface-control);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.debug-memory-error {
+  color: var(--status-error);
+  font-size: 11px;
+}
+
+.debug-memory-accesses {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.debug-memory-access-title,
+.debug-memory-empty {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.debug-memory-access-row {
+  display: grid;
+  grid-template-columns: minmax(56px, auto) minmax(120px, auto) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.debug-memory-access-time {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.debug-memory-access-event {
+  color: var(--text-stronger);
+  font-weight: 600;
+}
+
+.debug-memory-access-query {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .debug-meta {
   display: flex;
   gap: 10px;

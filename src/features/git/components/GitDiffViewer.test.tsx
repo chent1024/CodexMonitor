@@ -129,4 +129,33 @@ describe("GitDiffViewer", () => {
     expect(rawLines[1]?.className).toContain("diff-viewer-raw-line-add");
     expect(rawLines[2]?.className).toContain("diff-viewer-raw-line-del");
   });
+
+  it("bounds very large diff previews", () => {
+    const largeDiff = Array.from(
+      { length: 1_510 },
+      (_, index) => `+added ${index + 1}`,
+    ).join("\n");
+
+    render(
+      <GitDiffViewer
+        diffs={[
+          {
+            path: "src/large.ts",
+            displayPath: "src/large.ts",
+            status: "M",
+            diff: largeDiff,
+          },
+        ]}
+        selectedPath="src/large.ts"
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByText(/lines hidden for performance/)).toBeTruthy();
+    const rawLines = Array.from(document.querySelectorAll(".diff-viewer-raw-line"));
+    expect(rawLines).toHaveLength(1_500);
+    expect(rawLines[1_499]?.textContent).toBe("added 1500");
+    expect(document.body.textContent).not.toContain("added 1501");
+  });
 });

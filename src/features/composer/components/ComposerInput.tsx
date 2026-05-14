@@ -8,8 +8,6 @@ import type {
 } from "react";
 import type { AutocompleteItem } from "../hooks/useComposerAutocomplete";
 import ImagePlus from "lucide-react/dist/esm/icons/image-plus";
-import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
-import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import { useComposerImageDrop } from "../hooks/useComposerImageDrop";
 import { ComposerMobileActionsMenu } from "./ComposerMobileActionsMenu";
 import { ComposerSuggestionsPopover } from "./ComposerSuggestionsPopover";
@@ -84,7 +82,6 @@ export function ComposerInput({
   onSelectionChange,
   onKeyDown,
   isExpanded = false,
-  onToggleExpand,
   textareaRef,
   suggestionsOpen,
   suggestions,
@@ -171,14 +168,6 @@ export function ComposerInput({
     onAddAttachment();
   }, [disabled, onAddAttachment]);
 
-  const handleMobileExpandClick = useCallback(() => {
-    if (disabled || !onToggleExpand) {
-      return;
-    }
-    setMobileActionsOpen(false);
-    onToggleExpand();
-  }, [disabled, onToggleExpand]);
-
   return (
     <div className={`composer-input${isPhoneLayout && isPhoneTallInput ? " is-phone-tall" : ""}`}>
       <div
@@ -208,12 +197,9 @@ export function ComposerInput({
           <ComposerMobileActionsMenu
             disabled={disabled}
             handleMobileAttachClick={handleMobileAttachClick}
-            handleMobileExpandClick={handleMobileExpandClick}
-            isExpanded={isExpanded}
             mobileActionsOpen={mobileActionsOpen}
             mobileActionsRef={mobileActionsRef}
             onAddAttachment={onAddAttachment}
-            onToggleExpand={onToggleExpand}
             setMobileActionsOpen={setMobileActionsOpen}
           />
           <textarea
@@ -221,7 +207,7 @@ export function ComposerInput({
             placeholder={
               disabled
                 ? "Review in progress. Chat will re-enable when it completes."
-                : "Ask Codex to do something..."
+                : "输入任务或问题..."
             }
             value={text}
             onChange={handleTextareaChange}
@@ -235,19 +221,6 @@ export function ComposerInput({
             onPaste={handleTextareaPaste}
           />
           <div className="composer-input-actions">
-            {onToggleExpand && (
-              <button
-                className={`composer-action composer-action--expand${
-                  isExpanded ? " is-active" : ""
-                }`}
-                onClick={onToggleExpand}
-                disabled={disabled}
-                aria-label={isExpanded ? "Collapse input" : "Expand input"}
-                title={isExpanded ? "Collapse input" : "Expand input"}
-              >
-                {isExpanded ? <ChevronDown aria-hidden /> : <ChevronUp aria-hidden />}
-              </button>
-            )}
             <button
               className={`composer-action${canStop ? " is-stop" : " is-send"}${
                 canStop && isProcessing ? " is-loading" : ""

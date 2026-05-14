@@ -85,6 +85,10 @@ export function maybeRenameThreadFromAgent({
     : threadsByWorkspace;
 }
 
+const STREAMING_TOOL_OUTPUT_MAX_CHARS = 200_000;
+const STREAMING_TOOL_OUTPUT_TRUNCATION_NOTICE =
+  "[output truncated by CodexMonitor; showing latest output]\n";
+
 export function mergeStreamingText(existing: string, delta: string) {
   if (!delta) {
     return existing;
@@ -108,6 +112,17 @@ export function mergeStreamingText(existing: string, delta: string) {
     }
   }
   return `${existing}${delta}`;
+}
+
+export function mergeStreamingToolOutput(existing: string, delta: string) {
+  const merged = mergeStreamingText(existing, delta);
+  if (merged.length <= STREAMING_TOOL_OUTPUT_MAX_CHARS) {
+    return merged;
+  }
+  const keepLength =
+    STREAMING_TOOL_OUTPUT_MAX_CHARS -
+    STREAMING_TOOL_OUTPUT_TRUNCATION_NOTICE.length;
+  return `${STREAMING_TOOL_OUTPUT_TRUNCATION_NOTICE}${merged.slice(-keepLength)}`;
 }
 
 export function addSummaryBoundary(existing: string) {

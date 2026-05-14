@@ -22,6 +22,10 @@ pub(super) async fn dispatch_rpc_request(
         return result;
     }
 
+    if let Some(result) = terminal::try_handle(state, method, params).await {
+        return result;
+    }
+
     if let Some(result) = git::try_handle(state, method, params).await {
         return result;
     }

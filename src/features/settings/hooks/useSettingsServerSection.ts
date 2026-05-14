@@ -13,6 +13,8 @@ import {
   tailscaleDaemonStatus,
   tailscaleDaemonStop,
   tailscaleStatus as fetchTailscaleStatus,
+  getRestartSafeSessionDebugStatus,
+  type RestartSafeDebugStatus,
 } from "@services/tauri";
 import { isMobilePlatform } from "@utils/platformPaths";
 import { DEFAULT_REMOTE_HOST } from "@settings/components/settingsViewConstants";
@@ -54,6 +56,9 @@ export type SettingsServerSectionProps = {
   tailscaleCommandError: string | null;
   tcpDaemonStatus: TcpDaemonStatus | null;
   tcpDaemonBusyAction: "start" | "stop" | "status" | null;
+  restartSafeSessionStatus: RestartSafeDebugStatus | null;
+  restartSafeSessionLoading: boolean;
+  restartSafeSessionError: string | null;
   onSetRemoteNameDraft: Dispatch<SetStateAction<string>>;
   onSetRemoteHostDraft: Dispatch<SetStateAction<string>>;
   onSetRemoteTokenDraft: Dispatch<SetStateAction<string>>;
@@ -70,6 +75,7 @@ export type SettingsServerSectionProps = {
   onTcpDaemonStart: () => Promise<void>;
   onTcpDaemonStop: () => Promise<void>;
   onTcpDaemonStatus: () => Promise<void>;
+  onRefreshRestartSafeSessionStatus: () => void;
   onMobileConnectTest: () => void;
 };
 
@@ -166,6 +172,12 @@ export const useSettingsServerSection = ({
   const [tcpDaemonBusyAction, setTcpDaemonBusyAction] = useState<
     "start" | "stop" | "status" | null
   >(null);
+  const [restartSafeSessionStatus, setRestartSafeSessionStatus] =
+    useState<RestartSafeDebugStatus | null>(null);
+  const [restartSafeSessionLoading, setRestartSafeSessionLoading] = useState(false);
+  const [restartSafeSessionError, setRestartSafeSessionError] = useState<string | null>(
+    null,
+  );
   const [mobileConnectBusy, setMobileConnectBusy] = useState(false);
   const [mobileConnectStatusText, setMobileConnectStatusText] = useState<string | null>(null);
   const [mobileConnectStatusError, setMobileConnectStatusError] = useState(false);
@@ -182,6 +194,36 @@ export const useSettingsServerSection = ({
   useEffect(() => {
     latestSettingsRef.current = appSettings;
   }, [appSettings]);
+
+  const refreshRestartSafeSessionStatus = useCallback(() => {
+    if (!appSettings.restartSafeSessions) {
+      setRestartSafeSessionStatus(null);
+      setRestartSafeSessionError(null);
+      setRestartSafeSessionLoading(false);
+      return;
+    }
+    void (async () => {
+      setRestartSafeSessionLoading(true);
+      setRestartSafeSessionError(null);
+      try {
+        const status = await getRestartSafeSessionDebugStatus();
+        setRestartSafeSessionStatus(status);
+      } catch (error) {
+        setRestartSafeSessionStatus(null);
+        setRestartSafeSessionError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load restart-safe session status.",
+        );
+      } finally {
+        setRestartSafeSessionLoading(false);
+      }
+    })();
+  }, [appSettings.restartSafeSessions]);
+
+  useEffect(() => {
+    refreshRestartSafeSessionStatus();
+  }, [refreshRestartSafeSessionStatus]);
 
   useEffect(() => {
     setRemoteNameDraft(activeRemoteBackend.name);
@@ -663,6 +705,9 @@ export const useSettingsServerSection = ({
     tailscaleCommandError,
     tcpDaemonStatus,
     tcpDaemonBusyAction,
+    restartSafeSessionStatus,
+    restartSafeSessionLoading,
+    restartSafeSessionError,
     onSetRemoteNameDraft: handleSetRemoteNameDraft,
     onSetRemoteHostDraft: handleSetRemoteHostDraft,
     onSetRemoteTokenDraft: setRemoteTokenDraft,
@@ -679,6 +724,7 @@ export const useSettingsServerSection = ({
     onTcpDaemonStart: handleTcpDaemonStart,
     onTcpDaemonStop: handleTcpDaemonStop,
     onTcpDaemonStatus: handleTcpDaemonStatus,
+    onRefreshRestartSafeSessionStatus: refreshRestartSafeSessionStatus,
     isMobilePlatform: mobilePlatform,
     mobileConnectBusy,
     mobileConnectStatusText,

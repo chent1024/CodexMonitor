@@ -88,7 +88,7 @@ use shared::restart_safe_sessions_core::{
 };
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
-    local_usage_core, settings_core, workspaces_core, worktree_core,
+    local_usage_core, settings_core, terminal_core, workspaces_core, worktree_core,
 };
 use storage::{read_settings, read_workspaces};
 use types::{
@@ -214,6 +214,7 @@ struct DaemonState {
     app_settings: Mutex<AppSettings>,
     event_sink: DaemonEventSink,
     restart_safe_sessions: Arc<RestartSafeSessionStore>,
+    terminal_sessions: terminal_core::TerminalSessionStore,
     codex_login_cancels: Mutex<HashMap<String, CodexLoginCancelState>>,
     daemon_binary_path: Option<String>,
 }
@@ -241,6 +242,7 @@ impl DaemonState {
             settings_path,
             app_settings: Mutex::new(app_settings),
             restart_safe_sessions: event_sink.restart_safe_sessions.clone(),
+            terminal_sessions: terminal_core::new_terminal_session_store(),
             event_sink,
             codex_login_cancels: Mutex::new(HashMap::new()),
             daemon_binary_path,
@@ -974,10 +976,15 @@ impl DaemonState {
         &self,
         workspace_id: String,
         thread_id: String,
+        exclude_turns: Option<bool>,
     ) -> Result<Value, String> {
-        let response =
-            codex_core::resume_thread_core(&self.sessions, workspace_id.clone(), thread_id.clone())
-                .await?;
+        let response = codex_core::resume_thread_core(
+            &self.sessions,
+            workspace_id.clone(),
+            thread_id.clone(),
+            exclude_turns,
+        )
+        .await?;
         self.record_session_lifecycle(
             &workspace_id,
             "session/resume",
@@ -992,6 +999,25 @@ impl DaemonState {
 
     async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
         codex_core::read_thread_core(&self.sessions, workspace_id, thread_id).await
+    }
+
+    async fn list_thread_turns(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+        cursor: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Value, String> {
+        codex_core::list_thread_turns_core(&self.sessions, workspace_id, thread_id, cursor, limit)
+            .await
+    }
+
+    async fn thread_unsubscribe(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+    ) -> Result<Value, String> {
+        codex_core::thread_unsubscribe_core(&self.sessions, workspace_id, thread_id).await
     }
 
     async fn thread_live_subscribe(
@@ -1351,6 +1377,70 @@ impl DaemonState {
         }
     }
 
+    async fn terminal_open(
+        &self,
+        workspace_id: String,
+        terminal_id: String,
+        cols: u16,
+        rows: u16,
+    ) -> Result<terminal_core::TerminalSessionInfo, String> {
+        terminal_core::terminal_open_core(
+            workspace_id,
+            terminal_id,
+            cols,
+            rows,
+            &self.workspaces,
+            self.terminal_sessions.clone(),
+            self.event_sink.clone(),
+        )
+        .await
+    }
+
+    async fn terminal_write(
+        &self,
+        workspace_id: String,
+        terminal_id: String,
+        data: String,
+    ) -> Result<(), String> {
+        terminal_core::terminal_write_core(
+            workspace_id,
+            terminal_id,
+            data,
+            self.terminal_sessions.clone(),
+        )
+        .await
+    }
+
+    async fn terminal_resize(
+        &self,
+        workspace_id: String,
+        terminal_id: String,
+        cols: u16,
+        rows: u16,
+    ) -> Result<(), String> {
+        terminal_core::terminal_resize_core(
+            workspace_id,
+            terminal_id,
+            cols,
+            rows,
+            self.terminal_sessions.clone(),
+        )
+        .await
+    }
+
+    async fn terminal_close(
+        &self,
+        workspace_id: String,
+        terminal_id: String,
+    ) -> Result<(), String> {
+        terminal_core::terminal_close_core(
+            workspace_id,
+            terminal_id,
+            self.terminal_sessions.clone(),
+        )
+        .await
+    }
+
     async fn get_git_status(&self, workspace_id: String) -> Result<Value, String> {
         git_ui_core::get_git_status_core(&self.workspaces, workspace_id).await
     }
@@ -1604,6 +1694,15 @@ impl DaemonState {
         codex_args: Option<String>,
     ) -> Result<Value, String> {
         codex_aux_core::codex_doctor_core(&self.app_settings, codex_bin, codex_args).await
+    }
+
+    async fn codex_update(
+        &self,
+        codex_bin: Option<String>,
+        codex_args: Option<String>,
+    ) -> Result<Value, String> {
+        shared::codex_update_core::codex_update_core(&self.app_settings, codex_bin, codex_args)
+            .await
     }
 
     async fn generate_commit_message(
@@ -1958,6 +2057,7 @@ mod tests {
                 tx,
                 restart_safe_sessions,
             },
+            terminal_sessions: terminal_core::new_terminal_session_store(),
             codex_login_cancels: Mutex::new(HashMap::new()),
             daemon_binary_path: Some("/tmp/codex-monitor-daemon".to_string()),
         }
@@ -2146,6 +2246,7 @@ mod tests {
             protocol_version: 1,
             session_count: 0,
             active_session_count: 0,
+            processing_session_count: 0,
             retained_session_count: 0,
             journal_event_count: 0,
             pending_request_count: 0,

@@ -46,7 +46,12 @@ pub(super) async fn try_handle(
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
-            Some(state.resume_thread(workspace_id, thread_id).await)
+            let exclude_turns = parse_optional_bool(params, "excludeTurns");
+            Some(
+                state
+                    .resume_thread(workspace_id, thread_id, exclude_turns)
+                    .await,
+            )
         }
         "read_thread" => {
             let workspace_id = match parse_string(params, "workspaceId") {
@@ -58,6 +63,34 @@ pub(super) async fn try_handle(
                 Err(err) => return Some(Err(err)),
             };
             Some(state.read_thread(workspace_id, thread_id).await)
+        }
+        "list_thread_turns" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let thread_id = match parse_string(params, "threadId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let cursor = parse_optional_nullable_string(params, "cursor").flatten();
+            let limit = parse_optional_u32(params, "limit");
+            Some(
+                state
+                    .list_thread_turns(workspace_id, thread_id, cursor, limit)
+                    .await,
+            )
+        }
+        "thread_unsubscribe" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let thread_id = match parse_string(params, "threadId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(state.thread_unsubscribe(workspace_id, thread_id).await)
         }
         "thread_live_subscribe" => {
             let workspace_id = match parse_string(params, "workspaceId") {
@@ -513,6 +546,11 @@ pub(super) async fn try_handle(
             let codex_bin = parse_optional_string(params, "codexBin");
             let codex_args = parse_optional_string(params, "codexArgs");
             Some(state.codex_doctor(codex_bin, codex_args).await)
+        }
+        "codex_update" => {
+            let codex_bin = parse_optional_string(params, "codexBin");
+            let codex_args = parse_optional_string(params, "codexArgs");
+            Some(state.codex_update(codex_bin, codex_args).await)
         }
         "generate_run_metadata" => {
             let workspace_id = match parse_string(params, "workspaceId") {

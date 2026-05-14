@@ -20,6 +20,7 @@ import { splitPath } from "./GitDiffPanel.utils";
 import type { GitDiffViewerItem } from "./GitDiffViewer.types";
 import {
   isFallbackRawDiffLineHighlightable,
+  limitRenderedDiff,
   normalizePatchName,
   parseRawDiffLines,
 } from "./GitDiffViewer.utils";
@@ -126,12 +127,13 @@ export const DiffCard = memo(function DiffCard({
     () => languageFromPath(displayPath),
     [displayPath],
   );
+  const limitedDiff = useMemo(() => limitRenderedDiff(entry.diff), [entry.diff]);
 
   const fileDiff = useMemo(() => {
-    if (!entry.diff.trim()) {
+    if (!limitedDiff.diff.trim() || limitedDiff.isTruncated) {
       return null;
     }
-    const patch = parsePatchFiles(entry.diff);
+    const patch = parsePatchFiles(limitedDiff.diff);
     const parsed = patch[0]?.files[0];
     if (!parsed) {
       return null;
@@ -147,7 +149,13 @@ export const DiffCard = memo(function DiffCard({
       oldLines: entry.oldLines,
       newLines: entry.newLines,
     } satisfies FileDiffMetadata;
-  }, [displayPath, entry.diff, entry.newLines, entry.oldLines]);
+  }, [
+    displayPath,
+    entry.newLines,
+    entry.oldLines,
+    limitedDiff.diff,
+    limitedDiff.isTruncated,
+  ]);
 
   const placeholder = useMemo(() => {
     if (isLoading) {
@@ -160,12 +168,12 @@ export const DiffCard = memo(function DiffCard({
   }, [entry.diff, ignoreWhitespaceChanges, isLoading]);
 
   const parsedLines = useMemo(() => {
-    const parsed = parseDiff(entry.diff);
+    const parsed = parseDiff(limitedDiff.diff);
     if (parsed.length > 0) {
       return parsed;
     }
-    return parseRawDiffLines(entry.diff);
-  }, [entry.diff]);
+    return parseRawDiffLines(limitedDiff.diff);
+  }, [limitedDiff.diff]);
 
   const hasSelectableLines = useMemo(
     () => parsedLines.some(isSelectableLine),
@@ -296,6 +304,12 @@ export const DiffCard = memo(function DiffCard({
         </div>
       ) : entry.diff.trim().length > 0 && parsedLines.length > 0 ? (
         <div className="diff-viewer-output diff-viewer-output-flat diff-viewer-output-raw">
+          {limitedDiff.isTruncated ? (
+            <div className="diff-viewer-placeholder">
+              Showing first {parsedLines.length} of {limitedDiff.totalLines} diff lines.
+              {` ${limitedDiff.hiddenLines} lines hidden for performance.`}
+            </div>
+          ) : null}
           {parsedLines.map((line, index) => {
             const highlighted = highlightLine(
               line.text,

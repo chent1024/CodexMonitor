@@ -72,7 +72,7 @@ Keep runtime-specific responsibilities in adapters:
 Add a user-visible setting:
 
 - Name: Restart-safe sessions
-- Default: off until the daemon-owned path is fully validated.
+- Default: on.
 - Effect: new sessions are daemon-owned when enabled.
 - Scope: changing the setting does not migrate already running sessions.
 - UI requirement: explain through concise setting label/help text only; no debug-only wording in normal settings UI.

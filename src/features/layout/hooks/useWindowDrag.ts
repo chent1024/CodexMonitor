@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { toggleWindowZoomWithinCurrentDisplay } from "../utils/windowZoom";
+
+const DRAG_START_THRESHOLD_PX = 4;
 
 const NEVER_DRAG_TARGET_SELECTOR = [
   "button",
@@ -23,6 +26,9 @@ const NEVER_DRAG_TARGET_SELECTOR = [
   ".right-panel-resizer",
   ".content-split-resizer",
   ".right-panel-divider",
+  ".actions",
+  ".main-header-actions",
+  ".titlebar-controls",
 ].join(",");
 
 function startDraggingSafe() {
@@ -85,14 +91,55 @@ export function useWindowDrag(targetId: string) {
       return;
     }
 
+    let dragCandidate: { x: number; y: number } | null = null;
+
     const dragZoneSelectors = [
       `#${targetId}`,
-      ".main-topbar",
+      ".main-topbar-left",
+      ".workspace-header",
       ".sidebar-drag-strip",
       ".right-panel-drag-strip",
     ] as const;
 
     const handleMouseDown = (event: MouseEvent) => {
+      if (isNeverDragTarget(event)) {
+        dragCandidate = null;
+        return;
+      }
+      if (!isInsideAnyDragZone(event.clientX, event.clientY, dragZoneSelectors)) {
+        dragCandidate = null;
+        return;
+      }
+      dragCandidate = { x: event.clientX, y: event.clientY };
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!dragCandidate) {
+        return;
+      }
+      if ((event.buttons & 1) !== 1) {
+        dragCandidate = null;
+        return;
+      }
+      const deltaX = Math.abs(event.clientX - dragCandidate.x);
+      const deltaY = Math.abs(event.clientY - dragCandidate.y);
+      if (
+        deltaX < DRAG_START_THRESHOLD_PX &&
+        deltaY < DRAG_START_THRESHOLD_PX
+      ) {
+        return;
+      }
+      dragCandidate = null;
+      event.preventDefault();
+      startDraggingSafe();
+    };
+
+    const handleMouseUp = () => {
+      dragCandidate = null;
+    };
+
+    const handleDoubleClick = (event: MouseEvent) => {
+      dragCandidate = null;
       if (isNeverDragTarget(event)) {
         return;
       }
@@ -100,12 +147,21 @@ export function useWindowDrag(targetId: string) {
         return;
       }
       event.preventDefault();
-      startDraggingSafe();
+      event.stopPropagation();
+      void toggleWindowZoomWithinCurrentDisplay().catch(() => {
+        // Ignore platform-specific window manager failures.
+      });
     };
 
     document.addEventListener("mousedown", handleMouseDown, true);
+    document.addEventListener("mousemove", handleMouseMove, true);
+    document.addEventListener("mouseup", handleMouseUp, true);
+    document.addEventListener("dblclick", handleDoubleClick, true);
     return () => {
       document.removeEventListener("mousedown", handleMouseDown, true);
+      document.removeEventListener("mousemove", handleMouseMove, true);
+      document.removeEventListener("mouseup", handleMouseUp, true);
+      document.removeEventListener("dblclick", handleDoubleClick, true);
     };
   }, [targetId]);
 }

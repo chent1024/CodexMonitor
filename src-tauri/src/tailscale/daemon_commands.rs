@@ -226,6 +226,8 @@ pub(super) async fn tailscale_daemon_start(
         .arg(data_dir);
     if let Some(token) = token {
         command.arg("--token").arg(token);
+    } else if restart_safe_local {
+        command.arg("--insecure-no-auth");
     }
     let child = command
         .stdin(std::process::Stdio::null())

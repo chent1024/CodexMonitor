@@ -3,14 +3,14 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const isTauriMock = vi.hoisted(() => vi.fn());
-const getCurrentWindowMock = vi.hoisted(() => vi.fn());
+const toggleWindowZoomWithinCurrentDisplayMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: isTauriMock,
 }));
 
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: getCurrentWindowMock,
+vi.mock("../../layout/utils/windowZoom", () => ({
+  toggleWindowZoomWithinCurrentDisplay: toggleWindowZoomWithinCurrentDisplayMock,
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -45,14 +45,10 @@ function buildProps() {
 }
 
 describe("MainHeader", () => {
-  const toggleMaximize = vi.fn();
-
   beforeEach(() => {
     vi.clearAllMocks();
     isTauriMock.mockReturnValue(true);
-    getCurrentWindowMock.mockReturnValue({
-      toggleMaximize,
-    });
+    toggleWindowZoomWithinCurrentDisplayMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -64,7 +60,29 @@ describe("MainHeader", () => {
 
     fireEvent.doubleClick(screen.getByTestId("main-header-blank-region"));
 
-    expect(toggleMaximize).toHaveBeenCalledTimes(1);
+    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("double-clicks the header title region to toggle window maximize", () => {
+    render(<MainHeader {...buildProps()} />);
+
+    fireEvent.doubleClick(screen.getByText("coChat"));
+
+    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not toggle window maximize from interactive header controls", () => {
+    render(
+      <MainHeader
+        {...buildProps()}
+        showBranchContext
+        branchName="main"
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "main" }));
+
+    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
   });
 
   it("does nothing when not running in Tauri", () => {
@@ -74,7 +92,7 @@ describe("MainHeader", () => {
 
     fireEvent.doubleClick(screen.getByTestId("main-header-blank-region"));
 
-    expect(toggleMaximize).not.toHaveBeenCalled();
+    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
   });
 
   it("keeps the title line focused on the thread title by default", () => {

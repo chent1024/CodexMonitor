@@ -5,6 +5,7 @@ import type { ConversationItem, WorkspaceInfo } from "@/types";
 import {
   archiveThread,
   forkThread,
+  listThreadTurns,
   listThreads,
   listWorkspaces,
   resumeThread,
@@ -25,6 +26,7 @@ vi.mock("@services/tauri", () => ({
   forkThread: vi.fn(),
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
+  listThreadTurns: vi.fn(),
   listWorkspaces: vi.fn(),
   archiveThread: vi.fn(),
 }));
@@ -60,6 +62,7 @@ describe("useThreadActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listWorkspaces).mockResolvedValue([]);
+    vi.mocked(listThreadTurns).mockRejectedValue(new Error("not supported"));
     vi.mocked(getThreadCreatedTimestamp).mockReturnValue(0);
   });
 
@@ -83,6 +86,9 @@ describe("useThreadActions", () => {
       threadsByWorkspace: {},
       activeThreadIdByWorkspace: {},
       activeTurnIdByThread: {},
+      threadTurnsCursorById: {},
+      threadTurnsPagingById: {},
+      threadTurnsHasLoadedOldestById: {},
       threadParentById: {},
       threadListCursorByWorkspace: {},
       threadStatusById: {},
@@ -228,6 +234,67 @@ describe("useThreadActions", () => {
     expect(resumeThread).not.toHaveBeenCalled();
   });
 
+  it("hydrates the initial turn page for loaded live threads without resuming", async () => {
+    const pagedItem: ConversationItem = {
+      id: "paged-assistant-1",
+      kind: "message",
+      role: "assistant",
+      text: "Paged tail",
+    };
+    const localItem: ConversationItem = {
+      id: "local-live-1",
+      kind: "message",
+      role: "assistant",
+      text: "Local live output",
+    };
+
+    vi.mocked(listThreadTurns).mockResolvedValue({
+      result: {
+        data: [{ id: "turn-tail", status: "completed", items: [] }],
+        nextCursor: "older-cursor",
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([pagedItem]);
+    vi.mocked(mergeThreadItems).mockReturnValue([pagedItem, localItem]);
+
+    const { result, dispatch } = renderActions({
+      loadedThreadsRef: { current: { "thread-1": true } },
+      itemsByThread: { "thread-1": [localItem] },
+      threadStatusById: {
+        "thread-1": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 123,
+          lastDurationMs: null,
+        },
+      },
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-1");
+    });
+
+    expect(listThreadTurns).toHaveBeenCalledWith("ws-1", "thread-1", null, 20);
+    expect(resumeThread).not.toHaveBeenCalled();
+    expect(mergeThreadItems).toHaveBeenCalledWith([pagedItem], [localItem]);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "thread-1",
+      items: [pagedItem, localItem],
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnsCursor",
+      threadId: "thread-1",
+      cursor: "older-cursor",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnsHasLoadedOldest",
+      threadId: "thread-1",
+      hasLoadedOldest: false,
+    });
+  });
+
   it("skips resume while processing unless forced", async () => {
     const options = {
       loadedThreadsRef: { current: { "thread-1": true } },
@@ -324,6 +391,165 @@ describe("useThreadActions", () => {
       text: "Hello!",
       timestamp: 999,
     });
+  });
+
+  it("hydrates resume from the latest paged turns and tracks the older cursor", async () => {
+    const pagedItem: ConversationItem = {
+      id: "paged-assistant-1",
+      kind: "message",
+      role: "assistant",
+      text: "Paged tail",
+    };
+    const localItem: ConversationItem = {
+      id: "local-stream-1",
+      kind: "message",
+      role: "assistant",
+      text: "Local stream",
+    };
+
+    vi.mocked(listThreadTurns).mockResolvedValue({
+      result: {
+        data: [{ id: "turn-tail", status: "completed", items: [] }],
+        nextCursor: "older-cursor",
+      },
+    });
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-1",
+          preview: "preview",
+          updated_at: 555,
+        },
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([pagedItem]);
+    vi.mocked(mergeThreadItems).mockReturnValue([pagedItem, localItem]);
+    vi.mocked(isReviewingFromThread).mockReturnValue(false);
+    vi.mocked(getThreadTimestamp).mockReturnValue(999);
+
+    const { result, dispatch } = renderActions({
+      itemsByThread: { "thread-1": [localItem] },
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-1", true);
+    });
+
+    expect(listThreadTurns).toHaveBeenCalledWith("ws-1", "thread-1", null, 20);
+    expect(resumeThread).toHaveBeenCalledWith("ws-1", "thread-1", {
+      excludeTurns: true,
+    });
+    expect(mergeThreadItems).toHaveBeenCalledWith([pagedItem], [localItem]);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnsCursor",
+      threadId: "thread-1",
+      cursor: "older-cursor",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnsHasLoadedOldest",
+      threadId: "thread-1",
+      hasLoadedOldest: false,
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "thread-1",
+      items: [pagedItem, localItem],
+    });
+  });
+
+  it("loads older thread turns with the VS Code page size and updates oldest state", async () => {
+    const olderItem: ConversationItem = {
+      id: "older-assistant-1",
+      kind: "message",
+      role: "assistant",
+      text: "Older page",
+    };
+    const localItem: ConversationItem = {
+      id: "local-assistant-1",
+      kind: "message",
+      role: "assistant",
+      text: "Current page",
+    };
+
+    vi.mocked(listThreadTurns).mockResolvedValue({
+      result: {
+        data: [{ id: "turn-older", status: "completed", items: [] }],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([olderItem]);
+    vi.mocked(mergeThreadItems).mockReturnValue([olderItem, localItem]);
+
+    const { result, dispatch } = renderActions({
+      itemsByThread: { "thread-1": [localItem] },
+      threadTurnsCursorById: { "thread-1": "older-cursor" },
+    });
+
+    await act(async () => {
+      await result.current.loadOlderThreadTurns("ws-1", "thread-1");
+    });
+
+    expect(listThreadTurns).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "older-cursor",
+      20,
+    );
+    expect(mergeThreadItems).toHaveBeenCalledWith([olderItem], [localItem]);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnsPaging",
+      threadId: "thread-1",
+      isLoading: true,
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnsCursor",
+      threadId: "thread-1",
+      cursor: null,
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnsHasLoadedOldest",
+      threadId: "thread-1",
+      hasLoadedOldest: true,
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "thread-1",
+      items: [olderItem, localItem],
+    });
+  });
+
+  it("backs off older turn loading briefly after an error", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-02-19T00:00:00.000Z"));
+    vi.mocked(listThreadTurns)
+      .mockRejectedValueOnce(new Error("temporary"))
+      .mockResolvedValueOnce({
+        result: {
+          data: [{ id: "turn-older", status: "completed", items: [] }],
+          nextCursor: null,
+        },
+      });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+
+    const { result } = renderActions({
+      threadTurnsCursorById: { "thread-1": "older-cursor" },
+    });
+
+    await act(async () => {
+      await result.current.loadOlderThreadTurns("ws-1", "thread-1");
+    });
+    await act(async () => {
+      await result.current.loadOlderThreadTurns("ws-1", "thread-1");
+    });
+    expect(listThreadTurns).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_500);
+      await result.current.loadOlderThreadTurns("ws-1", "thread-1");
+    });
+
+    expect(listThreadTurns).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 
   it("links resumed spawn subagent to its parent from thread source", async () => {
@@ -636,18 +862,12 @@ describe("useThreadActions", () => {
     });
   });
 
-  it("keeps resume loading true until overlapping resumes finish", async () => {
+  it("coalesces overlapping resumes for the same thread", async () => {
     let resolveFirst: ((value: unknown) => void) | null = null;
-    let resolveSecond: ((value: unknown) => void) | null = null;
     const firstPromise = new Promise((resolve) => {
       resolveFirst = resolve;
     });
-    const secondPromise = new Promise((resolve) => {
-      resolveSecond = resolve;
-    });
-    vi.mocked(resumeThread)
-      .mockReturnValueOnce(firstPromise as Promise<any>)
-      .mockReturnValueOnce(secondPromise as Promise<any>);
+    vi.mocked(resumeThread).mockReturnValueOnce(firstPromise as Promise<any>);
     vi.mocked(buildItemsFromThread).mockReturnValue([]);
     vi.mocked(isReviewingFromThread).mockReturnValue(false);
     vi.mocked(getThreadTimestamp).mockReturnValue(0);
@@ -661,6 +881,8 @@ describe("useThreadActions", () => {
       callTwo = result.current.resumeThreadForWorkspace("ws-1", "thread-3", true);
     });
 
+    expect(resumeThread).toHaveBeenCalledTimes(1);
+
     expect(dispatch).toHaveBeenCalledWith({
       type: "setThreadResumeLoading",
       threadId: "thread-3",
@@ -669,17 +891,6 @@ describe("useThreadActions", () => {
 
     await act(async () => {
       resolveFirst?.({ result: { thread: { id: "thread-3" } } });
-      await firstPromise;
-    });
-
-    expect(dispatch).not.toHaveBeenCalledWith({
-      type: "setThreadResumeLoading",
-      threadId: "thread-3",
-      isLoading: false,
-    });
-
-    await act(async () => {
-      resolveSecond?.({ result: { thread: { id: "thread-3" } } });
       await Promise.all([callOne, callTwo]);
     });
 

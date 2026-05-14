@@ -130,4 +130,22 @@ describe("PierreDiffBlock", () => {
       ),
     );
   });
+
+  it("renders a bounded raw preview for very large diffs", () => {
+    const largeDiff = Array.from(
+      { length: 1_510 },
+      (_, index) => `+added ${index + 1}`,
+    ).join("\n");
+
+    render(
+      <PierreDiffBlock displayPath="src/large.ts" diff={largeDiff} />,
+    );
+
+    expect(parsePatchFilesMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/lines hidden for performance/)).toBeTruthy();
+    const rawLines = Array.from(document.querySelectorAll(".diff-viewer-raw-line"));
+    expect(rawLines).toHaveLength(1_500);
+    expect(rawLines[1_499]?.textContent).toBe("added 1500");
+    expect(document.body.textContent).not.toContain("added 1501");
+  });
 });

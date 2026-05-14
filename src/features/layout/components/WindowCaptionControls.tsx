@@ -6,6 +6,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 import { isWindowsPlatform } from "@utils/platformPaths";
+import { toggleWindowZoomWithinCurrentDisplay } from "../utils/windowZoom";
 
 function currentWindowSafe() {
   try {
@@ -83,7 +84,9 @@ export function WindowCaptionControls() {
     if (!windowHandle) {
       return;
     }
-    void windowHandle.toggleMaximize();
+    void toggleWindowZoomWithinCurrentDisplay(windowHandle).catch(() => {
+      // Ignore platform-specific window manager failures.
+    });
   };
 
   const handleClose = () => {

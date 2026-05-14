@@ -805,7 +805,9 @@ function VscodeContextCompactionRow({ item }: { item: ToolItem }) {
     >
       <span className="oai-context-compaction-divider" aria-hidden />
       <span className="oai-context-compaction-label">
-        <ScrollText className="oai-context-compaction-icon" size={15} aria-hidden />
+        <span className="oai-context-compaction-icon-badge" aria-hidden>
+          <ScrollText className="oai-context-compaction-icon" size={15} />
+        </span>
         <span>{label}</span>
       </span>
       <span className="oai-context-compaction-divider" aria-hidden />

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
+import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DebugEntry } from "../../../types";
-import { DebugPanel } from "./DebugPanel";
+import { DebugPanel, type DebugFilter } from "./DebugPanel";
 
 const debugEntries: DebugEntry[] = [
   {
@@ -32,7 +33,25 @@ const debugEntries: DebugEntry[] = [
     timestamp: 4,
     source: "client",
     label: "local memory debug status",
-    payload: { config: { serverName: "local_memory" }, database: { memoryCount: 2 } },
+    payload: {
+      config: { enabled: true, serverName: "local_memory" },
+      database: {
+        memoryCount: 2,
+        vectorCount: 2,
+        ftsCount: 2,
+        vectorAvailable: true,
+        recentAccesses: [
+          {
+            id: "access-1",
+            event: "search",
+            query: "daemon restart",
+            resultCount: 2,
+            score: 0.82,
+            createdAt: 1_800_000_000,
+          },
+        ],
+      },
+    },
   },
   {
     id: "mcp-1",
@@ -88,6 +107,25 @@ describe("DebugPanel", () => {
     expect(
       screen.getByRole("button", { name: "Refreshing Memory..." }),
     ).toHaveProperty("disabled", true);
+  });
+
+  it("shows structured local memory debug status", () => {
+    render(
+      <DebugPanel
+        entries={debugEntries}
+        isOpen
+        onClear={vi.fn()}
+        onCopy={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Local memory summary")).toBeTruthy();
+    expect(screen.getByText("Local Memory")).toBeTruthy();
+    expect(screen.getByText("Enabled")).toBeTruthy();
+    expect(screen.getByText("Memories 2")).toBeTruthy();
+    expect(screen.getByText("Vector ready")).toBeTruthy();
+    expect(screen.getByText(/search · 2 result · score 0\.82/)).toBeTruthy();
+    expect(screen.getByText("daemon restart")).toBeTruthy();
   });
 
   it("filters debug entries by source", () => {
@@ -161,5 +199,58 @@ describe("DebugPanel", () => {
     expect(screen.getByText("mcp server status")).toBeTruthy();
     expect(screen.queryByText("client entry")).toBeNull();
     expect(screen.queryByText("user message")).toBeNull();
+  });
+
+  it("keeps dock and full debug filters synchronized", () => {
+    const entries: DebugEntry[] = [
+      {
+        id: "event-started",
+        timestamp: 1,
+        source: "event",
+        label: "item/started",
+        payload: { type: "item_started" },
+      },
+    ];
+
+    function SharedFilterHarness() {
+      const [filter, setFilter] = useState<DebugFilter>("all");
+      return (
+        <>
+          <DebugPanel
+            entries={entries}
+            isOpen
+            debugFilter={filter}
+            onDebugFilterChange={setFilter}
+            onClear={vi.fn()}
+            onCopy={vi.fn()}
+          />
+          <DebugPanel
+            entries={entries}
+            isOpen
+            variant="full"
+            debugFilter={filter}
+            onDebugFilterChange={setFilter}
+            onClear={vi.fn()}
+            onCopy={vi.fn()}
+          />
+        </>
+      );
+    }
+
+    const { container } = render(<SharedFilterHarness />);
+
+    expect(container.querySelectorAll(".debug-row")).toHaveLength(2);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Memory 0" })[0]);
+
+    const lists = container.querySelectorAll(".debug-list");
+    expect(lists).toHaveLength(2);
+    lists.forEach((list) => {
+      expect(list.getAttribute("data-active-debug-filter")).toBe("memory");
+      expect(list.getAttribute("data-visible-debug-count")).toBe("0");
+    });
+    expect(container.querySelectorAll(".debug-row")).toHaveLength(0);
+    expect(screen.getAllByText("No memory debug events.")).toHaveLength(2);
+    expect(screen.queryByText("item/started")).toBeNull();
   });
 });

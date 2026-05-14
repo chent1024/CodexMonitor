@@ -82,6 +82,7 @@ type ComposerProps = {
   contextUsage?: ThreadTokenUsage | null;
   queuedMessages?: QueuedMessage[];
   queuePausedReason?: string | null;
+  onGuideQueued?: (item: QueuedMessage) => void | Promise<void>;
   onEditQueued?: (item: QueuedMessage) => void;
   onDeleteQueued?: (id: string) => void;
   sendLabel?: string;
@@ -179,6 +180,7 @@ export const Composer = memo(function Composer({
   contextUsage = null,
   queuedMessages = [],
   queuePausedReason = null,
+  onGuideQueued,
   onEditQueued,
   onDeleteQueued,
   sendLabel = "Send",
@@ -546,23 +548,25 @@ export const Composer = memo(function Composer({
       <ComposerQueue
         queuedMessages={queuedMessages}
         pausedReason={queuePausedReason}
+        onGuideQueued={onGuideQueued}
         onEditQueued={onEditQueued}
         onDeleteQueued={onDeleteQueued}
       />
       {isProcessing && composerFollowUpHintEnabled && (
         <div className="composer-followup-hint" role="status" aria-live="polite">
-          <div className="composer-followup-title">Follow-up behavior</div>
+          <div className="composer-followup-title">运行中下发</div>
           <div className="composer-followup-copy">
             {oppositeFallsBackToQueue ? (
               <>
-                Default: Queue (Steer unavailable). Both Enter and {followUpShortcutLabel} will
-                queue this message.
+                当前 Codex 不支持 Steer。本条消息会先排队，等当前回复结束后自动下发；Enter 和 {followUpShortcutLabel} 都会使用排队。
               </>
             ) : (
               <>
-                Default: {effectiveFollowUpBehavior === "steer" ? "Steer" : "Queue"}. Press{" "}
-                {followUpShortcutLabel} to{" "}
-                {oppositeFollowUpIntent === "steer" ? "steer" : "queue"} this message.
+                {effectiveFollowUpBehavior === "steer"
+                  ? "本条消息会立即 Steer 到当前回复。"
+                  : "本条消息会先排队，等当前回复结束后自动下发。"}
+                按 {followUpShortcutLabel} 可临时改为
+                {oppositeFollowUpIntent === "steer" ? "立即 Steer。" : "排队下发。"}
               </>
             )}
           </div>

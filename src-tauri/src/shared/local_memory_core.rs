@@ -115,6 +115,22 @@ pub(crate) struct LocalMemoryDebugStatus {
     pub(crate) memory_count: u64,
     pub(crate) vector_count: u64,
     pub(crate) fts_count: u64,
+    pub(crate) recent_accesses: Vec<LocalMemoryAccessLogEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LocalMemoryAccessLogEntry {
+    pub(crate) id: String,
+    pub(crate) memory_id: Option<String>,
+    pub(crate) query: Option<String>,
+    pub(crate) event: String,
+    pub(crate) result_count: Option<u64>,
+    pub(crate) score: Option<f64>,
+    pub(crate) thread_id: Option<String>,
+    pub(crate) run_id: Option<String>,
+    pub(crate) error: Option<String>,
+    pub(crate) created_at: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -159,14 +175,15 @@ impl LocalMemoryStore {
         }
         let now = Utc::now().timestamp();
         let id = Uuid::new_v4().to_string();
-        let scope = normalize_optional(input.scope.or(input.filters.scope), "global");
-        let kind = normalize_optional(input.kind.or(input.filters.kind), "task_learnings");
+        let filters = input.filters;
+        let scope = normalize_optional(input.scope.or(filters.scope.clone()), "global");
+        let kind = normalize_optional(input.kind.or(filters.kind.clone()), "task_learnings");
         let metadata = if input.metadata.is_null() {
             json!({})
         } else {
             input.metadata
         };
-        let categories = merge_categories(input.categories, input.filters.categories);
+        let categories = merge_categories(input.categories, filters.categories.clone());
         let content_hash = stable_hash_hex(content);
         let metadata_raw = serde_json::to_string(&metadata).map_err(|err| err.to_string())?;
         let categories_raw = serde_json::to_string(&categories).map_err(|err| err.to_string())?;
@@ -181,13 +198,13 @@ impl LocalMemoryStore {
                 params![
                     id,
                     scope,
-                    empty_to_none(input.filters.workspace_id),
-                    empty_to_none(input.filters.workspace_path),
-                    empty_to_none(input.filters.thread_id),
-                    empty_to_none(input.filters.user_id),
-                    empty_to_none(input.filters.agent_id),
-                    empty_to_none(input.filters.app_id),
-                    empty_to_none(input.filters.run_id),
+                    empty_to_none(filters.workspace_id.clone()),
+                    empty_to_none(filters.workspace_path.clone()),
+                    empty_to_none(filters.thread_id.clone()),
+                    empty_to_none(filters.user_id.clone()),
+                    empty_to_none(filters.agent_id.clone()),
+                    empty_to_none(filters.app_id.clone()),
+                    empty_to_none(filters.run_id.clone()),
                     kind,
                     content,
                     content_hash,
@@ -201,9 +218,20 @@ impl LocalMemoryStore {
             .map_err(|err| err.to_string())?;
         let rowid = self.conn.last_insert_rowid();
         self.upsert_indexes(rowid, content)?;
-        self.get_memory_by_rowid(rowid)?
+        let record = self
+            .get_memory_by_rowid(rowid)?
             .map(|row| row.record)
-            .ok_or_else(|| "inserted memory was not found".to_string())
+            .ok_or_else(|| "inserted memory was not found".to_string())?;
+        self.log_access(
+            "add",
+            Some(&record.id),
+            None,
+            Some(1),
+            None,
+            Some(&filters),
+            None,
+        );
+        Ok(record)
     }
 
     pub(crate) fn list_memories(
@@ -221,7 +249,13 @@ impl LocalMemoryStore {
     }
 
     pub(crate) fn get_memory(&self, id: &str) -> Result<Option<MemoryRecord>, String> {
-        self.get_memory_row(id).map(|row| row.map(|row| row.record))
+        let record = self
+            .get_memory_row(id)
+            .map(|row| row.map(|row| row.record))?;
+        if record.is_some() {
+            self.log_access("get", Some(id), None, Some(1), None, None, None);
+        }
+        Ok(record)
     }
 
     pub(crate) fn search_memories(
@@ -230,10 +264,10 @@ impl LocalMemoryStore {
     ) -> Result<Vec<MemorySearchResult>, String> {
         let query = input.query.trim();
         if query.is_empty() {
-            return Ok(self
+            let results = self
                 .list_memories(ListMemoryInput {
                     limit: input.limit,
-                    filters: input.filters,
+                    filters: input.filters.clone(),
                 })?
                 .into_iter()
                 .map(|memory| MemorySearchResult {
@@ -245,7 +279,9 @@ impl LocalMemoryStore {
                     temporal_score: 0.0,
                     reason: "recent".to_string(),
                 })
-                .collect());
+                .collect::<Vec<_>>();
+            self.log_search_accesses("", &input.filters, &results);
+            return Ok(results);
         }
 
         let limit = input.limit.unwrap_or(10).clamp(1, 100) as usize;
@@ -321,6 +357,7 @@ impl LocalMemoryStore {
                 params![now, item.memory.id],
             );
         }
+        self.log_search_accesses(query, &input.filters, &results);
 
         Ok(results)
     }
@@ -349,6 +386,7 @@ impl LocalMemoryStore {
             return Ok(None);
         };
         self.upsert_indexes(row.rowid, content)?;
+        self.log_access("update", Some(id), None, Some(1), None, None, None);
         Ok(Some(row.record))
     }
 
@@ -364,6 +402,7 @@ impl LocalMemoryStore {
             )
             .map_err(|err| err.to_string())?;
         self.delete_indexes(row.rowid)?;
+        self.log_access("delete", Some(id), None, Some(1), None, None, None);
         Ok(true)
     }
 
@@ -382,6 +421,7 @@ impl LocalMemoryStore {
         if self.vector_available {
             let _ = self.conn.execute("DELETE FROM memory_vec", []);
         }
+        self.log_access("delete_all", None, None, Some(count), None, None, None);
         Ok(count)
     }
 
@@ -398,7 +438,88 @@ impl LocalMemoryStore {
                 0
             },
             fts_count: count_table(&self.conn, "memory_fts", "1 = 1")?,
+            recent_accesses: self.recent_accesses(25)?,
         })
+    }
+
+    fn log_search_accesses(
+        &self,
+        query: &str,
+        filters: &MemoryFilters,
+        results: &[MemorySearchResult],
+    ) {
+        if results.is_empty() {
+            self.log_access(
+                "search",
+                None,
+                Some(query),
+                Some(0),
+                None,
+                Some(filters),
+                None,
+            );
+            return;
+        }
+        let result_count = Some(results.len() as u64);
+        for result in results {
+            self.log_access(
+                "search",
+                Some(&result.memory.id),
+                Some(query),
+                result_count,
+                Some(result.score),
+                Some(filters),
+                None,
+            );
+        }
+    }
+
+    fn log_access(
+        &self,
+        event: &str,
+        memory_id: Option<&str>,
+        query: Option<&str>,
+        result_count: Option<u64>,
+        score: Option<f64>,
+        filters: Option<&MemoryFilters>,
+        error: Option<&str>,
+    ) {
+        let now = Utc::now().timestamp();
+        let filters = filters.cloned().unwrap_or_default();
+        let _ = self.conn.execute(
+            "INSERT INTO memory_access_log (
+                id, memory_id, query, event, result_count, score, thread_id, run_id, error, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                Uuid::new_v4().to_string(),
+                memory_id.unwrap_or(""),
+                query.map(str::trim).filter(|value| !value.is_empty()),
+                event,
+                result_count,
+                score,
+                empty_to_none(filters.thread_id),
+                empty_to_none(filters.run_id),
+                error.map(str::trim).filter(|value| !value.is_empty()),
+                now,
+            ],
+        );
+    }
+
+    fn recent_accesses(&self, limit: u32) -> Result<Vec<LocalMemoryAccessLogEntry>, String> {
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT id, memory_id, query, event, result_count, score, thread_id, run_id, error, created_at
+                 FROM memory_access_log
+                 ORDER BY created_at DESC, rowid DESC
+                 LIMIT ?1",
+            )
+            .map_err(|err| err.to_string())?;
+        let rows = statement
+            .query_map(params![limit.clamp(1, 200)], access_log_entry_from_sql)
+            .map_err(|err| err.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|err| err.to_string())
     }
 
     fn migrate(&mut self) -> Result<(), String> {
@@ -449,16 +570,31 @@ impl LocalMemoryStore {
                 );
                 CREATE TABLE IF NOT EXISTS memory_access_log (
                   id TEXT PRIMARY KEY,
-                  memory_id TEXT NOT NULL,
+                  memory_id TEXT,
                   query TEXT,
                   event TEXT NOT NULL,
+                  result_count INTEGER,
+                  score REAL,
+                  thread_id TEXT,
+                  run_id TEXT,
+                  error TEXT,
                   created_at INTEGER NOT NULL
                 );
                 ",
             )
             .map_err(|err| err.to_string())?;
 
+        self.ensure_access_log_columns()?;
         self.vector_available = self.conn.execute_batch(VECTOR_TABLE_SQL).is_ok();
+        Ok(())
+    }
+
+    fn ensure_access_log_columns(&self) -> Result<(), String> {
+        ensure_column(&self.conn, "memory_access_log", "result_count", "INTEGER")?;
+        ensure_column(&self.conn, "memory_access_log", "score", "REAL")?;
+        ensure_column(&self.conn, "memory_access_log", "thread_id", "TEXT")?;
+        ensure_column(&self.conn, "memory_access_log", "run_id", "TEXT")?;
+        ensure_column(&self.conn, "memory_access_log", "error", "TEXT")?;
         Ok(())
     }
 
@@ -633,10 +769,64 @@ fn memory_row_from_sql(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryRow> {
     })
 }
 
+fn access_log_entry_from_sql(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<LocalMemoryAccessLogEntry> {
+    let memory_id: Option<String> = row.get(1)?;
+    let result_count: Option<i64> = row.get(4)?;
+    Ok(LocalMemoryAccessLogEntry {
+        id: row.get(0)?,
+        memory_id: memory_id.and_then(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }),
+        query: row.get(2)?,
+        event: row.get(3)?,
+        result_count: result_count.and_then(|value| u64::try_from(value).ok()),
+        score: row.get(5)?,
+        thread_id: row.get(6)?,
+        run_id: row.get(7)?,
+        error: row.get(8)?,
+        created_at: row.get(9)?,
+    })
+}
+
 fn count_table(conn: &Connection, table: &str, where_clause: &str) -> Result<u64, String> {
     let sql = format!("SELECT COUNT(*) FROM {table} WHERE {where_clause}");
     conn.query_row(sql.as_str(), [], |row| row.get::<_, u64>(0))
         .map_err(|err| err.to_string())
+}
+
+fn ensure_column(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<(), String> {
+    let mut statement = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|err| err.to_string())?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|err| err.to_string())?;
+    for existing in columns {
+        if existing
+            .map_err(|err| err.to_string())?
+            .eq_ignore_ascii_case(column)
+        {
+            return Ok(());
+        }
+    }
+    conn.execute(
+        &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
+        [],
+    )
+    .map(|_| ())
+    .map_err(|err| err.to_string())
 }
 
 fn filters_match(memory: &MemoryRecord, filters: &MemoryFilters) -> bool {
@@ -873,6 +1063,14 @@ mod tests {
             .expect("search");
         assert_eq!(results.len(), 1);
         assert!(results[0].memory.content.contains("tauri:dev:win"));
+        let debug = store.debug_status().expect("debug status");
+        assert_eq!(debug.memory_count, 1);
+        assert!(debug
+            .recent_accesses
+            .iter()
+            .any(|entry| entry.event == "search"
+                && entry.query.as_deref() == Some("Windows tauri dev command")
+                && entry.result_count == Some(1)));
         let _ = fs::remove_file(path);
     }
 }

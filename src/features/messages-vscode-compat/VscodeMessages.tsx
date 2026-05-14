@@ -1,4 +1,13 @@
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
@@ -56,6 +65,8 @@ type MessagesProps = {
   workspaceId?: string | null;
   isThinking: boolean;
   isLoadingMessages?: boolean;
+  hasOlderTurns?: boolean;
+  isLoadingOlderTurns?: boolean;
   processingStartedAt?: number | null;
   lastDurationMs?: number | null;
   showPollingFetchStatus?: boolean;
@@ -74,6 +85,7 @@ type MessagesProps = {
   onPlanSubmitChanges?: (changes: string) => void;
   onOpenThreadLink?: (threadId: string, workspaceId?: string | null) => void;
   onQuoteMessage?: (text: string) => void;
+  onLoadOlderTurns?: () => void | Promise<void>;
 };
 
 function activityBlocksFromTurn(turn: AssistantTurn) {
@@ -144,7 +156,7 @@ function useWorkingElapsedMs(isWorking: boolean, startedAtMs?: number | null) {
   return Math.max(nowMs - startedAtMs, 0);
 }
 
-const TURN_VIRTUALIZATION_THRESHOLD = 80;
+const TURN_VIRTUALIZATION_THRESHOLD = 40;
 const TURN_VIRTUALIZATION_ESTIMATED_SIZE = 240;
 const TURN_VIRTUALIZATION_GAP = 8;
 
@@ -170,7 +182,7 @@ const VirtualizedConversationTurns = memo(function VirtualizedConversationTurns(
     getItemKey: (index) => turns[index]?.id ?? index,
     gap: TURN_VIRTUALIZATION_GAP,
     initialRect: { width: 1, height: 800 },
-    overscan: 8,
+    overscan: 4,
   });
   const virtualTurnRows = turnVirtualizer.getVirtualItems();
 
@@ -208,6 +220,8 @@ export const Messages = memo(function Messages({
   workspaceId = null,
   isThinking,
   isLoadingMessages = false,
+  hasOlderTurns = false,
+  isLoadingOlderTurns = false,
   processingStartedAt = null,
   lastDurationMs = null,
   showPollingFetchStatus = false,
@@ -223,6 +237,7 @@ export const Messages = memo(function Messages({
   onPlanSubmitChanges,
   onOpenThreadLink,
   onQuoteMessage,
+  onLoadOlderTurns,
 }: MessagesProps) {
   const activeUserInputRequestId =
     threadId && userInputRequests.length
@@ -238,6 +253,7 @@ export const Messages = memo(function Messages({
     selectedOpenAppId,
   );
   const workingElapsedMs = useWorkingElapsedMs(isThinking, processingStartedAt);
+  const olderLoadInFlightRef = useRef(false);
   const [selectedTurnById, setSelectedTurnById] = useState<Record<string, number>>({});
   const [collapsedTurns, setCollapsedTurns] = useState<Record<string, boolean | undefined>>({});
   const handleOpenThreadLink = useCallback(
@@ -291,6 +307,50 @@ export const Messages = memo(function Messages({
     () => buildVscodeViewModelFromEntries(groupedItems),
     [groupedItems],
   );
+
+  const loadOlderTurns = useCallback(() => {
+    if (
+      !hasOlderTurns ||
+      isLoadingOlderTurns ||
+      olderLoadInFlightRef.current ||
+      !onLoadOlderTurns
+    ) {
+      return;
+    }
+    const container = containerRef.current;
+    const previousScrollHeight = container?.scrollHeight ?? 0;
+    olderLoadInFlightRef.current = true;
+    Promise.resolve(onLoadOlderTurns())
+      .catch(() => {
+        // Loading errors are surfaced by the thread action debug path.
+      })
+      .finally(() => {
+        window.requestAnimationFrame(() => {
+          if (container) {
+            const nextScrollHeight = container.scrollHeight;
+            const heightDelta = nextScrollHeight - previousScrollHeight;
+            if (heightDelta > 0) {
+              container.scrollTop += heightDelta;
+            }
+          }
+          olderLoadInFlightRef.current = false;
+        });
+      });
+  }, [
+    containerRef,
+    hasOlderTurns,
+    isLoadingOlderTurns,
+    onLoadOlderTurns,
+  ]);
+
+  const handleScroll = useCallback(() => {
+    updateAutoScroll();
+    const container = containerRef.current;
+    if (!container || container.scrollTop > 80) {
+      return;
+    }
+    loadOlderTurns();
+  }, [containerRef, loadOlderTurns, updateAutoScroll]);
 
   const planFollowupNode =
     planFollowup.shouldShow && onPlanAccept && onPlanSubmitChanges ? (
@@ -1018,12 +1078,22 @@ export const Messages = memo(function Messages({
     <div
       className="messages messages-full"
       ref={containerRef}
-      onScroll={updateAutoScroll}
+      onScroll={handleScroll}
     >
       <div
 	        className="messages-inner oai-conversation-thread relative flex flex-col gap-2 electron:[--color-token-description-foreground:color-mix(in_srgb,var(--color-token-foreground)_70%,transparent)]"
         data-thread-find-target="conversation"
       >
+        {hasOlderTurns ? (
+          <button
+            type="button"
+            className="ghost messages-load-older-turns"
+            disabled={isLoadingOlderTurns}
+            onClick={loadOlderTurns}
+          >
+            {isLoadingOlderTurns ? "Loading earlier messages..." : "Load earlier messages"}
+          </button>
+        ) : null}
         {renderConversationTurns()}
         <div
           className="flex flex-col gap-2 oai-thread-find-composer"

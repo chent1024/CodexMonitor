@@ -1,5 +1,7 @@
-use tauri::{State, Window};
+use serde_json::json;
+use tauri::{AppHandle, State, Window};
 
+use crate::remote_backend;
 use crate::shared::settings_core::{
     get_app_settings_core, get_codex_config_path_core, update_app_settings_core,
 };
@@ -35,7 +37,16 @@ pub(crate) async fn update_app_settings(
 }
 
 #[tauri::command]
-pub(crate) async fn get_codex_config_path() -> Result<String, String> {
+pub(crate) async fn get_codex_config_path(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<String, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "get_codex_config_path", json!({})).await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
     get_codex_config_path_core()
 }
 

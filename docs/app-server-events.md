@@ -108,6 +108,8 @@ These arrive on the same frontend event stream but are not Codex v2
 - `serverRequest/resolved` (request lifecycle cleanup for approval and user-input queues)
 - `codex/backgroundThread` (CodexMonitor synthetic bridge event)
 - `codex/connected` (CodexMonitor synthetic bridge event)
+- `codex/event_gap` (CodexMonitor synthetic daemon reliability event; the
+  frontend resumes the active thread after daemon broadcast lag)
 - `codex/stderr` (CodexMonitor synthetic bridge event; recorded in the debug log, not routed into the active thread transcript)
 - `codex/event/skills_update_available` (handled via
   `isSkillsUpdateAvailableEvent(...)` in `useSkills.ts`)
@@ -155,11 +157,14 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
 
 - `thread/start`
 - `thread/resume`
+- `thread/read`
+- `thread/turns/list`
 - `thread/fork`
 - `thread/list`
 - `thread/archive`
 - `thread/compact/start`
 - `thread/name/set`
+- `thread/unsubscribe`
 - `turn/start`
 - `turn/steer` (used for explicit steer follow-ups while a turn is active)
 - `turn/interrupt`
@@ -177,6 +182,10 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
 
 Notes:
 - `turn/start` now forwards the optional `serviceTier` override (`"fast"` for `/fast`, `null` for default/off) alongside `model`, `effort`, and `collaborationMode`.
+- CodexMonitor does not use a real `thread/live/subscribe` app-server method.
+  It follows the VS Code extension pattern: `thread/resume` owns the active
+  conversation, `thread/turns/list` pages history, and `thread/unsubscribe`
+  releases inactive threads.
 
 ## Missing Client Requests (Codex v2 ClientRequest Methods)
 
@@ -217,7 +226,6 @@ Compared against Codex v2 request methods, CodexMonitor currently does not send:
 - `thread/increment_elicitation`
 - `thread/loaded/list`
 - `thread/metadata/update`
-- `thread/read`
 - `thread/realtime/appendAudio`
 - `thread/realtime/appendText`
 - `thread/realtime/start`
@@ -225,7 +233,6 @@ Compared against Codex v2 request methods, CodexMonitor currently does not send:
 - `thread/rollback`
 - `thread/shellCommand`
 - `thread/unarchive`
-- `thread/unsubscribe`
 - `windowsSandbox/setupStart`
 
 ## Server Requests (App-Server -> CodexMonitor, v2)

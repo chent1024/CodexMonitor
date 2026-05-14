@@ -417,8 +417,16 @@ export function useTerminalSession({
       return;
     }
 
+    let resizeFrame: number | null = null;
+    let lastSentSize: string | null = null;
+
     const resize = () => {
       fitAddon.fit();
+      const sizeKey = `${terminal.cols}x${terminal.rows}`;
+      if (sizeKey === lastSentSize) {
+        return;
+      }
+      lastSentSize = sizeKey;
       const key = `${activeWorkspace.id}:${activeTerminalId}`;
       resizeTerminalSession(
         activeWorkspace.id,
@@ -434,17 +442,30 @@ export function useTerminalSession({
       });
     };
 
+    const scheduleResize = () => {
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+      }
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        resize();
+      });
+    };
+
     const observer = new ResizeObserver(() => {
-      resize();
+      scheduleResize();
     });
 
     if (containerRef.current) {
       observer.observe(containerRef.current);
     }
-    resize();
+    scheduleResize();
 
     return () => {
       observer.disconnect();
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+      }
     };
   }, [activeTerminalId, activeWorkspace, hasSession, isVisible, onDebug]);
 

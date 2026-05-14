@@ -432,6 +432,38 @@ fn build_initialize_params(client_version: &str) -> Value {
 }
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+const MAX_THREAD_WORKSPACE_MAPPINGS: usize = 8_192;
+const THREAD_WORKSPACE_MAPPINGS_PRUNE_TO: usize = 6_144;
+const MAX_HIDDEN_THREAD_IDS: usize = 2_048;
+const HIDDEN_THREAD_IDS_PRUNE_TO: usize = 1_536;
+
+fn prune_hash_map_to_limit<K, V>(map: &mut HashMap<K, V>, max_len: usize, prune_to: usize)
+where
+    K: Eq + std::hash::Hash + Clone,
+{
+    if map.len() <= max_len {
+        return;
+    }
+    let remove_count = map.len().saturating_sub(prune_to);
+    let keys = map.keys().take(remove_count).cloned().collect::<Vec<_>>();
+    for key in keys {
+        map.remove(&key);
+    }
+}
+
+fn prune_hash_set_to_limit<T>(set: &mut HashSet<T>, max_len: usize, prune_to: usize)
+where
+    T: Eq + std::hash::Hash + Clone,
+{
+    if set.len() <= max_len {
+        return;
+    }
+    let remove_count = set.len().saturating_sub(prune_to);
+    let values = set.iter().take(remove_count).cloned().collect::<Vec<_>>();
+    for value in values {
+        set.remove(&value);
+    }
+}
 
 pub(crate) struct WorkspaceSession {
     pub(crate) codex_args: Option<String>,
@@ -516,10 +548,13 @@ impl WorkspaceSession {
             },
         );
         if let Some(thread_id) = extract_thread_id(&json!({ "params": params.clone() })) {
-            self.thread_workspace
-                .lock()
-                .await
-                .insert(thread_id, workspace_id.to_string());
+            let mut thread_workspace = self.thread_workspace.lock().await;
+            thread_workspace.insert(thread_id, workspace_id.to_string());
+            prune_hash_map_to_limit(
+                &mut thread_workspace,
+                MAX_THREAD_WORKSPACE_MAPPINGS,
+                THREAD_WORKSPACE_MAPPINGS_PRUNE_TO,
+            );
         }
         if let Err(error) = self
             .write_message(json!({ "id": id, "method": method, "params": params }))
@@ -839,17 +874,26 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
 
             if let Some(ref workspace_id) = request_workspace {
                 let related_thread_ids = extract_related_thread_ids(&value);
-                if !related_thread_ids.is_empty() {
+                if !related_thread_ids.is_empty()
+                    && !matches!(request_method.as_deref(), Some("thread/list"))
+                {
                     let mut thread_workspace = session_clone.thread_workspace.lock().await;
                     for tid in related_thread_ids {
                         thread_workspace.insert(tid, workspace_id.clone());
                     }
+                    prune_hash_map_to_limit(
+                        &mut thread_workspace,
+                        MAX_THREAD_WORKSPACE_MAPPINGS,
+                        THREAD_WORKSPACE_MAPPINGS_PRUNE_TO,
+                    );
                 } else if let Some(ref tid) = thread_id {
-                    session_clone
-                        .thread_workspace
-                        .lock()
-                        .await
-                        .insert(tid.clone(), workspace_id.clone());
+                    let mut thread_workspace = session_clone.thread_workspace.lock().await;
+                    thread_workspace.insert(tid.clone(), workspace_id.clone());
+                    prune_hash_map_to_limit(
+                        &mut thread_workspace,
+                        MAX_THREAD_WORKSPACE_MAPPINGS,
+                        THREAD_WORKSPACE_MAPPINGS_PRUNE_TO,
+                    );
                 }
             }
             if matches!(request_method.as_deref(), Some("thread/list")) {
@@ -872,12 +916,22 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                             thread_workspace.insert(entry.thread_id, workspace_id);
                         }
                     }
+                    prune_hash_map_to_limit(
+                        &mut thread_workspace,
+                        MAX_THREAD_WORKSPACE_MAPPINGS,
+                        THREAD_WORKSPACE_MAPPINGS_PRUNE_TO,
+                    );
                     drop(thread_workspace);
                     if !hidden_thread_ids.is_empty() {
                         let mut hidden = session_clone.hidden_thread_ids.lock().await;
                         for thread_id in hidden_thread_ids {
                             hidden.insert(thread_id);
                         }
+                        prune_hash_set_to_limit(
+                            &mut hidden,
+                            MAX_HIDDEN_THREAD_IDS,
+                            HIDDEN_THREAD_IDS_PRUNE_TO,
+                        );
                     }
                 }
             }
@@ -905,20 +959,24 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                         .and_then(Value::as_str)
                         .unwrap_or("hide");
                     if action.eq_ignore_ascii_case("hide") {
-                        session_clone
-                            .hidden_thread_ids
-                            .lock()
-                            .await
-                            .insert(tid.clone());
+                        let mut hidden = session_clone.hidden_thread_ids.lock().await;
+                        hidden.insert(tid.clone());
+                        prune_hash_set_to_limit(
+                            &mut hidden,
+                            MAX_HIDDEN_THREAD_IDS,
+                            HIDDEN_THREAD_IDS_PRUNE_TO,
+                        );
                     }
                 } else if method_name == Some("thread/started")
                     && thread_started_is_memory_consolidation(&value)
                 {
-                    session_clone
-                        .hidden_thread_ids
-                        .lock()
-                        .await
-                        .insert(tid.clone());
+                    let mut hidden = session_clone.hidden_thread_ids.lock().await;
+                    hidden.insert(tid.clone());
+                    prune_hash_set_to_limit(
+                        &mut hidden,
+                        MAX_HIDDEN_THREAD_IDS,
+                        HIDDEN_THREAD_IDS_PRUNE_TO,
+                    );
                     let payload = AppServerEvent {
                         workspace_id: routed_workspace_id.clone(),
                         message: json!({
@@ -953,6 +1011,11 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                             .entry(related_id)
                             .or_insert_with(|| routed_workspace_id.clone());
                     }
+                    prune_hash_map_to_limit(
+                        &mut thread_workspace,
+                        MAX_THREAD_WORKSPACE_MAPPINGS,
+                        THREAD_WORKSPACE_MAPPINGS_PRUNE_TO,
+                    );
                 }
             }
 

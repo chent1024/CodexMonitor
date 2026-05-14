@@ -41,6 +41,18 @@ fn apply_macos_window_appearance(window: &Window, theme: &str) -> Result<(), Str
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn perform_macos_window_zoom(ns_window: *mut std::ffi::c_void) -> Result<(), String> {
+    use objc2_app_kit::NSWindow;
+
+    if ns_window.is_null() {
+        return Err("NSWindow missing".to_string());
+    }
+    let ns_window: &NSWindow = unsafe { &*ns_window.cast() };
+    ns_window.performZoom(None);
+    Ok(())
+}
+
 pub(crate) fn apply_window_appearance(window: &Window, theme: &str) -> Result<(), String> {
     #[cfg(test)]
     if let Some(handler) = WINDOW_APPEARANCE_OVERRIDE
@@ -74,6 +86,46 @@ pub(crate) fn apply_window_appearance(window: &Window, theme: &str) -> Result<()
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn perform_window_zoom(window: &Window) -> Result<bool, String> {
+    let window_handle = window.clone();
+    window
+        .run_on_main_thread(move || {
+            if let Ok(ns_window) = window_handle.ns_window() {
+                let _ = perform_macos_window_zoom(ns_window);
+            }
+        })
+        .map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn perform_window_zoom(_window: &Window) -> Result<bool, String> {
+    Ok(false)
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn perform_webview_window_zoom<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+) -> Result<bool, String> {
+    let window_handle = window.clone();
+    window
+        .run_on_main_thread(move || {
+            if let Ok(ns_window) = window_handle.ns_window() {
+                let _ = perform_macos_window_zoom(ns_window);
+            }
+        })
+        .map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn perform_webview_window_zoom<R: tauri::Runtime>(
+    _window: &tauri::WebviewWindow<R>,
+) -> Result<bool, String> {
+    Ok(false)
 }
 
 #[cfg(target_os = "ios")]

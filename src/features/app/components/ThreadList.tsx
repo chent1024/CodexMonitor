@@ -236,6 +236,23 @@ function hasPendingInputChanged(
   return false;
 }
 
+function getVisibleActiveThreadIdForList(props: ThreadListProps) {
+  if (props.activeWorkspaceId !== props.workspaceId || !props.activeThreadId) {
+    return null;
+  }
+  const rows = [...props.pinnedRows, ...props.unpinnedRows];
+  return rows.some((row) => row.thread.id === props.activeThreadId)
+    ? props.activeThreadId
+    : null;
+}
+
+function hasActiveRowChanged(prev: ThreadListProps, next: ThreadListProps) {
+  return (
+    getVisibleActiveThreadIdForList(prev) !==
+    getVisibleActiveThreadIdForList(next)
+  );
+}
+
 const ThreadList = memo(
   ThreadListInner,
   (prev, next) =>
@@ -247,8 +264,6 @@ const ThreadList = memo(
     prev.isPaging === next.isPaging &&
     prev.nested === next.nested &&
     prev.showLoadOlder === next.showLoadOlder &&
-    prev.activeWorkspaceId === next.activeWorkspaceId &&
-    prev.activeThreadId === next.activeThreadId &&
     prev.onToggleExpanded === next.onToggleExpanded &&
     prev.onLoadOlderThreads === next.onLoadOlderThreads &&
     prev.onSelectThread === next.onSelectThread &&
@@ -258,6 +273,7 @@ const ThreadList = memo(
     prev.isThreadPinned === next.isThreadPinned &&
     prev.pinnedRows === next.pinnedRows &&
     prev.unpinnedRows === next.unpinnedRows &&
+    !hasActiveRowChanged(prev, next) &&
     !hasVisibleStatusChanged(prev, next) &&
     !hasPendingInputChanged(prev, next),
 );

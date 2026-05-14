@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import type { DebugFilter } from "../components/DebugPanel";
 import type { DebugEntry } from "../../../types";
 
 const MAX_DEBUG_ENTRIES = 200;
@@ -119,6 +120,7 @@ export function useDebugLog() {
   const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([]);
   const [hasDebugAlerts, setHasDebugAlerts] = useState(false);
   const [debugResetVersion, setDebugResetVersion] = useState(0);
+  const [debugFilter, setDebugFilter] = useState<DebugFilter>("all");
   const debugOpenRef = useRef(debugOpen);
   debugOpenRef.current = debugOpen;
 
@@ -181,6 +183,7 @@ export function useDebugLog() {
   const clearDebugEntries = useCallback(() => {
     setDebugEntries([]);
     setHasDebugAlerts(false);
+    setDebugFilter("all");
     setDebugResetVersion((version) => version + 1);
   }, []);
 
@@ -200,6 +203,8 @@ export function useDebugLog() {
     setDebugOpen,
     debugEntries,
     debugResetVersion,
+    debugFilter,
+    setDebugFilter,
     hasDebugAlerts,
     showDebugButton,
     addDebugEntry,

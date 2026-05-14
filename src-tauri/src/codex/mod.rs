@@ -56,7 +56,18 @@ pub(crate) async fn codex_doctor(
     codex_bin: Option<String>,
     codex_args: Option<String>,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "codex_doctor",
+            json!({ "codexBin": codex_bin, "codexArgs": codex_args }),
+        )
+        .await;
+    }
+
     crate::shared::codex_aux_core::codex_doctor_core(&state.app_settings, codex_bin, codex_args)
         .await
 }
@@ -66,7 +77,18 @@ pub(crate) async fn codex_update(
     codex_bin: Option<String>,
     codex_args: Option<String>,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "codex_update",
+            json!({ "codexBin": codex_bin, "codexArgs": codex_args }),
+        )
+        .await;
+    }
+
     crate::shared::codex_update_core::codex_update_core(&state.app_settings, codex_bin, codex_args)
         .await
 }
@@ -94,6 +116,7 @@ pub(crate) async fn start_thread(
 pub(crate) async fn resume_thread(
     workspace_id: String,
     thread_id: String,
+    exclude_turns: Option<bool>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -102,12 +125,16 @@ pub(crate) async fn resume_thread(
             &*state,
             app,
             "resume_thread",
-            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+            json!({
+                "workspaceId": workspace_id,
+                "threadId": thread_id,
+                "excludeTurns": exclude_turns
+            }),
         )
         .await;
     }
 
-    codex_core::resume_thread_core(&state.sessions, workspace_id, thread_id).await
+    codex_core::resume_thread_core(&state.sessions, workspace_id, thread_id, exclude_turns).await
 }
 
 #[tauri::command]
@@ -128,6 +155,54 @@ pub(crate) async fn read_thread(
     }
 
     codex_core::read_thread_core(&state.sessions, workspace_id, thread_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn list_thread_turns(
+    workspace_id: String,
+    thread_id: String,
+    cursor: Option<String>,
+    limit: Option<u32>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "list_thread_turns",
+            json!({
+                "workspaceId": workspace_id,
+                "threadId": thread_id,
+                "cursor": cursor,
+                "limit": limit
+            }),
+        )
+        .await;
+    }
+
+    codex_core::list_thread_turns_core(&state.sessions, workspace_id, thread_id, cursor, limit)
+        .await
+}
+
+#[tauri::command]
+pub(crate) async fn thread_unsubscribe(
+    workspace_id: String,
+    thread_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "thread_unsubscribe",
+            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+        )
+        .await;
+    }
+
+    codex_core::thread_unsubscribe_core(&state.sessions, workspace_id, thread_id).await
 }
 
 #[tauri::command]
@@ -925,7 +1000,18 @@ pub(crate) async fn remember_approval_rule(
     workspace_id: String,
     command: Vec<String>,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "remember_approval_rule",
+            json!({ "workspaceId": workspace_id, "command": command }),
+        )
+        .await;
+    }
+
     codex_core::remember_approval_rule_core(&state.workspaces, workspace_id, command).await
 }
 
@@ -1120,9 +1206,13 @@ pub(crate) async fn session_debug_status(
     Ok(json!({
         "protocolVersion": 1,
         "sessionCount": 0,
+        "activeSessionCount": 0,
+        "processingSessionCount": 0,
+        "retainedSessionCount": 0,
         "journalEventCount": 0,
         "pendingRequestCount": 0,
         "attachedClientCount": 0,
+        "idleShutdownAllowed": true,
     }))
 }
 

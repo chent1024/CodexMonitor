@@ -204,4 +204,29 @@ describe("ThreadList", () => {
     expect(queryByRole("button", { name: "Hide sub-agents" })).toBeNull();
     expect(queryByRole("button", { name: "Show sub-agents" })).toBeNull();
   });
+
+  it("skips rerender when active selection changes outside this list", () => {
+    const getThreadTime = vi.fn(() => "2m");
+    const { rerender } = render(
+      <ThreadList
+        {...baseProps}
+        activeWorkspaceId="ws-2"
+        activeThreadId="thread-other"
+        getThreadTime={getThreadTime}
+      />,
+    );
+
+    getThreadTime.mockClear();
+
+    rerender(
+      <ThreadList
+        {...baseProps}
+        activeWorkspaceId="ws-3"
+        activeThreadId="thread-another"
+        getThreadTime={getThreadTime}
+      />,
+    );
+
+    expect(getThreadTime).not.toHaveBeenCalled();
+  });
 });

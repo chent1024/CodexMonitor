@@ -375,6 +375,13 @@ export function enrichConversationItemsWithThreads(
   if (items.length === 0 || threads.length === 0) {
     return items;
   }
+  if (
+    !items.some(
+      (item) => item.kind === "tool" && item.toolType === "collabToolCall",
+    )
+  ) {
+    return items;
+  }
 
   const metadataByThreadId = new Map<
     string,

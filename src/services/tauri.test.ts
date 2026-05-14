@@ -38,6 +38,7 @@ import {
   setAgentsCoreSettings,
   setTrayRecentThreads,
   setTraySessionUsage,
+  threadUnsubscribe,
   startReview,
   setThreadName,
   tailscaleDaemonStart,
@@ -47,6 +48,7 @@ import {
   tailscaleStatus,
   pickImageFiles,
   pickWorkspacePaths,
+  performNativeWindowZoom,
   writeGlobalAgentsMd,
   writeGlobalCodexConfigToml,
   createAgent,
@@ -238,6 +240,15 @@ describe("tauri invoke wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("list_workspaces");
   });
 
+  it("invokes the native window zoom command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce(true);
+
+    await expect(performNativeWindowZoom()).resolves.toBe(true);
+
+    expect(invokeMock).toHaveBeenCalledWith("perform_window_zoom");
+  });
+
   it("applies default limit for git log", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({
@@ -329,6 +340,18 @@ describe("tauri invoke wrappers", () => {
     await readThread("ws-10", "thread-1");
 
     expect(invokeMock).toHaveBeenCalledWith("read_thread", {
+      workspaceId: "ws-10",
+      threadId: "thread-1",
+    });
+  });
+
+  it("maps workspaceId/threadId for thread_unsubscribe", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await threadUnsubscribe("ws-10", "thread-1");
+
+    expect(invokeMock).toHaveBeenCalledWith("thread_unsubscribe", {
       workspaceId: "ws-10",
       threadId: "thread-1",
     });

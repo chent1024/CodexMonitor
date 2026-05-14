@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const isTauriMock = vi.hoisted(() => vi.fn());
 const getCurrentWindowMock = vi.hoisted(() => vi.fn());
 const isWindowsPlatformMock = vi.hoisted(() => vi.fn());
+const toggleWindowZoomWithinCurrentDisplayMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: isTauriMock,
@@ -18,24 +19,30 @@ vi.mock("@utils/platformPaths", () => ({
   isWindowsPlatform: isWindowsPlatformMock,
 }));
 
+vi.mock("../utils/windowZoom", () => ({
+  toggleWindowZoomWithinCurrentDisplay: toggleWindowZoomWithinCurrentDisplayMock,
+}));
+
 import { WindowCaptionControls } from "./WindowCaptionControls";
 
 describe("WindowCaptionControls", () => {
   const minimize = vi.fn();
-  const toggleMaximize = vi.fn();
   const close = vi.fn();
+  const windowHandle = {
+    minimize,
+    close,
+    isMaximized: vi.fn().mockResolvedValue(false),
+    onResized: vi.fn().mockResolvedValue(() => undefined),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     isWindowsPlatformMock.mockReturnValue(true);
     isTauriMock.mockReturnValue(true);
-    getCurrentWindowMock.mockReturnValue({
-      minimize,
-      toggleMaximize,
-      close,
-      isMaximized: vi.fn().mockResolvedValue(false),
-      onResized: vi.fn().mockResolvedValue(() => undefined),
-    });
+    windowHandle.isMaximized.mockResolvedValue(false);
+    windowHandle.onResized.mockResolvedValue(() => undefined);
+    getCurrentWindowMock.mockReturnValue(windowHandle);
+    toggleWindowZoomWithinCurrentDisplayMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -52,7 +59,7 @@ describe("WindowCaptionControls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close window" }));
 
     expect(minimize).toHaveBeenCalledTimes(1);
-    expect(toggleMaximize).toHaveBeenCalledTimes(1);
+    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledWith(windowHandle);
     expect(close).toHaveBeenCalledTimes(1);
   });
 

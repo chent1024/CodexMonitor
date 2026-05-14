@@ -1,4 +1,5 @@
 import { useWindowDrag } from "@/features/layout/hooks/useWindowDrag";
+import { useWindowBoundsGuard } from "@/features/layout/hooks/useWindowBoundsGuard";
 import {
   REMOTE_WORKSPACE_REFRESH_INTERVAL_MS,
   useWorkspaceRefreshOnFocus,
@@ -49,6 +50,7 @@ export function useMainAppWorkspaceLifecycle({
     setActiveTab,
   });
 
+  useWindowBoundsGuard();
   useWindowDrag("titlebar");
 
   useWorkspaceRestore({

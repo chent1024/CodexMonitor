@@ -137,7 +137,7 @@ export function buildResumeHydrationPlan({
   workspaceId: string;
 }): ResumeHydrationPlan {
   const items = buildItemsFromThread(thread);
-  if (localItems.length > 0 && !replaceLocal) {
+  if (items.length === 0 && localItems.length > 0 && !replaceLocal) {
     return {
       keepLocalProcessing: false,
       lastMessageText: null,
@@ -162,17 +162,11 @@ export function buildResumeHydrationPlan({
     : resumedTurnState.activeTurnId;
   const shouldMarkProcessing = keepLocalProcessing || Boolean(resumedActiveTurnId);
   const processingTimestamp = resumedTurnState.activeTurnStartedAtMs ?? Date.now();
-  const hasOverlap =
-    items.length > 0 &&
-    localItems.length > 0 &&
-    items.some((item) => localItems.some((local) => local.id === item.id));
   const mergedItems =
     items.length > 0
       ? replaceLocal
         ? items
-        : localItems.length > 0 && !hasOverlap
-          ? localItems
-          : mergeThreadItems(items, localItems)
+        : mergeThreadItems(items, localItems)
       : localItems;
   const preview = asString(thread.preview ?? "");
   const customName = getCustomName(workspaceId, threadId);

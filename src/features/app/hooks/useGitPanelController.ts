@@ -12,6 +12,8 @@ import { useGitCommitDiffs } from "../../git/hooks/useGitCommitDiffs";
 import type { GitDiffSource, GitPanelMode } from "../../git/types";
 import { buildPerFileThreadDiffs } from "../../git/utils/perFileThreadDiffs";
 
+const GIT_DIFF_PRELOAD_FILE_LIMIT = 40;
+
 export function useGitPanelController({
   activeWorkspace,
   activeItems,
@@ -115,6 +117,8 @@ export function useGitPanelController({
   const shouldPreloadDiffs = Boolean(
     gitDiffPreloadEnabled &&
       activeWorkspace &&
+      gitStatus.files.length > 0 &&
+      gitStatus.files.length <= GIT_DIFF_PRELOAD_FILE_LIMIT &&
       !preloadedWorkspaceIdsRef.current.has(activeWorkspace.id),
   );
   const shouldLoadSelectedLocalDiff =

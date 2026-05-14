@@ -7,6 +7,7 @@ import { useThreadRows } from "@app/hooks/useThreadRows";
 import {
   archiveThread,
   interruptTurn,
+  listThreadTurns,
   listThreads,
   readThread,
   resumeThread,
@@ -38,6 +39,7 @@ vi.mock("@services/tauri", () => ({
   steerTurn: vi.fn(),
   startReview: vi.fn(),
   startThread: vi.fn(),
+  listThreadTurns: vi.fn(),
   listThreads: vi.fn(),
   resumeThread: vi.fn(),
   readThread: vi.fn(),
@@ -64,6 +66,7 @@ describe("useThreads UX integration", () => {
     handlers = null;
     localStorage.clear();
     vi.clearAllMocks();
+    vi.mocked(listThreadTurns).mockRejectedValue(new Error("not supported"));
     now = 1000;
     nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now++);
   });
@@ -630,7 +633,7 @@ describe("useThreads UX integration", () => {
     );
   });
 
-  it("does not resume selected threads that already have local items", async () => {
+  it("resumes selected threads that only have cached local items", async () => {
     vi.mocked(resumeThread).mockResolvedValue({
       result: {
         thread: {
@@ -684,8 +687,10 @@ describe("useThreads UX integration", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(vi.mocked(resumeThread)).not.toHaveBeenCalled();
-    expect(ensureWorkspaceRuntimeCodexArgs).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(vi.mocked(resumeThread)).toHaveBeenCalledWith("ws-1", "thread-3");
+    });
+    expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", "thread-3");
 
     const activeItems = result.current.activeItems;
     const hasLocal = activeItems.some(
@@ -698,7 +703,69 @@ describe("useThreads UX integration", () => {
       (item) => item.kind === "message" && item.id === "server-user-1",
     );
     expect(hasLocal).toBe(true);
-    expect(hasRemote).toBe(false);
+    expect(hasRemote).toBe(true);
+  });
+
+  it("hydrates turn pagination for active threads that are already loaded locally", async () => {
+    vi.mocked(startThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-live",
+        },
+      },
+    });
+    vi.mocked(listThreadTurns).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "turn-tail",
+            status: "completed",
+            items: [
+              {
+                type: "userMessage",
+                id: "server-user-1",
+                content: [{ type: "text", text: "Recent prompt" }],
+              },
+              {
+                type: "agentMessage",
+                id: "server-assistant-1",
+                text: "Recent response",
+              },
+            ],
+          },
+        ],
+        nextCursor: "older-cursor",
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        ensureWorkspaceRuntimeCodexArgs: vi.fn(async () => undefined),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.startThread();
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(listThreadTurns)).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-live",
+        null,
+        20,
+      );
+    });
+    expect(vi.mocked(resumeThread)).not.toHaveBeenCalled();
+    expect(result.current.threadTurnsCursorById["thread-live"]).toBe("older-cursor");
+    expect(result.current.threadTurnsHasLoadedOldestById["thread-live"]).toBe(false);
+    expect(
+      result.current.activeItems.some(
+        (item) => item.kind === "message" && item.id === "server-assistant-1",
+      ),
+    ).toBe(true);
   });
 
   it("clears empty plan updates to null", () => {

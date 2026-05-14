@@ -62,6 +62,11 @@ type LinkBlockProps = {
 };
 
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkFileLinks];
+const HOST_CONTROL_DIRECTIVE_SOURCE =
+  String.raw`::(?:git-stage|git-commit|git-push|git-create-branch|git-create-pr|archive)\{(?:[^{}"'\\]+|"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')*\}`;
+const TRAILING_HOST_CONTROL_DIRECTIVE_BLOCK_PATTERN = new RegExp(
+  String.raw`(?:^|\n)[ \t]*(?:${HOST_CONTROL_DIRECTIVE_SOURCE}[ \t]*)+$`,
+);
 
 function extractLanguageTag(className?: string) {
   if (!className) {
@@ -200,6 +205,14 @@ function normalizeStructuredReviewTables(value: string) {
 
 function stripTrailingMemoryCitation(value: string) {
   return value.replace(/\n*<oai-mem-citation>[\s\S]*?<\/oai-mem-citation>\s*$/i, "").trim();
+}
+
+function stripHostControlDirectives(value: string) {
+  return value.trimEnd()
+    .replace(TRAILING_HOST_CONTROL_DIRECTIVE_BLOCK_PATTERN, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
 }
 
 export function isStandaloneMarkdownTable(value: string) {
@@ -457,7 +470,9 @@ export const Markdown = memo(function Markdown({
     () =>
       codeBlock
         ? value
-        : normalizeStructuredReviewTables(normalizeListIndentation(value)),
+        : normalizeStructuredReviewTables(
+            normalizeListIndentation(stripHostControlDirectives(value)),
+          ),
     [codeBlock, value],
   );
   const content = useMemo(

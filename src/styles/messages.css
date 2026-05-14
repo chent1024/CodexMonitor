@@ -612,14 +612,20 @@
   align-items: center;
   gap: 8px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 160ms ease;
 }
 
 .messages [data-message-author-role="user"]:hover [data-message-actions-row],
-.messages [data-message-author-role="user"]:focus-within [data-message-actions-row],
 .messages .oai-assistant-turn:hover .oai-assistant-actions [data-message-actions-row],
 .messages .oai-assistant-turn:focus-within .oai-assistant-actions [data-message-actions-row] {
   opacity: 1;
+  pointer-events: auto;
+}
+
+.messages [data-message-author-role="user"] [data-message-actions-row]:has(:focus-visible) {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .messages [data-message-author-role="assistant"] {
@@ -1911,12 +1917,40 @@
 }
 
 .oai-review-diff-summary-card {
+  --codex-review-diff-summary-surface: color-mix(
+    in srgb,
+    var(--codex-message-surface) 96%,
+    var(--codex-foreground)
+  );
+  --codex-review-diff-summary-hover-surface: color-mix(
+    in srgb,
+    var(--codex-message-surface) 92%,
+    var(--codex-foreground)
+  );
+  --codex-diffs-surface: var(--codex-review-diff-summary-surface);
+  --codex-diffs-context-surface: color-mix(
+    in srgb,
+    var(--codex-review-diff-summary-surface) 96%,
+    var(--codex-foreground)
+  );
+  --codex-diffs-separator-surface: color-mix(
+    in srgb,
+    var(--codex-review-diff-summary-surface) 96%,
+    var(--codex-foreground)
+  );
+  --codex-diffs-hover-surface: var(--codex-review-diff-summary-hover-surface);
+  --codex-diffs-header-surface: color-mix(
+    in srgb,
+    var(--codex-review-diff-summary-surface) 98%,
+    var(--codex-message-surface)
+  );
   width: 100%;
   margin-top: 16px;
-  border: 1px solid color-mix(in srgb, var(--codex-border) 54%, transparent);
+  border: 1px solid color-mix(in srgb, var(--codex-border) 48%, transparent);
   border-radius: 12px;
-  background: var(--codex-diffs-surface, var(--codex-code-surface));
+  background: var(--codex-review-diff-summary-surface);
   overflow: hidden;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--codex-foreground) 7%, transparent);
 }
 
 .oai-review-diff-summary-header {
@@ -2210,37 +2244,83 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   max-width: min(100%, 360px);
   color: var(--codex-foreground-secondary);
   white-space: nowrap;
 }
 
-.oai-context-compaction-icon {
-  width: 15px;
-  height: 15px;
+.oai-context-compaction-icon-badge {
+  position: relative;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
   color: var(--codex-foreground-tertiary);
 }
 
-.oai-context-compaction-row.is-processing .oai-context-compaction-icon {
-  color: var(--status-warning);
-  animation: oai-context-compaction-pulse 1.2s ease-in-out infinite;
+.oai-context-compaction-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: currentColor;
 }
 
-.oai-context-compaction-row.is-failed .oai-context-compaction-icon,
+.oai-context-compaction-row.is-processing .oai-context-compaction-label {
+  color: var(--codex-foreground);
+}
+
+.oai-context-compaction-row.is-processing .oai-context-compaction-icon-badge {
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 14%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--status-warning) 30%, transparent),
+    0 0 0 0 color-mix(in srgb, var(--status-warning) 0%, transparent);
+  animation: oai-context-compaction-badge-pulse 1.35s ease-in-out infinite;
+}
+
+.oai-context-compaction-row.is-processing .oai-context-compaction-icon {
+  animation: oai-context-compaction-icon-shift 1.35s ease-in-out infinite;
+}
+
+.oai-context-compaction-row.is-failed .oai-context-compaction-icon-badge,
 .oai-context-compaction-row.is-failed .oai-context-compaction-label {
   color: var(--status-error);
 }
 
-@keyframes oai-context-compaction-pulse {
+@keyframes oai-context-compaction-badge-pulse {
   0%,
   100% {
-    opacity: 0.55;
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--status-warning) 30%, transparent),
+      0 0 0 0 color-mix(in srgb, var(--status-warning) 0%, transparent);
   }
 
   50% {
-    opacity: 1;
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--status-warning) 42%, transparent),
+      0 0 0 5px color-mix(in srgb, var(--status-warning) 14%, transparent);
+  }
+}
+
+@keyframes oai-context-compaction-icon-shift {
+  0%,
+  100% {
+    transform: translateY(-1px);
+  }
+
+  50% {
+    transform: translateY(1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oai-context-compaction-row.is-processing .oai-context-compaction-icon-badge,
+  .oai-context-compaction-row.is-processing .oai-context-compaction-icon {
+    animation: none;
   }
 }
 
@@ -3092,7 +3172,11 @@
   border: none;
   padding: 2px 6px;
   border-radius: 4px;
-  line-height: 1;
+  line-height: inherit;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .messages .markdown,
@@ -3538,4 +3622,60 @@
   color: var(--codex-foreground-tertiary);
   cursor: default;
   opacity: 0.5;
+}
+
+.oai-memory-citation {
+  margin-top: 8px;
+  color: var(--codex-foreground-secondary);
+  font-size: var(--message-ui-font-size-sm);
+}
+
+.oai-memory-citation-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-control);
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.oai-memory-citation-summary::-webkit-details-marker {
+  display: none;
+}
+
+.oai-memory-citation[open] .oai-memory-citation-summary {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.oai-memory-citation-body {
+  margin-top: 6px;
+  display: flex;
+  max-width: min(720px, 100%);
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-raised) 70%, transparent);
+}
+
+.oai-memory-citation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.oai-memory-citation-entry,
+.oai-memory-citation-rollouts {
+  color: var(--text-muted);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }

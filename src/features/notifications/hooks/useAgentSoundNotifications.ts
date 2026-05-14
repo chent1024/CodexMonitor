@@ -158,18 +158,6 @@ export function useAgentSoundNotifications({
     [recordStartIfMissing],
   );
 
-  const handleAgentMessageCompleted = useCallback(
-    (event: { workspaceId: string; threadId: string }) => {
-      const durationMs = consumeDuration(event.workspaceId, event.threadId, "");
-      const threadKey = buildThreadKey(event.workspaceId, event.threadId);
-      if (!shouldPlaySound(durationMs, threadKey)) {
-        return;
-      }
-      playSound(successSoundUrl, "success");
-    },
-    [consumeDuration, playSound, shouldPlaySound],
-  );
-
   const handlers = useMemo(
     () => ({
       onTurnStarted: handleTurnStarted,
@@ -177,10 +165,8 @@ export function useAgentSoundNotifications({
       onTurnError: handleTurnError,
       onItemStarted: handleItemStarted,
       onAgentMessageDelta: handleAgentMessageDelta,
-      onAgentMessageCompleted: handleAgentMessageCompleted,
     }),
     [
-      handleAgentMessageCompleted,
       handleAgentMessageDelta,
       handleItemStarted,
       handleTurnCompleted,

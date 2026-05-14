@@ -16,6 +16,8 @@ pub(crate) mod prompts_core;
 #[allow(dead_code)]
 pub(crate) mod restart_safe_sessions_core;
 pub(crate) mod settings_core;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) mod terminal_core;
 pub(crate) mod workspace_rpc;
 pub(crate) mod workspaces_core;
 pub(crate) mod worktree_core;

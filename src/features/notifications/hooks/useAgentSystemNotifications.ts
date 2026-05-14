@@ -4,7 +4,8 @@ import { sendNotification } from "../../../services/tauri";
 import { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
 
 const DEFAULT_MIN_DURATION_MS = 60_000; // 1 minute
-const MAX_BODY_LENGTH = 200;
+const MAX_TITLE_LENGTH = 40;
+const MAX_BODY_LENGTH = 140;
 
 type SystemNotificationOptions = {
   enabled: boolean;
@@ -32,6 +33,21 @@ function truncateText(text: string, maxLength: number): string {
   return text.slice(0, maxLength - 1) + "…";
 }
 
+function normalizeNotificationText(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/[*_~>#]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function useAgentSystemNotifications({
   enabled,
   isWindowFocused,
@@ -55,9 +71,15 @@ export function useAgentSystemNotifications({
       extra?: Record<string, unknown>,
     ) => {
       try {
+        const group = typeof extra?.group === "string" ? extra.group : undefined;
+        const extraPayload = extra ? { ...extra } : undefined;
+        if (extraPayload) {
+          delete extraPayload.group;
+        }
         await sendNotification(title, body, {
           autoCancel: true,
-          extra,
+          group,
+          extra: extraPayload,
         });
         onDebug?.({
           id: `${Date.now()}-client-notification-${label}`,
@@ -157,12 +179,15 @@ export function useAgentSystemNotifications({
 
   const getNotificationContent = useCallback(
     (workspaceId: string, threadId: string, fallbackBody: string) => {
-      const title = getWorkspaceName?.(workspaceId) ?? "Agent Complete";
+      const rawTitle = getWorkspaceName?.(workspaceId) ?? "Codex";
+      const title = truncateText(
+        normalizeNotificationText(rawTitle) || "Codex",
+        MAX_TITLE_LENGTH,
+      );
       const threadKey = buildThreadKey(workspaceId, threadId);
       const lastMessage = lastMessageByThread.current.get(threadKey);
-      const body = lastMessage
-        ? truncateText(lastMessage, MAX_BODY_LENGTH)
-        : fallbackBody;
+      const normalizedBody = normalizeNotificationText(lastMessage ?? fallbackBody);
+      const body = truncateText(normalizedBody || fallbackBody, MAX_BODY_LENGTH);
       return { title, body };
     },
     [getWorkspaceName],
@@ -198,6 +223,7 @@ export function useAgentSystemNotifications({
         kind: "thread",
         workspaceId,
         threadId,
+        group: threadKey,
       });
       lastMessageByThread.current.delete(threadKey);
     },
@@ -219,13 +245,18 @@ export function useAgentSystemNotifications({
       if (!shouldNotify(workspaceId, threadId, durationMs, threadKey)) {
         return;
       }
-      const title = getWorkspaceName?.(workspaceId) ?? "Agent Error";
-      const body = payload.message || "An error occurred.";
+      const title = truncateText(
+        normalizeNotificationText(getWorkspaceName?.(workspaceId) ?? "Codex") || "Codex",
+        MAX_TITLE_LENGTH,
+      );
+      const body =
+        normalizeNotificationText(payload.message) || "An error occurred.";
       onThreadNotificationSent?.(workspaceId, threadId);
       void notify(title, truncateText(body, MAX_BODY_LENGTH), "error", {
         kind: "thread",
         workspaceId,
         threadId,
+        group: threadKey,
       });
       lastMessageByThread.current.delete(threadKey);
     },
@@ -249,35 +280,11 @@ export function useAgentSystemNotifications({
   const handleAgentMessageCompleted = useCallback(
     (event: { workspaceId: string; threadId: string; text: string }) => {
       const threadKey = buildThreadKey(event.workspaceId, event.threadId);
-      // Store the message text for use in turn completion notification
       if (event.text) {
         lastMessageByThread.current.set(threadKey, event.text);
       }
-      const durationMs = consumeDuration(event.workspaceId, event.threadId, "");
-      if (
-        !shouldNotify(
-          event.workspaceId,
-          event.threadId,
-          durationMs,
-          threadKey,
-        )
-      ) {
-        return;
-      }
-      const { title, body } = getNotificationContent(
-        event.workspaceId,
-        event.threadId,
-        "Your agent has finished its task.",
-      );
-      onThreadNotificationSent?.(event.workspaceId, event.threadId);
-      void notify(title, body, "success", {
-        kind: "thread",
-        workspaceId: event.workspaceId,
-        threadId: event.threadId,
-      });
-      lastMessageByThread.current.delete(threadKey);
     },
-    [consumeDuration, getNotificationContent, notify, onThreadNotificationSent, shouldNotify],
+    [],
   );
 
   const handlers = useMemo(

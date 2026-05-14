@@ -1,14 +1,15 @@
 import { useEffect, useRef } from "react";
 import type { WorkspaceInfo } from "../../../types";
 
-export const REMOTE_WORKSPACE_REFRESH_INTERVAL_MS = 15_000;
+export const REMOTE_WORKSPACE_REFRESH_INTERVAL_MS = 30_000;
+const REMOTE_WORKSPACE_THREAD_REFRESH_MAX_PAGES = 2;
 
 type WorkspaceRefreshOptions = {
   workspaces: WorkspaceInfo[];
   refreshWorkspaces: () => Promise<WorkspaceInfo[] | void>;
   listThreadsForWorkspaces: (
     workspaces: WorkspaceInfo[],
-    options?: { preserveState?: boolean },
+    options?: { preserveState?: boolean; maxPages?: number },
   ) => Promise<void>;
   backendMode?: string;
   pollIntervalMs?: number;
@@ -65,7 +66,10 @@ export function useWorkspaceRefreshOnFocus({
         }
         const connected = latestWorkspaces.filter((entry) => entry.connected);
         if (connected.length > 0) {
-          await listThreads(connected, { preserveState: true });
+          await listThreads(connected, {
+            preserveState: true,
+            maxPages: REMOTE_WORKSPACE_THREAD_REFRESH_MAX_PAGES,
+          });
         }
       })().finally(() => {
         refreshInFlight = false;

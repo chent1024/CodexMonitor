@@ -158,6 +158,18 @@ export function reduceThreadLifecycle(
       const { [action.threadId]: ____, ...restDiffs } = state.turnDiffByThread;
       const { [action.threadId]: _____, ...restPlans } = state.planByThread;
       const { [action.threadId]: ______, ...restParents } = state.threadParentById;
+      const {
+        [action.threadId]: _______,
+        ...restThreadTurnsPaging
+      } = state.threadTurnsPagingById;
+      const {
+        [action.threadId]: ________,
+        ...restThreadTurnsCursor
+      } = state.threadTurnsCursorById;
+      const {
+        [action.threadId]: _________,
+        ...restThreadTurnsHasLoadedOldest
+      } = state.threadTurnsHasLoadedOldestById;
       return {
         ...state,
         threadsByWorkspace: {
@@ -170,6 +182,9 @@ export function reduceThreadLifecycle(
         turnDiffByThread: restDiffs,
         planByThread: restPlans,
         threadParentById: restParents,
+        threadTurnsPagingById: restThreadTurnsPaging,
+        threadTurnsCursorById: restThreadTurnsCursor,
+        threadTurnsHasLoadedOldestById: restThreadTurnsHasLoadedOldest,
         activeThreadIdByWorkspace: {
           ...state.activeThreadIdByWorkspace,
           [action.workspaceId]: nextActive,
@@ -496,6 +511,30 @@ export function reduceThreadLifecycle(
         threadResumeLoadingById: {
           ...state.threadResumeLoadingById,
           [action.threadId]: action.isLoading,
+        },
+      };
+    case "setThreadTurnsPaging":
+      return {
+        ...state,
+        threadTurnsPagingById: {
+          ...state.threadTurnsPagingById,
+          [action.threadId]: action.isLoading,
+        },
+      };
+    case "setThreadTurnsCursor":
+      return {
+        ...state,
+        threadTurnsCursorById: {
+          ...state.threadTurnsCursorById,
+          [action.threadId]: action.cursor,
+        },
+      };
+    case "setThreadTurnsHasLoadedOldest":
+      return {
+        ...state,
+        threadTurnsHasLoadedOldestById: {
+          ...state.threadTurnsHasLoadedOldestById,
+          [action.threadId]: action.hasLoadedOldest,
         },
       };
     case "setThreadListPaging":

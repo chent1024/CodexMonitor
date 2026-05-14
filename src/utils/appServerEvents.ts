@@ -7,6 +7,7 @@ export const SUPPORTED_APP_SERVER_METHODS = [
   "account/updated",
   "codex/backgroundThread",
   "codex/connected",
+  "codex/event_gap",
   "codex/event/skills_update_available",
   "codex/stderr",
   "error",
@@ -47,6 +48,7 @@ export type SupportedAppServerMethod = (typeof SUPPORTED_APP_SERVER_METHODS)[num
 
 export const METHODS_HANDLED_OUTSIDE_USE_APP_SERVER_EVENTS = [
   "app/list/updated",
+  "codex/event_gap",
   "codex/event/skills_update_available",
 ] as const satisfies readonly SupportedAppServerMethod[];
 

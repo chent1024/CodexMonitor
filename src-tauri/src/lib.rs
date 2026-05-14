@@ -62,6 +62,11 @@ fn is_mobile_runtime() -> bool {
     cfg!(any(target_os = "ios", target_os = "android"))
 }
 
+#[tauri::command]
+fn perform_window_zoom(window: tauri::Window) -> Result<bool, String> {
+    window::perform_window_zoom(&window)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -228,6 +233,8 @@ pub fn run() {
             codex::generate_agent_description,
             codex::resume_thread,
             codex::read_thread,
+            codex::list_thread_turns,
+            codex::thread_unsubscribe,
             codex::thread_live_subscribe,
             codex::thread_live_unsubscribe,
             codex::fork_thread,
@@ -308,7 +315,8 @@ pub fn run() {
             tailscale::tailscale_daemon_start,
             tailscale::tailscale_daemon_stop,
             tailscale::tailscale_daemon_status,
-            is_mobile_runtime
+            is_mobile_runtime,
+            perform_window_zoom
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");

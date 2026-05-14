@@ -1,15 +1,13 @@
 import { useCallback } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import CornerDownRight from "lucide-react/dist/esm/icons/corner-down-right";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import type { QueuedMessage } from "../../../types";
-import {
-  PopoverMenuItem,
-  PopoverSurface,
-} from "../../design-system/components/popover/PopoverPrimitives";
-import { useMenuController } from "../../app/hooks/useMenuController";
 
 type ComposerQueueProps = {
   queuedMessages: QueuedMessage[];
   pausedReason?: string | null;
+  onGuideQueued?: (item: QueuedMessage) => void | Promise<void>;
   onEditQueued?: (item: QueuedMessage) => void;
   onDeleteQueued?: (id: string) => void;
 };
@@ -17,6 +15,7 @@ type ComposerQueueProps = {
 export function ComposerQueue({
   queuedMessages,
   pausedReason = null,
+  onGuideQueued,
   onEditQueued,
   onDeleteQueued,
 }: ComposerQueueProps) {
@@ -26,31 +25,89 @@ export function ComposerQueue({
 
   return (
     <div className="composer-queue">
-      <div className="composer-queue-title">Queued</div>
       {pausedReason ? (
         <div className="composer-queue-hint">{pausedReason}</div>
       ) : null}
-      <div className="composer-queue-list">
-        {queuedMessages.map((item) => (
-          <div key={item.id} className="composer-queue-item">
-            <span className="composer-queue-text">
-              {item.text ||
-                (item.images?.length
-                  ? item.images.length === 1
-                    ? "Image"
-                    : "Images"
-                  : "")}
-              {item.images?.length
-                ? ` · ${item.images.length} image${item.images.length === 1 ? "" : "s"}`
-                : ""}
-            </span>
-            <QueueMenuButton
-              item={item}
-              onEditQueued={onEditQueued}
-              onDeleteQueued={onDeleteQueued}
-            />
-          </div>
-        ))}
+      {queuedMessages.map((item) => (
+        <QueueItem
+          key={item.id}
+          item={item}
+          onGuideQueued={onGuideQueued}
+          onEditQueued={onEditQueued}
+          onDeleteQueued={onDeleteQueued}
+        />
+      ))}
+    </div>
+  );
+}
+
+function getQueuedMessageLabel(item: QueuedMessage) {
+  const fallback = item.images?.length
+    ? item.images.length === 1
+      ? "Image"
+      : "Images"
+    : "";
+  const text = item.text || fallback;
+  const imageSuffix = item.images?.length
+    ? ` · ${item.images.length} image${item.images.length === 1 ? "" : "s"}`
+    : "";
+  return `${text}${imageSuffix}`;
+}
+
+function QueueItem({
+  item,
+  onGuideQueued,
+  onEditQueued,
+  onDeleteQueued,
+}: QueueMenuButtonProps) {
+  const handleGuide = useCallback(() => {
+    void onGuideQueued?.(item);
+  }, [item, onGuideQueued]);
+
+  const handleDelete = useCallback(() => {
+    onDeleteQueued?.(item.id);
+  }, [item.id, onDeleteQueued]);
+
+  const handleEdit = useCallback(() => {
+    onEditQueued?.(item);
+  }, [item, onEditQueued]);
+
+  return (
+    <div className="composer-queue-item">
+      <CornerDownRight className="composer-queue-leading-icon" size={14} aria-hidden />
+      <span className="composer-queue-text">{getQueuedMessageLabel(item)}</span>
+      <div className="composer-queue-actions">
+        {onGuideQueued ? (
+          <button
+            type="button"
+            className="composer-queue-guide"
+            onClick={handleGuide}
+            aria-label="Guide queued message"
+          >
+            <CornerDownRight size={13} aria-hidden />
+            <span>引导</span>
+          </button>
+        ) : null}
+        {onEditQueued ? (
+          <button
+            type="button"
+            className="composer-queue-action-icon"
+            onClick={handleEdit}
+            aria-label="Edit queued message"
+          >
+            <Pencil size={13} aria-hidden />
+          </button>
+        ) : null}
+        {onDeleteQueued ? (
+          <button
+            type="button"
+            className="composer-queue-action-icon"
+            onClick={handleDelete}
+            aria-label="Delete queued message"
+          >
+            <Trash2 size={13} aria-hidden />
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -58,49 +115,7 @@ export function ComposerQueue({
 
 type QueueMenuButtonProps = {
   item: QueuedMessage;
+  onGuideQueued?: (item: QueuedMessage) => void | Promise<void>;
   onEditQueued?: (item: QueuedMessage) => void;
   onDeleteQueued?: (id: string) => void;
 };
-
-function QueueMenuButton({ item, onEditQueued, onDeleteQueued }: QueueMenuButtonProps) {
-  const menu = useMenuController();
-  const handleToggleMenu = useCallback(
-    (event: ReactMouseEvent<HTMLButtonElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      menu.toggle();
-    },
-    [menu],
-  );
-
-  const handleEdit = useCallback(() => {
-    menu.close();
-    onEditQueued?.(item);
-  }, [item, menu, onEditQueued]);
-
-  const handleDelete = useCallback(() => {
-    menu.close();
-    onDeleteQueued?.(item.id);
-  }, [item.id, menu, onDeleteQueued]);
-
-  return (
-    <div className="composer-queue-menu-wrap" ref={menu.containerRef}>
-      <button
-        type="button"
-        className={`composer-queue-menu${menu.isOpen ? " is-open" : ""}`}
-        onClick={handleToggleMenu}
-        aria-label="Queue item menu"
-        aria-haspopup="menu"
-        aria-expanded={menu.isOpen}
-      >
-        ...
-      </button>
-      {menu.isOpen && (
-        <PopoverSurface className="composer-queue-item-popover" role="menu">
-          <PopoverMenuItem onClick={handleEdit}>Edit</PopoverMenuItem>
-          <PopoverMenuItem onClick={handleDelete}>Delete</PopoverMenuItem>
-        </PopoverSurface>
-      )}
-    </div>
-  );
-}

@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex as StdMutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 
@@ -28,7 +29,35 @@ struct UsageTotals {
     output: i64,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+struct UsageFileCacheKey {
+    path: PathBuf,
+    workspace_path: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct UsageFileMetadata {
+    len: u64,
+    modified_ms: u128,
+}
+
+#[derive(Clone, Default)]
+struct FileUsageScan {
+    daily: HashMap<String, DailyTotals>,
+    model_totals_by_day: HashMap<String, HashMap<String, i64>>,
+}
+
+#[derive(Clone)]
+struct CachedFileUsage {
+    metadata: UsageFileMetadata,
+    scan: FileUsageScan,
+}
+
 const MAX_ACTIVITY_GAP_MS: i64 = 2 * 60 * 1000;
+const MAX_USAGE_FILE_CACHE_ENTRIES: usize = 2_000;
+
+static USAGE_FILE_CACHE: OnceLock<StdMutex<HashMap<UsageFileCacheKey, CachedFileUsage>>> =
+    OnceLock::new();
 
 pub(crate) async fn local_usage_snapshot_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
@@ -92,7 +121,8 @@ fn scan_local_usage(
                 if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
                     continue;
                 }
-                scan_file(&path, &mut daily, &mut model_totals, workspace_path)?;
+                let scan = scan_file_cached(&path, workspace_path)?;
+                merge_file_scan(&mut daily, &mut model_totals, scan);
             }
         }
     }
@@ -179,19 +209,107 @@ fn build_snapshot(
     }
 }
 
+#[cfg(test)]
 fn scan_file(
     path: &Path,
     daily: &mut HashMap<String, DailyTotals>,
     model_totals: &mut HashMap<String, i64>,
     workspace_path: Option<&Path>,
 ) -> Result<(), String> {
+    let scan = scan_file_cached(path, workspace_path)?;
+    merge_file_scan(daily, model_totals, scan);
+    Ok(())
+}
+
+fn scan_file_cached(path: &Path, workspace_path: Option<&Path>) -> Result<FileUsageScan, String> {
+    let key = UsageFileCacheKey {
+        path: path.to_path_buf(),
+        workspace_path: workspace_path.map(Path::to_path_buf),
+    };
+    if let Some(metadata) = usage_file_metadata(path) {
+        if let Some(cached) = usage_file_cache()
+            .lock()
+            .ok()
+            .and_then(|cache| cache.get(&key).cloned())
+        {
+            if cached.metadata == metadata {
+                return Ok(cached.scan);
+            }
+        }
+    }
+
+    let scan = scan_file_uncached(path, workspace_path)?;
+    if let Some(metadata) = usage_file_metadata(path) {
+        if let Ok(mut cache) = usage_file_cache().lock() {
+            if cache.len() >= MAX_USAGE_FILE_CACHE_ENTRIES {
+                cache.clear();
+            }
+            cache.insert(
+                key,
+                CachedFileUsage {
+                    metadata,
+                    scan: scan.clone(),
+                },
+            );
+        }
+    }
+    Ok(scan)
+}
+
+fn usage_file_cache() -> &'static StdMutex<HashMap<UsageFileCacheKey, CachedFileUsage>> {
+    USAGE_FILE_CACHE.get_or_init(|| StdMutex::new(HashMap::new()))
+}
+
+fn usage_file_metadata(path: &Path) -> Option<UsageFileMetadata> {
+    let metadata = std::fs::metadata(path).ok()?;
+    let modified_ms = metadata
+        .modified()
+        .ok()?
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_millis();
+    Some(UsageFileMetadata {
+        len: metadata.len(),
+        modified_ms,
+    })
+}
+
+fn merge_file_scan(
+    daily: &mut HashMap<String, DailyTotals>,
+    model_totals: &mut HashMap<String, i64>,
+    scan: FileUsageScan,
+) {
+    let FileUsageScan {
+        daily: scan_daily,
+        model_totals_by_day,
+    } = scan;
+    for (day_key, totals) in scan_daily {
+        let Some(entry) = daily.get_mut(&day_key) else {
+            continue;
+        };
+        entry.input += totals.input;
+        entry.cached += totals.cached;
+        entry.output += totals.output;
+        entry.agent_ms += totals.agent_ms;
+        entry.agent_runs += totals.agent_runs;
+
+        if let Some(models) = model_totals_by_day.get(&day_key) {
+            for (model, tokens) in models {
+                *model_totals.entry(model.clone()).or_insert(0) += tokens;
+            }
+        }
+    }
+}
+
+fn scan_file_uncached(path: &Path, workspace_path: Option<&Path>) -> Result<FileUsageScan, String> {
     let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => {
-            return Ok(());
+            return Ok(FileUsageScan::default());
         }
     };
     let reader = BufReader::new(file);
+    let mut scan = FileUsageScan::default();
     let mut previous_totals: Option<UsageTotals> = None;
     let mut current_model: Option<String> = None;
     let mut last_activity_ms: Option<i64> = None;
@@ -261,19 +379,17 @@ fn scan_file(
                 if let Some(timestamp_ms) = read_timestamp_ms(&value) {
                     if seen_runs.insert(timestamp_ms) {
                         if let Some(day_key) = day_key_for_timestamp_ms(timestamp_ms) {
-                            if let Some(entry) = daily.get_mut(&day_key) {
-                                entry.agent_runs += 1;
-                            }
+                            scan.daily.entry(day_key).or_default().agent_runs += 1;
                         }
                     }
-                    track_activity(daily, &mut last_activity_ms, timestamp_ms);
+                    track_activity_for_scan(&mut scan.daily, &mut last_activity_ms, timestamp_ms);
                 }
                 continue;
             }
 
             if payload_type == Some("agent_reasoning") {
                 if let Some(timestamp_ms) = read_timestamp_ms(&value) {
-                    track_activity(daily, &mut last_activity_ms, timestamp_ms);
+                    track_activity_for_scan(&mut scan.daily, &mut last_activity_ms, timestamp_ms);
                 }
                 continue;
             }
@@ -360,22 +476,26 @@ fn scan_file(
 
             let timestamp_ms = read_timestamp_ms(&value);
             if let Some(day_key) = timestamp_ms.and_then(|ms| day_key_for_timestamp_ms(ms)) {
-                if let Some(entry) = daily.get_mut(&day_key) {
-                    let cached = delta.cached.min(delta.input);
-                    entry.input += delta.input;
-                    entry.cached += cached;
-                    entry.output += delta.output;
+                let cached = delta.cached.min(delta.input);
+                let entry = scan.daily.entry(day_key.clone()).or_default();
+                entry.input += delta.input;
+                entry.cached += cached;
+                entry.output += delta.output;
 
-                    let model = current_model
-                        .clone()
-                        .or_else(|| extract_model_from_token_count(&value))
-                        .unwrap_or_else(|| "unknown".to_string());
-                    *model_totals.entry(model).or_insert(0) += delta.input + delta.output;
-                }
+                let model = current_model
+                    .clone()
+                    .or_else(|| extract_model_from_token_count(&value))
+                    .unwrap_or_else(|| "unknown".to_string());
+                *scan
+                    .model_totals_by_day
+                    .entry(day_key)
+                    .or_default()
+                    .entry(model)
+                    .or_insert(0) += delta.input + delta.output;
             }
 
             if let Some(timestamp_ms) = timestamp_ms {
-                track_activity(daily, &mut last_activity_ms, timestamp_ms);
+                track_activity_for_scan(&mut scan.daily, &mut last_activity_ms, timestamp_ms);
             }
             continue;
         }
@@ -394,22 +514,20 @@ fn scan_file(
                 if let Some(timestamp_ms) = read_timestamp_ms(&value) {
                     if seen_runs.insert(timestamp_ms) {
                         if let Some(day_key) = day_key_for_timestamp_ms(timestamp_ms) {
-                            if let Some(entry) = daily.get_mut(&day_key) {
-                                entry.agent_runs += 1;
-                            }
+                            scan.daily.entry(day_key).or_default().agent_runs += 1;
                         }
                     }
-                    track_activity(daily, &mut last_activity_ms, timestamp_ms);
+                    track_activity_for_scan(&mut scan.daily, &mut last_activity_ms, timestamp_ms);
                 }
             } else if payload_type != Some("message") {
                 if let Some(timestamp_ms) = read_timestamp_ms(&value) {
-                    track_activity(daily, &mut last_activity_ms, timestamp_ms);
+                    track_activity_for_scan(&mut scan.daily, &mut last_activity_ms, timestamp_ms);
                 }
             }
         }
     }
 
-    Ok(())
+    Ok(scan)
 }
 
 fn extract_model_from_turn_context(value: &Value) -> Option<String> {
@@ -472,7 +590,7 @@ fn read_timestamp_ms(value: &Value) -> Option<i64> {
     Some(numeric)
 }
 
-fn track_activity(
+fn track_activity_for_scan(
     daily: &mut HashMap<String, DailyTotals>,
     last_activity_ms: &mut Option<i64>,
     timestamp_ms: i64,
@@ -481,9 +599,7 @@ fn track_activity(
         let delta = timestamp_ms - prev_ms;
         if delta > 0 && delta <= MAX_ACTIVITY_GAP_MS {
             if let Some(day_key) = day_key_for_timestamp_ms(timestamp_ms) {
-                if let Some(entry) = daily.get_mut(&day_key) {
-                    entry.agent_ms += delta;
-                }
+                daily.entry(day_key).or_default().agent_ms += delta;
             }
         }
     }

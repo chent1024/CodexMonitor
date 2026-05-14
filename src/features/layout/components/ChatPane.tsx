@@ -21,19 +21,40 @@ export function ChatPane({ messagesNode, composerNode, className }: ChatPaneProp
       return;
     }
 
+    let animationFrame: number | null = null;
+    let lastHeight = -1;
+
     const updateComposerHeight = () => {
-      setComposerHeight(Math.ceil(node.getBoundingClientRect().height));
+      const nextHeight = Math.ceil(node.getBoundingClientRect().height);
+      if (nextHeight === lastHeight) {
+        return;
+      }
+      lastHeight = nextHeight;
+      setComposerHeight(nextHeight);
+    };
+
+    const scheduleComposerHeightUpdate = () => {
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = null;
+        updateComposerHeight();
+      });
     };
 
     updateComposerHeight();
 
     const observer = new ResizeObserver(() => {
-      updateComposerHeight();
+      scheduleComposerHeightUpdate();
     });
     observer.observe(node);
 
     return () => {
       observer.disconnect();
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
     };
   }, [composerNode]);
 

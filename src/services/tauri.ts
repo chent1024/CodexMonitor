@@ -117,6 +117,10 @@ export async function getCodexConfigPath(): Promise<string> {
   return invoke<string>("get_codex_config_path");
 }
 
+export async function performNativeWindowZoom(): Promise<boolean> {
+  return invoke<boolean>("perform_window_zoom");
+}
+
 export type TextFileResponse = {
   exists: boolean;
   content: string;
@@ -768,6 +772,20 @@ export type LocalMemoryStoreDebugStatus = {
   memoryCount: number;
   vectorCount: number;
   ftsCount: number;
+  recentAccesses: LocalMemoryAccessLogEntry[];
+};
+
+export type LocalMemoryAccessLogEntry = {
+  id: string;
+  memoryId: string | null;
+  query: string | null;
+  event: string;
+  resultCount: number | null;
+  score: number | null;
+  threadId: string | null;
+  runId: string | null;
+  error: string | null;
+  createdAt: number;
 };
 
 export type LocalMemoryDebugSnapshot = {
@@ -856,6 +874,7 @@ export type RestartSafeDebugStatus = {
   protocolVersion: number;
   sessionCount: number;
   activeSessionCount: number;
+  processingSessionCount?: number;
   retainedSessionCount: number;
   journalEventCount: number;
   pendingRequestCount: number;
@@ -1176,12 +1195,33 @@ export async function listMcpServerStatus(
   return invoke<any>("list_mcp_server_status", { workspaceId, cursor, limit });
 }
 
-export async function resumeThread(workspaceId: string, threadId: string) {
-  return invoke<any>("resume_thread", { workspaceId, threadId });
+export async function resumeThread(
+  workspaceId: string,
+  threadId: string,
+  options?: { excludeTurns?: boolean },
+) {
+  return invoke<any>("resume_thread", {
+    workspaceId,
+    threadId,
+    excludeTurns: options?.excludeTurns,
+  });
 }
 
 export async function readThread(workspaceId: string, threadId: string) {
   return invoke<any>("read_thread", { workspaceId, threadId });
+}
+
+export async function listThreadTurns(
+  workspaceId: string,
+  threadId: string,
+  cursor?: string | null,
+  limit?: number | null,
+) {
+  return invoke<any>("list_thread_turns", { workspaceId, threadId, cursor, limit });
+}
+
+export async function threadUnsubscribe(workspaceId: string, threadId: string) {
+  return invoke<any>("thread_unsubscribe", { workspaceId, threadId });
 }
 
 export async function threadLiveSubscribe(workspaceId: string, threadId: string) {

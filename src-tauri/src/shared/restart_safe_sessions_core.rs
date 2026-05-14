@@ -105,6 +105,7 @@ pub(crate) struct RestartSafeDebugStatus {
     pub(crate) protocol_version: u32,
     pub(crate) session_count: usize,
     pub(crate) active_session_count: usize,
+    pub(crate) processing_session_count: usize,
     pub(crate) retained_session_count: usize,
     pub(crate) journal_event_count: usize,
     pub(crate) pending_request_count: usize,
@@ -486,6 +487,13 @@ impl RestartSafeSessionStore {
                     || !record.pending_requests.is_empty()
             })
             .count();
+        let processing_session_count = records
+            .values()
+            .filter(|record| {
+                matches!(record.status.lifecycle, RestartSafeSessionLifecycle::Live)
+                    && record.status.active_turn_id.is_some()
+            })
+            .count();
         let retained_session_count = records
             .values()
             .filter(|record| !record.events.is_empty() || !record.resolved_requests.is_empty())
@@ -494,6 +502,7 @@ impl RestartSafeSessionStore {
             protocol_version: RESTART_SAFE_SESSION_PROTOCOL_VERSION,
             session_count: records.len(),
             active_session_count,
+            processing_session_count,
             retained_session_count,
             journal_event_count,
             pending_request_count,
@@ -724,8 +733,40 @@ mod tests {
         store.record_lifecycle_event("ws-1", "session/start", json!({}));
         let active = store.debug_status();
         assert_eq!(active.active_session_count, 1);
+        assert_eq!(active.processing_session_count, 0);
         assert_eq!(active.retained_session_count, 1);
         assert!(!active.idle_shutdown_allowed);
+    }
+
+    #[test]
+    fn debug_status_distinguishes_live_sessions_from_processing_turns() {
+        let store = RestartSafeSessionStore::new();
+        store.record_lifecycle_event("ws-idle", "session/attach", json!({}));
+        store.record_app_server_event(
+            "ws-busy",
+            json!({
+                "method": "turn/started",
+                "params": { "threadId": "thread-1", "turnId": "turn-1" }
+            }),
+        );
+
+        let debug = store.debug_status();
+
+        assert_eq!(debug.active_session_count, 2);
+        assert_eq!(debug.processing_session_count, 1);
+
+        store.record_app_server_event(
+            "ws-busy",
+            json!({
+                "method": "turn/completed",
+                "params": { "threadId": "thread-1", "turnId": "turn-1" }
+            }),
+        );
+
+        let completed = store.debug_status();
+
+        assert_eq!(completed.active_session_count, 1);
+        assert_eq!(completed.processing_session_count, 0);
     }
 
     #[test]

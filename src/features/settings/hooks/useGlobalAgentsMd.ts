@@ -8,5 +8,6 @@ export function useGlobalAgentsMd() {
     write: writeGlobalAgentsMd,
     readErrorTitle: "Couldn’t load global AGENTS.md",
     writeErrorTitle: "Couldn’t save global AGENTS.md",
+    toastOnReadError: false,
   });
 }
