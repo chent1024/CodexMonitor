@@ -1,6 +1,6 @@
 #[cfg(desktop)]
 use tauri::Theme;
-use tauri::Window;
+use tauri::{LogicalSize, Runtime, WebviewWindow, Window};
 
 #[cfg(test)]
 use std::sync::{Mutex, OnceLock};
@@ -12,6 +12,51 @@ type WindowAppearanceOverride =
 #[cfg(test)]
 static WINDOW_APPEARANCE_OVERRIDE: OnceLock<Mutex<Option<WindowAppearanceOverride>>> =
     OnceLock::new();
+
+#[cfg(desktop)]
+const DEFAULT_RESTORE_LOGICAL_WIDTH: f64 = 1200.0;
+#[cfg(desktop)]
+const DEFAULT_RESTORE_LOGICAL_HEIGHT: f64 = 700.0;
+#[cfg(desktop)]
+const DEFAULT_SIZE_TOLERANCE_PX: u32 = 8;
+
+#[cfg(desktop)]
+fn is_near_default_physical_size(width: u32, height: u32) -> bool {
+    width.abs_diff(DEFAULT_RESTORE_LOGICAL_WIDTH as u32) <= DEFAULT_SIZE_TOLERANCE_PX
+        && height.abs_diff(DEFAULT_RESTORE_LOGICAL_HEIGHT as u32) <= DEFAULT_SIZE_TOLERANCE_PX
+}
+
+#[cfg(desktop)]
+fn is_near_scaled_default_size(width: u32, height: u32, scale_factor: f64) -> bool {
+    if scale_factor <= 1.0 {
+        return false;
+    }
+    let scaled_width = (DEFAULT_RESTORE_LOGICAL_WIDTH / scale_factor).round() as u32;
+    let scaled_height = (DEFAULT_RESTORE_LOGICAL_HEIGHT / scale_factor).round() as u32;
+    width.abs_diff(scaled_width) <= DEFAULT_SIZE_TOLERANCE_PX
+        && height.abs_diff(scaled_height) <= DEFAULT_SIZE_TOLERANCE_PX
+}
+
+#[cfg(desktop)]
+pub(crate) fn repair_unscaled_default_window_size<R: Runtime>(
+    window: &WebviewWindow<R>,
+) -> Result<(), String> {
+    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    let inner_size = window.inner_size().map_err(|error| error.to_string())?;
+    if !is_near_default_physical_size(inner_size.width, inner_size.height)
+        && !is_near_scaled_default_size(inner_size.width, inner_size.height, scale_factor)
+    {
+        return Ok(());
+    }
+    window
+        .set_size(LogicalSize::new(
+            DEFAULT_RESTORE_LOGICAL_WIDTH,
+            DEFAULT_RESTORE_LOGICAL_HEIGHT,
+        ))
+        .map_err(|error| error.to_string())?;
+    let _ = window.center();
+    Ok(())
+}
 
 #[cfg(target_os = "macos")]
 fn apply_macos_window_appearance(window: &Window, theme: &str) -> Result<(), String> {

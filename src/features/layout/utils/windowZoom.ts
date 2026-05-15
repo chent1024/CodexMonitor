@@ -1,17 +1,15 @@
-import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
+import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import {
   currentMonitor,
   getCurrentWindow,
   type Monitor,
 } from "@tauri-apps/api/window";
-import { performNativeWindowZoom } from "@services/tauri";
-import { isMacPlatform } from "@utils/platformPaths";
 
 type WindowHandle = ReturnType<typeof getCurrentWindow>;
 
 const EDGE_TOLERANCE_PX = 8;
-const DEFAULT_RESTORE_WIDTH = 1200;
-const DEFAULT_RESTORE_HEIGHT = 700;
+const DEFAULT_RESTORE_LOGICAL_WIDTH = 1200;
+const DEFAULT_RESTORE_LOGICAL_HEIGHT = 700;
 
 type WindowBounds = {
   position: PhysicalPosition;
@@ -19,7 +17,16 @@ type WindowBounds = {
   outerSize: PhysicalSize;
 };
 
-let restoreBounds: Pick<WindowBounds, "position" | "innerSize"> | null = null;
+type RestoreBounds = {
+  position: PhysicalPosition;
+  innerSize: LogicalSize | PhysicalSize;
+};
+
+type EnsureWindowBoundsOptions = {
+  repairLegacyUnscaledDefault?: boolean;
+};
+
+let restoreBounds: RestoreBounds | null = null;
 let customZoomed = false;
 
 export function resetWindowZoomStateForTests() {
@@ -37,6 +44,10 @@ function currentWindowSafe() {
 
 function workAreaFor(monitor: Monitor | null) {
   return monitor?.workArea ?? null;
+}
+
+function scaleFactorFor(monitor: Monitor | null) {
+  return Math.max(1, monitor?.scaleFactor ?? 1);
 }
 
 async function readWindowBounds(windowHandle: WindowHandle): Promise<WindowBounds> {
@@ -89,45 +100,66 @@ function targetInnerSize(
 function centeredRestoreBounds(
   bounds: WindowBounds,
   workArea: NonNullable<Monitor["workArea"]>,
-) {
+  scaleFactor = 1,
+): RestoreBounds {
   const frame = frameDelta(bounds);
-  const width = Math.min(DEFAULT_RESTORE_WIDTH, workArea.size.width - frame.width);
-  const height = Math.min(DEFAULT_RESTORE_HEIGHT, workArea.size.height - frame.height);
+  const width = Math.min(
+    DEFAULT_RESTORE_LOGICAL_WIDTH,
+    Math.floor((workArea.size.width - frame.width) / scaleFactor),
+  );
+  const height = Math.min(
+    DEFAULT_RESTORE_LOGICAL_HEIGHT,
+    Math.floor((workArea.size.height - frame.height) / scaleFactor),
+  );
+  const physicalWidth = width * scaleFactor;
+  const physicalHeight = height * scaleFactor;
   return {
     position: new PhysicalPosition(
-      Math.round(workArea.position.x + (workArea.size.width - width - frame.width) / 2),
-      Math.round(workArea.position.y + (workArea.size.height - height - frame.height) / 2),
+      Math.round(workArea.position.x + (workArea.size.width - physicalWidth - frame.width) / 2),
+      Math.round(workArea.position.y + (workArea.size.height - physicalHeight - frame.height) / 2),
     ),
-    innerSize: new PhysicalSize(Math.max(360, width), Math.max(600, height)),
+    innerSize: new LogicalSize(Math.max(360, width), Math.max(600, height)),
   };
 }
 
-async function performNativeZoomIfAvailable() {
-  if (!isMacPlatform()) {
+function isLegacyUnscaledDefaultSize(bounds: WindowBounds, scaleFactor: number) {
+  if (scaleFactor <= 1) {
     return false;
   }
-  try {
-    return await performNativeWindowZoom();
-  } catch {
-    return false;
-  }
+  return (
+    (
+      Math.abs(bounds.innerSize.width - DEFAULT_RESTORE_LOGICAL_WIDTH) <= EDGE_TOLERANCE_PX &&
+      Math.abs(bounds.innerSize.height - DEFAULT_RESTORE_LOGICAL_HEIGHT) <= EDGE_TOLERANCE_PX
+    ) ||
+    (
+      Math.abs(window.innerWidth * scaleFactor - DEFAULT_RESTORE_LOGICAL_WIDTH) <=
+        EDGE_TOLERANCE_PX * scaleFactor &&
+      Math.abs(window.innerHeight * scaleFactor - DEFAULT_RESTORE_LOGICAL_HEIGHT) <=
+        EDGE_TOLERANCE_PX * scaleFactor
+    )
+  );
 }
 
 export async function ensureWindowWithinCurrentDisplay(
   windowHandle: WindowHandle | null = currentWindowSafe(),
+  options: EnsureWindowBoundsOptions = {},
 ) {
   if (!windowHandle) {
     return;
   }
-  const workArea = workAreaFor(await currentMonitor());
+  const monitor = await currentMonitor();
+  const workArea = workAreaFor(monitor);
   if (!workArea) {
     return;
   }
   const bounds = await readWindowBounds(windowHandle);
-  if (!exceedsWorkArea(bounds, workArea)) {
+  const scaleFactor = scaleFactorFor(monitor);
+  const shouldRepairLegacySize = options.repairLegacyUnscaledDefault !== false &&
+    isLegacyUnscaledDefaultSize(bounds, scaleFactor);
+  if (!exceedsWorkArea(bounds, workArea) && !shouldRepairLegacySize) {
     return;
   }
-  const safeBounds = centeredRestoreBounds(bounds, workArea);
+  const safeBounds = centeredRestoreBounds(bounds, workArea, scaleFactor);
   await windowHandle.setPosition(safeBounds.position);
   await windowHandle.setSize(safeBounds.innerSize);
 }
@@ -138,25 +170,17 @@ export async function toggleWindowZoomWithinCurrentDisplay(
   if (!windowHandle) {
     return;
   }
-  const workArea = workAreaFor(await currentMonitor());
+  const monitor = await currentMonitor();
+  const workArea = workAreaFor(monitor);
   if (!workArea) {
-    if (await performNativeZoomIfAvailable()) {
-      restoreBounds = null;
-      customZoomed = false;
-      return;
-    }
     await windowHandle.toggleMaximize();
     return;
   }
 
   const bounds = await readWindowBounds(windowHandle);
+  const scaleFactor = scaleFactorFor(monitor);
   const nearWorkArea = isNearWorkArea(bounds, workArea);
   const outsideWorkArea = exceedsWorkArea(bounds, workArea);
-  if (!nearWorkArea && !outsideWorkArea && await performNativeZoomIfAvailable()) {
-    restoreBounds = null;
-    customZoomed = false;
-    return;
-  }
   const nativeMaximized = await windowHandle.isMaximized().catch(() => false);
   const shouldRestore = nativeMaximized || customZoomed || nearWorkArea;
 
@@ -170,12 +194,14 @@ export async function toggleWindowZoomWithinCurrentDisplay(
       await windowHandle.setSize(nextRestoreBounds.innerSize);
       return;
     }
-    await ensureWindowWithinCurrentDisplay(windowHandle);
+    const fallbackRestoreBounds = centeredRestoreBounds(bounds, workArea, scaleFactor);
+    await windowHandle.setPosition(fallbackRestoreBounds.position);
+    await windowHandle.setSize(fallbackRestoreBounds.innerSize);
     return;
   }
 
   restoreBounds = outsideWorkArea
-    ? centeredRestoreBounds(bounds, workArea)
+    ? centeredRestoreBounds(bounds, workArea, scaleFactor)
     : { position: bounds.position, innerSize: bounds.innerSize };
   customZoomed = true;
 

@@ -4,6 +4,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { toggleWindowZoomWithinCurrentDisplay } from "../utils/windowZoom";
 
 const DRAG_START_THRESHOLD_PX = 4;
+const DOUBLE_CLICK_MAX_INTERVAL_MS = 500;
+const DOUBLE_CLICK_MAX_DISTANCE_PX = 6;
+const FALLBACK_TOP_CHROME_HEIGHT_PX = 44;
 
 const NEVER_DRAG_TARGET_SELECTOR = [
   "button",
@@ -85,6 +88,56 @@ function isInsideAnyDragZone(
   return false;
 }
 
+function parsePixelValue(value: string) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function topChromeBandHeight() {
+  const app = document.querySelector<HTMLElement>(".app");
+  if (!app) {
+    return FALLBACK_TOP_CHROME_HEIGHT_PX;
+  }
+  const styles = window.getComputedStyle(app);
+  return (
+    parsePixelValue(styles.getPropertyValue("--window-drag-hit-height")) ??
+    parsePixelValue(styles.getPropertyValue("--main-topbar-height")) ??
+    FALLBACK_TOP_CHROME_HEIGHT_PX
+  );
+}
+
+function isInsideTopChromeBand(clientX: number, clientY: number) {
+  const width = document.documentElement.clientWidth || window.innerWidth;
+  return (
+    clientX >= 0 &&
+    clientX <= width &&
+    clientY >= 0 &&
+    clientY <= topChromeBandHeight()
+  );
+}
+
+function isInsideWindowDragSurface(
+  clientX: number,
+  clientY: number,
+  dragZoneSelectors: readonly string[],
+) {
+  return (
+    isInsideAnyDragZone(clientX, clientY, dragZoneSelectors) ||
+    isInsideTopChromeBand(clientX, clientY)
+  );
+}
+
+function isNearPreviousClick(
+  previous: { x: number; y: number; time: number },
+  event: MouseEvent,
+) {
+  return (
+    event.timeStamp - previous.time <= DOUBLE_CLICK_MAX_INTERVAL_MS &&
+    Math.abs(event.clientX - previous.x) <= DOUBLE_CLICK_MAX_DISTANCE_PX &&
+    Math.abs(event.clientY - previous.y) <= DOUBLE_CLICK_MAX_DISTANCE_PX
+  );
+}
+
 export function useWindowDrag(targetId: string) {
   useEffect(() => {
     if (!isTauri()) {
@@ -92,6 +145,8 @@ export function useWindowDrag(targetId: string) {
     }
 
     let dragCandidate: { x: number; y: number } | null = null;
+    let lastClick: { x: number; y: number; time: number } | null = null;
+    let suppressNextDoubleClick = false;
 
     const dragZoneSelectors = [
       `#${targetId}`,
@@ -101,15 +156,35 @@ export function useWindowDrag(targetId: string) {
       ".right-panel-drag-strip",
     ] as const;
 
+    const toggleWindowZoomSafe = () => {
+      void toggleWindowZoomWithinCurrentDisplay().catch(() => {
+        // Ignore platform-specific window manager failures.
+      });
+    };
+
     const handleMouseDown = (event: MouseEvent) => {
       if (isNeverDragTarget(event)) {
         dragCandidate = null;
+        lastClick = null;
         return;
       }
-      if (!isInsideAnyDragZone(event.clientX, event.clientY, dragZoneSelectors)) {
+      if (!isInsideWindowDragSurface(event.clientX, event.clientY, dragZoneSelectors)) {
         dragCandidate = null;
+        lastClick = null;
         return;
       }
+
+      if (event.detail >= 2 || (lastClick && isNearPreviousClick(lastClick, event))) {
+        dragCandidate = null;
+        lastClick = null;
+        suppressNextDoubleClick = true;
+        event.preventDefault();
+        event.stopPropagation();
+        toggleWindowZoomSafe();
+        return;
+      }
+
+      lastClick = { x: event.clientX, y: event.clientY, time: event.timeStamp };
       dragCandidate = { x: event.clientX, y: event.clientY };
     };
 
@@ -143,14 +218,16 @@ export function useWindowDrag(targetId: string) {
       if (isNeverDragTarget(event)) {
         return;
       }
-      if (!isInsideAnyDragZone(event.clientX, event.clientY, dragZoneSelectors)) {
+      if (!isInsideWindowDragSurface(event.clientX, event.clientY, dragZoneSelectors)) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
-      void toggleWindowZoomWithinCurrentDisplay().catch(() => {
-        // Ignore platform-specific window manager failures.
-      });
+      if (suppressNextDoubleClick) {
+        suppressNextDoubleClick = false;
+        return;
+      }
+      toggleWindowZoomSafe();
     };
 
     document.addEventListener("mousedown", handleMouseDown, true);

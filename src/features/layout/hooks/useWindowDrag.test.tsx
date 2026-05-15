@@ -43,6 +43,13 @@ function movePastDragThreshold(clientX: number, clientY: number) {
   );
 }
 
+function setViewportWidth(width: number) {
+  Object.defineProperty(document.documentElement, "clientWidth", {
+    configurable: true,
+    value: width,
+  });
+}
+
 describe("useWindowDrag", () => {
   const startDragging = vi.fn();
 
@@ -52,6 +59,7 @@ describe("useWindowDrag", () => {
     isTauriMock.mockReturnValue(true);
     getCurrentWindowMock.mockReturnValue({ startDragging });
     toggleWindowZoomWithinCurrentDisplayMock.mockResolvedValue(undefined);
+    setViewportWidth(1200);
   });
 
   afterEach(() => {
@@ -246,6 +254,114 @@ describe("useWindowDrag", () => {
     );
 
     expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles safe zoom in the top chrome band when drag zone geometry is unavailable", () => {
+    const app = document.createElement("div");
+    app.className = "app";
+    document.body.appendChild(app);
+    app.style.setProperty("--window-drag-hit-height", "44px");
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    document.body.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 400,
+        clientY: 20,
+      }),
+    );
+
+    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles safe zoom from two top chrome mousedowns when dblclick is not emitted", () => {
+    const app = document.createElement("div");
+    app.className = "app";
+    document.body.appendChild(app);
+    app.style.setProperty("--window-drag-hit-height", "44px");
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    document.body.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 400,
+        clientY: 20,
+      }),
+    );
+    document.body.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    document.body.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 402,
+        clientY: 21,
+      }),
+    );
+
+    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not double-toggle when manual top chrome double-click detection is followed by dblclick", () => {
+    const app = document.createElement("div");
+    app.className = "app";
+    document.body.appendChild(app);
+    app.style.setProperty("--window-drag-hit-height", "44px");
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    document.body.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 400,
+        clientY: 20,
+      }),
+    );
+    document.body.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    document.body.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 400,
+        clientY: 20,
+        detail: 2,
+      }),
+    );
+    document.body.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 400,
+        clientY: 20,
+      }),
+    );
+
+    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts dragging from the top chrome band when drag zone geometry is unavailable", () => {
+    const app = document.createElement("div");
+    app.className = "app";
+    document.body.appendChild(app);
+    app.style.setProperty("--window-drag-hit-height", "44px");
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    document.body.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 400,
+        clientY: 20,
+      }),
+    );
+    movePastDragThreshold(400, 20);
+
+    expect(startDragging).toHaveBeenCalledTimes(1);
   });
 
   it("does not start dragging before a middle topbar double-click", () => {

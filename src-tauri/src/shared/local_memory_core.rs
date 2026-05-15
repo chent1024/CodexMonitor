@@ -13,6 +13,7 @@ const HASH_EMBEDDING_MODEL_ID: &str = "codex-monitor-hash-embedding-v2";
 const LOCAL_NGRAM_EMBEDDING_MODEL_ID: &str = "codex-monitor-local-ngram-v1";
 const PENDING_REVIEW_CATEGORY: &str = "pending-review";
 const APPROVED_REVIEW_CATEGORY: &str = "approved";
+const MIN_SEMANTIC_ONLY_SCORE: f64 = 0.78;
 const VECTOR_TABLE_SQL: &str =
     "CREATE VIRTUAL TABLE IF NOT EXISTS memory_vec USING vec0(embedding float[64]);";
 
@@ -641,6 +642,10 @@ impl LocalMemoryStore {
                 continue;
             };
             if !filters_match(&row.record, &input.filters) {
+                continue;
+            }
+            let lexical_score = lexical_overlap_score(query, &row.record.content);
+            if !candidate_is_relevant(&scores, lexical_score) {
                 continue;
             }
             let scope_score = scope_score(&row.record, &input.filters);
@@ -1779,10 +1784,8 @@ fn temporal_score(memory: &MemoryRecord) -> f64 {
 }
 
 fn fts_query(query: &str) -> Option<String> {
-    let tokens = query
-        .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '-'))
-        .map(str::trim)
-        .filter(|value| value.len() >= 2)
+    let tokens = tokenize_terms(query)
+        .into_iter()
         .take(16)
         .map(|value| format!("\"{}\"", value.replace('"', "\"\"")))
         .collect::<Vec<_>>();
@@ -1804,6 +1807,12 @@ fn lexical_overlap_score(query: &str, content: &str) -> f64 {
         .filter(|token| content_tokens.contains(*token))
         .count();
     hits as f64 / query_tokens.len() as f64
+}
+
+fn candidate_is_relevant(scores: &CandidateScore, lexical_score: f64) -> bool {
+    scores.keyword_score > 0.0
+        || scores.entity_score > 0.0
+        || (scores.semantic_score >= MIN_SEMANTIC_ONLY_SCORE && lexical_score > 0.0)
 }
 
 fn jaccard_score(left: &HashSet<String>, right: &HashSet<String>) -> f64 {
@@ -1867,10 +1876,64 @@ fn normalize_for_subject(value: &str) -> String {
 }
 
 fn token_set(value: &str) -> HashSet<String> {
-    value
-        .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '-'))
-        .map(|token| token.trim().to_ascii_lowercase())
-        .filter(|token| token.len() >= 2)
+    tokenize_terms(value).into_iter().collect()
+}
+
+fn tokenize_terms(value: &str) -> Vec<String> {
+    let mut terms = Vec::new();
+    let mut current = String::new();
+    for ch in value.chars() {
+        if is_memory_token_char(ch) {
+            current.push(ch);
+        } else {
+            push_memory_token_terms(&mut terms, &current);
+            current.clear();
+        }
+    }
+    push_memory_token_terms(&mut terms, &current);
+    dedupe_terms(terms)
+}
+
+fn is_memory_token_char(ch: char) -> bool {
+    ch.is_alphanumeric() || ch == '_' || ch == '-'
+}
+
+fn push_memory_token_terms(terms: &mut Vec<String>, token: &str) {
+    let normalized = token.trim().to_ascii_lowercase();
+    if normalized.chars().count() < 2 {
+        return;
+    }
+    terms.push(normalized.clone());
+    if normalized.chars().any(is_cjk_char) {
+        for ngram in char_ngrams(&normalized, 2)
+            .into_iter()
+            .chain(char_ngrams(&normalized, 3))
+        {
+            if ngram.chars().count() >= 2 {
+                terms.push(ngram);
+            }
+        }
+    }
+}
+
+fn is_cjk_char(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x3400..=0x4DBF
+            | 0x4E00..=0x9FFF
+            | 0xF900..=0xFAFF
+            | 0x20000..=0x2A6DF
+            | 0x2A700..=0x2B73F
+            | 0x2B740..=0x2B81F
+            | 0x2B820..=0x2CEAF
+    )
+}
+
+fn dedupe_terms(values: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    values
+        .into_iter()
+        .filter(|value| !value.is_empty() && seen.insert(value.clone()))
         .collect()
 }
 
@@ -2168,6 +2231,72 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert!(results[0].entity_score > 0.0);
         assert!(results[0].reason.contains("entity"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn memory_search_handles_chinese_without_unrelated_recall() {
+        let path = std::env::temp_dir().join(format!(
+            "codex-monitor-memory-chinese-search-test-{}.sqlite",
+            Uuid::new_v4()
+        ));
+        let store = LocalMemoryStore::open(&path).expect("open store");
+        store
+            .add_memory(AddMemoryInput {
+                content: "用户偏好：以后默认用中文回答，并先给结论。".to_string(),
+                scope: Some("user".to_string()),
+                kind: Some("user_preferences".to_string()),
+                ..AddMemoryInput::default()
+            })
+            .expect("add chinese memory");
+
+        let matches = store
+            .search_memories(SearchMemoryInput {
+                query: "默认用中文回答".to_string(),
+                limit: Some(5),
+                filters: MemoryFilters::default(),
+            })
+            .expect("search chinese memory");
+        assert_eq!(matches.len(), 1);
+        assert!(matches[0].memory.content.contains("默认用中文回答"));
+
+        let unrelated = store
+            .search_memories(SearchMemoryInput {
+                query: "unrelated database schema migration".to_string(),
+                limit: Some(5),
+                filters: MemoryFilters::default(),
+            })
+            .expect("search unrelated memory");
+        assert!(unrelated.is_empty());
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn memory_search_filters_zero_overlap_fallback_candidates() {
+        let path = std::env::temp_dir().join(format!(
+            "codex-monitor-memory-zero-overlap-search-test-{}.sqlite",
+            Uuid::new_v4()
+        ));
+        let store = LocalMemoryStore::open(&path).expect("open store");
+        store
+            .add_memory(AddMemoryInput {
+                content: "Use npm run tauri:dev for the local desktop app.".to_string(),
+                scope: Some("workspace".to_string()),
+                kind: Some("tooling_setup".to_string()),
+                ..AddMemoryInput::default()
+            })
+            .expect("add memory");
+
+        let unrelated = store
+            .search_memories(SearchMemoryInput {
+                query: "kubernetes ingress certificate rotation".to_string(),
+                limit: Some(5),
+                filters: MemoryFilters::default(),
+            })
+            .expect("search unrelated memory");
+        assert!(unrelated.is_empty());
 
         let _ = fs::remove_file(path);
     }

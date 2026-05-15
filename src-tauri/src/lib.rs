@@ -133,6 +133,19 @@ pub fn run() {
             }
             #[cfg(desktop)]
             {
+                if let Some(main_window) = app.get_webview_window("main") {
+                    let _ = window::repair_unscaled_default_window_size(&main_window);
+                    let main_window_later = main_window.clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                        let _ = window::repair_unscaled_default_window_size(&main_window_later);
+                        tokio::time::sleep(std::time::Duration::from_millis(450)).await;
+                        let _ = window::repair_unscaled_default_window_size(&main_window_later);
+                    });
+                }
+            }
+            #[cfg(desktop)]
+            {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     let state = app_handle.state::<state::AppState>();

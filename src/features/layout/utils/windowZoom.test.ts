@@ -1,23 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
+import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import capabilities from "../../../../src-tauri/capabilities/default.json";
 
 const currentMonitorMock = vi.hoisted(() => vi.fn());
 const getCurrentWindowMock = vi.hoisted(() => vi.fn());
-const performNativeWindowZoomMock = vi.hoisted(() => vi.fn());
-const isMacPlatformMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/window", () => ({
   currentMonitor: currentMonitorMock,
   getCurrentWindow: getCurrentWindowMock,
-}));
-
-vi.mock("@services/tauri", () => ({
-  performNativeWindowZoom: performNativeWindowZoomMock,
-}));
-
-vi.mock("@utils/platformPaths", () => ({
-  isMacPlatform: isMacPlatformMock,
 }));
 
 import {
@@ -26,7 +16,7 @@ import {
   toggleWindowZoomWithinCurrentDisplay,
 } from "./windowZoom";
 
-function monitor(width = 1440, height = 900) {
+function monitor(width = 1440, height = 900, scaleFactor = 1) {
   return {
     name: "Built-in",
     position: new PhysicalPosition(0, 0),
@@ -35,7 +25,7 @@ function monitor(width = 1440, height = 900) {
       position: new PhysicalPosition(0, 25),
       size: new PhysicalSize(width, height - 25),
     },
-    scaleFactor: 1,
+    scaleFactor,
   };
 }
 
@@ -62,36 +52,30 @@ describe("windowZoom", () => {
     vi.clearAllMocks();
     resetWindowZoomStateForTests();
     currentMonitorMock.mockResolvedValue(monitor());
-    isMacPlatformMock.mockReturnValue(false);
-    performNativeWindowZoomMock.mockResolvedValue(false);
   });
 
-  it("uses native macOS zoom when available", async () => {
+  it("falls back to native maximize when the current monitor is unavailable", async () => {
     const handle = windowHandle();
-    isMacPlatformMock.mockReturnValue(true);
-    performNativeWindowZoomMock.mockResolvedValue(true);
+    currentMonitorMock.mockResolvedValue(null);
 
     await toggleWindowZoomWithinCurrentDisplay(handle as never);
 
-    expect(performNativeWindowZoomMock).toHaveBeenCalledTimes(1);
     expect(handle.setPosition).not.toHaveBeenCalled();
     expect(handle.setSize).not.toHaveBeenCalled();
+    expect(handle.toggleMaximize).toHaveBeenCalledTimes(1);
   });
 
-  it("does not use native macOS zoom when already filling the work area", async () => {
+  it("restores when already filling the work area", async () => {
     const handle = windowHandle({
       position: new PhysicalPosition(0, 25),
       outerSize: new PhysicalSize(1440, 875),
       innerSize: new PhysicalSize(1440, 875),
     });
-    isMacPlatformMock.mockReturnValue(true);
-    performNativeWindowZoomMock.mockResolvedValue(true);
 
     await toggleWindowZoomWithinCurrentDisplay(handle as never);
 
-    expect(performNativeWindowZoomMock).not.toHaveBeenCalled();
-    expect(handle.setPosition).not.toHaveBeenCalled();
-    expect(handle.setSize).not.toHaveBeenCalled();
+    expect(handle.setPosition).toHaveBeenCalledWith(new PhysicalPosition(120, 113));
+    expect(handle.setSize).toHaveBeenCalledWith(new LogicalSize(1200, 700));
   });
 
   it("zooms to the current display work area without exceeding it", async () => {
@@ -135,7 +119,50 @@ describe("windowZoom", () => {
     await ensureWindowWithinCurrentDisplay(handle as never);
 
     expect(handle.setPosition).toHaveBeenCalledWith(new PhysicalPosition(120, 113));
-    expect(handle.setSize).toHaveBeenCalledWith(new PhysicalSize(1200, 700));
+    expect(handle.setSize).toHaveBeenCalledWith(new LogicalSize(1200, 700));
+  });
+
+  it("keeps in-bounds default restore size unchanged on scale 1 displays", async () => {
+    const handle = windowHandle({
+      position: new PhysicalPosition(100, 120),
+      outerSize: new PhysicalSize(1200, 700),
+      innerSize: new PhysicalSize(1200, 700),
+    });
+
+    await ensureWindowWithinCurrentDisplay(handle as never);
+
+    expect(handle.setPosition).not.toHaveBeenCalled();
+    expect(handle.setSize).not.toHaveBeenCalled();
+  });
+
+  it("rescales legacy unscaled restore bounds on high-DPI displays", async () => {
+    currentMonitorMock.mockResolvedValue(monitor(3456, 2234, 2));
+    const handle = windowHandle({
+      position: new PhysicalPosition(100, 120),
+      outerSize: new PhysicalSize(1200, 700),
+      innerSize: new PhysicalSize(1200, 700),
+    });
+
+    await ensureWindowWithinCurrentDisplay(handle as never);
+
+    expect(handle.setPosition).toHaveBeenCalledWith(new PhysicalPosition(528, 430));
+    expect(handle.setSize).toHaveBeenCalledWith(new LogicalSize(1200, 700));
+  });
+
+  it("can skip high-DPI legacy restore repair after user-driven resize events", async () => {
+    currentMonitorMock.mockResolvedValue(monitor(3456, 2234, 2));
+    const handle = windowHandle({
+      position: new PhysicalPosition(100, 120),
+      outerSize: new PhysicalSize(1200, 700),
+      innerSize: new PhysicalSize(1200, 700),
+    });
+
+    await ensureWindowWithinCurrentDisplay(handle as never, {
+      repairLegacyUnscaledDefault: false,
+    });
+
+    expect(handle.setPosition).not.toHaveBeenCalled();
+    expect(handle.setSize).not.toHaveBeenCalled();
   });
 
   it("keeps Tauri desktop permissions in sync with window zoom APIs", () => {

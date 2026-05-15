@@ -22,11 +22,15 @@ export function useWindowBoundsGuard() {
     }
     let mounted = true;
     let timeoutId: number | null = null;
+    let startupTimeoutIds: number[] = [];
     let unlistenResized: (() => void) | null = null;
     let unlistenMoved: (() => void) | null = null;
 
-    const ensureBounds = () => {
-      void ensureWindowWithinCurrentDisplay(windowHandle).catch(() => {
+    const ensureBounds = (repairLegacyUnscaledDefault = true) => {
+      void ensureWindowWithinCurrentDisplay(
+        windowHandle,
+        { repairLegacyUnscaledDefault },
+      ).catch(() => {
         // Window bounds are best-effort; startup should not fail on platform quirks.
       });
     };
@@ -37,11 +41,16 @@ export function useWindowBoundsGuard() {
       }
       timeoutId = window.setTimeout(() => {
         timeoutId = null;
-        ensureBounds();
+        ensureBounds(false);
       }, 80);
     };
 
     ensureBounds();
+    startupTimeoutIds = [150, 600].map((delayMs) =>
+      window.setTimeout(() => {
+        ensureBounds();
+      }, delayMs),
+    );
     void windowHandle.onResized(scheduleEnsureBounds).then((unlisten) => {
       if (!mounted) {
         unlisten();
@@ -67,6 +76,8 @@ export function useWindowBoundsGuard() {
       if (timeoutId !== null) {
         window.clearTimeout(timeoutId);
       }
+      startupTimeoutIds.forEach((id) => window.clearTimeout(id));
+      startupTimeoutIds = [];
       unlistenResized?.();
       unlistenMoved?.();
     };
