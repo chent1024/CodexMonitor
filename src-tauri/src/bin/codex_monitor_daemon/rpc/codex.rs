@@ -372,6 +372,209 @@ pub(super) async fn try_handle(
                     .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
             )
         }
+        "set_local_memory_db_path" => {
+            let input = match parse_input::<codex_config::SetLocalMemoryDbPathInput>(params) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .set_local_memory_db_path(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "set_local_memory_embedding_model" => {
+            let input = match parse_input::<codex_config::SetLocalMemoryEmbeddingModelInput>(params)
+            {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .set_local_memory_embedding_model(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "check_local_memory_connection" => Some(
+            state
+                .check_local_memory_connection()
+                .await
+                .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+        ),
+        "add_local_memory" => {
+            let input = match parse_input::<local_memory_core::AddMemoryInput>(params) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .add_local_memory(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "search_local_memories" => {
+            let input = match parse_input::<local_memory_core::SearchMemoryInput>(params) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .search_local_memories(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "list_local_memories" => {
+            let input = match parse_input::<local_memory_core::ListMemoryInput>(params) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .list_local_memories(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "get_local_memory" => {
+            let id = match parse_string(params, "id") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .get_local_memory(id)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "update_local_memory" => {
+            let id = match parse_string(params, "id") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let content = match parse_string(params, "content") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .update_local_memory(id, content)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "delete_local_memory" => {
+            let id = match parse_string(params, "id") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .delete_local_memory(id)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "delete_all_local_memories" => Some(
+            state
+                .delete_all_local_memories()
+                .await
+                .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+        ),
+        "import_local_memories" => {
+            let input = match parse_input::<local_memory_core::ImportMemoriesInput>(params) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .import_local_memories(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "list_local_memory_review_queue" => {
+            let limit = params
+                .get("limit")
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|value| u32::try_from(value).ok());
+            Some(
+                state
+                    .list_local_memory_review_queue(limit)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "approve_local_memory" => {
+            let id = match parse_string(params, "id") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .approve_local_memory(id)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "reject_local_memory" => {
+            let id = match parse_string(params, "id") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .reject_local_memory(id)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "list_local_memory_entities" => Some(
+            state
+                .list_local_memory_entities()
+                .await
+                .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+        ),
+        "delete_local_memory_entities" => Some(
+            state
+                .delete_local_memory_entities()
+                .await
+                .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+        ),
+        "rebuild_local_memory_indexes" => Some(
+            state
+                .rebuild_local_memory_indexes()
+                .await
+                .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+        ),
+        "list_local_memory_events" => {
+            let input = match parse_input::<local_memory_core::ListMemoryEventsInput>(params) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .list_local_memory_events(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "get_local_memory_event_status" => {
+            let id = match parse_string(params, "id") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .get_local_memory_event_status(id)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
         "get_agents_settings" => Some(
             state
                 .get_agents_settings()

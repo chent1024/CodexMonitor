@@ -5,6 +5,7 @@ import type {
   AppSettings,
   CodexUpdateResult,
   CodexDoctorResult,
+  DaemonHealthStatus,
   LocalUsageSnapshot,
   TcpDaemonStatus,
   TailscaleDaemonCommandPreview,
@@ -762,12 +763,32 @@ export type LocalMemoryConfigStatus = {
   commandPath: string;
   dbPath: string;
   vectorBackend: string;
+  embeddingModel: string;
+  embeddingDim: number;
+  embeddingModels: LocalMemoryEmbeddingModel[];
+  indexRebuildRecommended: boolean;
+};
+
+export type LocalMemoryEmbeddingModel = {
+  id: string;
+  label: string;
+  dim: number;
+  default: boolean;
+};
+
+export type LocalMemoryConnectionCheck = {
+  ok: boolean;
+  protocolVersion: string | null;
+  toolCount: number | null;
+  error: string | null;
+  checkedAt: number;
 };
 
 export type LocalMemoryStoreDebugStatus = {
   dbPath: string;
   vectorBackend: string;
   vectorAvailable: boolean;
+  embeddingModel: string;
   embeddingDim: number;
   memoryCount: number;
   vectorCount: number;
@@ -780,12 +801,111 @@ export type LocalMemoryAccessLogEntry = {
   memoryId: string | null;
   query: string | null;
   event: string;
+  status: string;
   resultCount: number | null;
   score: number | null;
   threadId: string | null;
   runId: string | null;
   error: string | null;
   createdAt: number;
+};
+
+export type LocalMemoryFilters = {
+  userId?: string | null;
+  agentId?: string | null;
+  appId?: string | null;
+  runId?: string | null;
+  workspaceId?: string | null;
+  workspacePath?: string | null;
+  threadId?: string | null;
+  scope?: string | null;
+  kind?: string | null;
+  categories?: string[];
+};
+
+export type LocalMemoryRecord = {
+  id: string;
+  scope: string;
+  workspaceId: string | null;
+  workspacePath: string | null;
+  threadId: string | null;
+  userId: string | null;
+  agentId: string | null;
+  appId: string | null;
+  runId: string | null;
+  kind: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  categories: string[];
+  confidence: number;
+  createdAt: number;
+  updatedAt: number;
+  lastUsedAt: number | null;
+  expiresAt: number | null;
+  supersedesId: string | null;
+  supersededById: string | null;
+};
+
+export type LocalMemorySearchResult = LocalMemoryRecord & {
+  score: number;
+  semanticScore: number;
+  keywordScore: number;
+  entityScore: number;
+  scopeScore: number;
+  temporalScore: number;
+  reason: string;
+};
+
+export type LocalMemoryEntity = {
+  id: string;
+  name: string;
+  normalizedName: string;
+  kind: string | null;
+  memoryCount: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type AddLocalMemoryInput = {
+  content: string;
+  scope?: string | null;
+  kind?: string | null;
+  metadata?: Record<string, unknown>;
+  categories?: string[];
+  filters?: LocalMemoryFilters;
+  confidence?: number | null;
+  expiresAt?: number | null;
+  supersedesId?: string | null;
+};
+
+export type ImportLocalMemoryRecord = AddLocalMemoryInput;
+
+export type ImportLocalMemoriesInput = {
+  memories: ImportLocalMemoryRecord[];
+};
+
+export type ImportLocalMemoriesResult = {
+  imported: number;
+  skipped: number;
+  rebuiltIndexes: boolean;
+};
+
+export type SearchLocalMemoryInput = {
+  query?: string;
+  limit?: number | null;
+  filters?: LocalMemoryFilters;
+};
+
+export type ListLocalMemoryInput = {
+  limit?: number | null;
+  filters?: LocalMemoryFilters;
+};
+
+export type ListLocalMemoryEventsInput = {
+  limit?: number | null;
+  memoryId?: string | null;
+  runId?: string | null;
+  event?: string | null;
 };
 
 export type LocalMemoryDebugSnapshot = {
@@ -808,6 +928,109 @@ export async function setLocalMemoryEnabled(
   return invoke("set_local_memory_enabled", { enabled });
 }
 
+export async function setLocalMemoryDbPath(
+  dbPath: string,
+): Promise<LocalMemoryConfigStatus> {
+  return invoke("set_local_memory_db_path", { input: { dbPath } });
+}
+
+export async function setLocalMemoryEmbeddingModel(
+  embeddingModel: string,
+): Promise<LocalMemoryConfigStatus> {
+  return invoke("set_local_memory_embedding_model", {
+    input: { embeddingModel },
+  });
+}
+
+export async function checkLocalMemoryConnection(): Promise<LocalMemoryConnectionCheck> {
+  return invoke("check_local_memory_connection");
+}
+
+export async function addLocalMemory(
+  input: AddLocalMemoryInput,
+): Promise<LocalMemoryRecord> {
+  return invoke("add_local_memory", { input });
+}
+
+export async function searchLocalMemories(
+  input: SearchLocalMemoryInput,
+): Promise<LocalMemorySearchResult[]> {
+  return invoke("search_local_memories", { input });
+}
+
+export async function listLocalMemories(
+  input: ListLocalMemoryInput,
+): Promise<LocalMemoryRecord[]> {
+  return invoke("list_local_memories", { input });
+}
+
+export async function getLocalMemory(
+  id: string,
+): Promise<LocalMemoryRecord | null> {
+  return invoke("get_local_memory", { id });
+}
+
+export async function updateLocalMemory(
+  id: string,
+  content: string,
+): Promise<LocalMemoryRecord | null> {
+  return invoke("update_local_memory", { id, content });
+}
+
+export async function deleteLocalMemory(id: string): Promise<boolean> {
+  return invoke("delete_local_memory", { id });
+}
+
+export async function deleteAllLocalMemories(): Promise<number> {
+  return invoke("delete_all_local_memories");
+}
+
+export async function importLocalMemories(
+  input: ImportLocalMemoriesInput,
+): Promise<ImportLocalMemoriesResult> {
+  return invoke("import_local_memories", { input });
+}
+
+export async function listLocalMemoryReviewQueue(
+  limit?: number | null,
+): Promise<LocalMemoryRecord[]> {
+  return invoke("list_local_memory_review_queue", { limit });
+}
+
+export async function approveLocalMemory(
+  id: string,
+): Promise<LocalMemoryRecord | null> {
+  return invoke("approve_local_memory", { id });
+}
+
+export async function rejectLocalMemory(id: string): Promise<boolean> {
+  return invoke("reject_local_memory", { id });
+}
+
+export async function listLocalMemoryEntities(): Promise<LocalMemoryEntity[]> {
+  return invoke("list_local_memory_entities");
+}
+
+export async function deleteLocalMemoryEntities(): Promise<number> {
+  return invoke("delete_local_memory_entities");
+}
+
+export async function rebuildLocalMemoryIndexes(): Promise<LocalMemoryStoreDebugStatus> {
+  return invoke("rebuild_local_memory_indexes");
+}
+
+export async function listLocalMemoryEvents(
+  input: ListLocalMemoryEventsInput = {},
+): Promise<LocalMemoryAccessLogEntry[]> {
+  return invoke("list_local_memory_events", { input });
+}
+
+export async function getLocalMemoryEventStatus(
+  id: string,
+): Promise<LocalMemoryAccessLogEntry | null> {
+  return invoke("get_local_memory_event_status", { id });
+}
+
 export type RestartSafeSessionLifecycle =
   | "live"
   | "completed"
@@ -817,6 +1040,7 @@ export type RestartSafeSessionLifecycle =
 
 export type RestartSafeSessionEvent = {
   sessionId: string;
+  sessionInstanceId?: string;
   workspaceId: string;
   threadId: string | null;
   turnId: string | null;
@@ -828,6 +1052,7 @@ export type RestartSafeSessionEvent = {
 
 export type RestartSafeSessionStatus = {
   sessionId: string;
+  sessionInstanceId?: string;
   workspaceId: string;
   lifecycle: RestartSafeSessionLifecycle;
   activeThreadId: string | null;
@@ -856,6 +1081,7 @@ export type PendingSessionRequest = {
 
 export type RestartSafeReplay = {
   sessionId: string;
+  sessionInstanceId?: string;
   fromSeq: number;
   events: RestartSafeSessionEvent[];
   latestSeq: number;
@@ -877,6 +1103,7 @@ export type RestartSafeDebugStatus = {
   processingSessionCount?: number;
   retainedSessionCount: number;
   journalEventCount: number;
+  journalEventBytes?: number;
   pendingRequestCount: number;
   attachedClientCount: number;
   idleShutdownAllowed: boolean;
@@ -1084,6 +1311,10 @@ export async function tailscaleDaemonStop(): Promise<TcpDaemonStatus> {
 
 export async function tailscaleDaemonStatus(): Promise<TcpDaemonStatus> {
   return invoke<TcpDaemonStatus>("tailscale_daemon_status");
+}
+
+export async function daemonHealthStatus(): Promise<DaemonHealthStatus> {
+  return invoke<DaemonHealthStatus>("daemon_health_status");
 }
 
 type MenuAcceleratorUpdate = {

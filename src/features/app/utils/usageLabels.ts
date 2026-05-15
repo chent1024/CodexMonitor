@@ -29,7 +29,7 @@ function formatResetLabel(resetsAt?: number | null) {
     return null;
   }
   const resetMs = resetsAt > 1_000_000_000_000 ? resetsAt : resetsAt * 1000;
-  return `Resets ${formatResetDate(resetMs)}`;
+  return `${formatResetDate(resetMs)} 重置`;
 }
 
 function formatWindowLimitLabel(
@@ -60,7 +60,7 @@ function formatCreditsLabel(accountRateLimits: RateLimitSnapshot | null) {
     return null;
   }
   if (credits.unlimited) {
-    return "Available credits: Unlimited";
+    return "可用额度：不限量";
   }
   const balance = credits.balance?.trim() ?? "";
   if (!balance) {
@@ -68,12 +68,12 @@ function formatCreditsLabel(accountRateLimits: RateLimitSnapshot | null) {
   }
   const intValue = Number.parseInt(balance, 10);
   if (Number.isFinite(intValue) && intValue > 0) {
-    return `Available credits: ${intValue}`;
+    return `可用额度：${intValue}`;
   }
   const floatValue = Number.parseFloat(balance);
   if (Number.isFinite(floatValue) && floatValue > 0) {
     const rounded = Math.round(floatValue);
-    return rounded > 0 ? `Available credits: ${rounded}` : null;
+    return rounded > 0 ? `可用额度：${rounded}` : null;
   }
   return null;
 }

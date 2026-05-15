@@ -6,9 +6,31 @@ import {
   getCodexConfigPath,
   getExperimentalFeatureList,
   getLocalMemoryStatus,
+  listLocalMemories,
+  searchLocalMemories,
+  addLocalMemory,
+  updateLocalMemory,
+  deleteLocalMemory,
+  deleteAllLocalMemories,
+  importLocalMemories,
+  listLocalMemoryReviewQueue,
+  approveLocalMemory,
+  rejectLocalMemory,
+  listLocalMemoryEntities,
+  deleteLocalMemoryEntities,
+  rebuildLocalMemoryIndexes,
+  listLocalMemoryEvents,
   setLocalMemoryEnabled,
+  setLocalMemoryDbPath,
+  setLocalMemoryEmbeddingModel,
+  checkLocalMemoryConnection,
   setCodexFeatureFlag,
+  type ImportLocalMemoryRecord,
+  type LocalMemoryConnectionCheck,
   type LocalMemoryConfigStatus,
+  type LocalMemoryAccessLogEntry,
+  type LocalMemoryEntity,
+  type LocalMemoryRecord,
 } from "@services/tauri";
 
 type UseSettingsFeaturesSectionArgs = {
@@ -51,8 +73,43 @@ export type SettingsFeaturesSectionProps = {
   localMemoryLoading: boolean;
   localMemoryUpdating: boolean;
   localMemoryError: string | null;
+  localMemoryQuery: string;
+  localMemoryDraft: string;
+  localMemoryDbPathDraft: string;
+  localMemoryReviewFilter: string;
+  localMemorySelectedReviewIds: string[];
+  localMemoryRecords: LocalMemoryRecord[];
+  localMemoryReviewQueue: LocalMemoryRecord[];
+  localMemoryEntities: LocalMemoryEntity[];
+  localMemoryEvents: LocalMemoryAccessLogEntry[];
+  localMemoryConnection: LocalMemoryConnectionCheck | null;
+  localMemoryActionLoading: boolean;
   onOpenConfig: () => void;
   onToggleLocalMemory: () => void;
+  onLocalMemoryQueryChange: (value: string) => void;
+  onLocalMemoryDraftChange: (value: string) => void;
+  onLocalMemoryDbPathDraftChange: (value: string) => void;
+  onLocalMemoryReviewFilterChange: (value: string) => void;
+  onApplyLocalMemoryDbPath: () => void;
+  onApplyLocalMemoryEmbeddingModel: (embeddingModel: string) => void;
+  onCheckLocalMemoryConnection: () => void;
+  onRefreshLocalMemories: () => void;
+  onSearchLocalMemories: () => void;
+  onAddLocalMemory: () => void;
+  onUpdateLocalMemory: (memory: LocalMemoryRecord) => void;
+  onDeleteLocalMemory: (id: string) => void;
+  onDeleteAllLocalMemories: () => void;
+  onDeleteLocalMemoryEntities: () => void;
+  onRebuildLocalMemoryIndexes: () => void;
+  onExportLocalMemories: () => void;
+  onImportLocalMemories: () => void;
+  onToggleLocalMemoryReviewSelection: (id: string) => void;
+  onToggleAllLocalMemoryReviewSelection: (ids: string[]) => void;
+  onApproveLocalMemory: (id: string) => void;
+  onEditAndApproveLocalMemory: (memory: LocalMemoryRecord) => void;
+  onApproveSelectedLocalMemories: () => void;
+  onRejectLocalMemory: (id: string) => void;
+  onRejectSelectedLocalMemories: () => void;
   onToggleCodexFeature: (feature: CodexFeature) => void;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
 };
@@ -160,6 +217,63 @@ function mapFeatureToAppSettings(
   return null;
 }
 
+function importRecordFromValue(value: unknown): ImportLocalMemoryRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const content = String(record.content ?? record.text ?? record.memory ?? "").trim();
+  if (!content) {
+    return null;
+  }
+  const metadata =
+    record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+      ? (record.metadata as Record<string, unknown>)
+      : {};
+  const categories = Array.isArray(record.categories)
+    ? record.categories
+        .map((item) => String(item ?? "").trim())
+        .filter((item) => item.length > 0)
+    : [];
+  return {
+    content,
+    scope: typeof record.scope === "string" ? record.scope : null,
+    kind: typeof record.kind === "string" ? record.kind : null,
+    metadata,
+    categories,
+    confidence: typeof record.confidence === "number" ? record.confidence : null,
+    expiresAt: typeof record.expiresAt === "number" ? record.expiresAt : null,
+    supersedesId:
+      typeof record.supersedesId === "string" ? record.supersedesId : null,
+    filters: {
+      workspaceId: typeof record.workspaceId === "string" ? record.workspaceId : null,
+      workspacePath:
+        typeof record.workspacePath === "string" ? record.workspacePath : null,
+      threadId: typeof record.threadId === "string" ? record.threadId : null,
+      userId: typeof record.userId === "string" ? record.userId : null,
+      agentId: typeof record.agentId === "string" ? record.agentId : null,
+      appId: typeof record.appId === "string" ? record.appId : null,
+      runId: typeof record.runId === "string" ? record.runId : null,
+      scope: typeof record.scope === "string" ? record.scope : null,
+      kind: typeof record.kind === "string" ? record.kind : null,
+      categories,
+    },
+  };
+}
+
+function importRecordsFromJson(raw: string): ImportLocalMemoryRecord[] {
+  const parsed = JSON.parse(raw) as unknown;
+  const source =
+    parsed && typeof parsed === "object" && Array.isArray((parsed as { memories?: unknown }).memories)
+      ? (parsed as { memories: unknown[] }).memories
+      : Array.isArray(parsed)
+        ? parsed
+        : [];
+  return source
+    .map((item) => importRecordFromValue(item))
+    .filter((item): item is ImportLocalMemoryRecord => item !== null);
+}
+
 export const useSettingsFeaturesSection = ({
   appSettings,
   featureWorkspaceId,
@@ -176,6 +290,22 @@ export const useSettingsFeaturesSection = ({
   const [localMemoryLoading, setLocalMemoryLoading] = useState(false);
   const [localMemoryUpdating, setLocalMemoryUpdating] = useState(false);
   const [localMemoryError, setLocalMemoryError] = useState<string | null>(null);
+  const [localMemoryQuery, setLocalMemoryQuery] = useState("");
+  const [localMemoryDraft, setLocalMemoryDraft] = useState("");
+  const [localMemoryDbPathDraft, setLocalMemoryDbPathDraft] = useState("");
+  const [localMemoryReviewFilter, setLocalMemoryReviewFilter] = useState("");
+  const [localMemorySelectedReviewIds, setLocalMemorySelectedReviewIds] = useState<
+    string[]
+  >([]);
+  const [localMemoryRecords, setLocalMemoryRecords] = useState<LocalMemoryRecord[]>([]);
+  const [localMemoryReviewQueue, setLocalMemoryReviewQueue] = useState<
+    LocalMemoryRecord[]
+  >([]);
+  const [localMemoryEntities, setLocalMemoryEntities] = useState<LocalMemoryEntity[]>([]);
+  const [localMemoryEvents, setLocalMemoryEvents] = useState<LocalMemoryAccessLogEntry[]>([]);
+  const [localMemoryConnection, setLocalMemoryConnection] =
+    useState<LocalMemoryConnectionCheck | null>(null);
+  const [localMemoryActionLoading, setLocalMemoryActionLoading] = useState(false);
 
   const handleOpenConfig = useCallback(async () => {
     setOpenConfigError(null);
@@ -207,6 +337,49 @@ export const useSettingsFeaturesSection = ({
       active = false;
     };
   }, []);
+
+  const refreshLocalMemoryData = useCallback(async () => {
+    setLocalMemoryActionLoading(true);
+    setLocalMemoryError(null);
+    try {
+      const [records, entities, events, reviewQueue] = await Promise.all([
+        listLocalMemories({ limit: 50 }),
+        listLocalMemoryEntities(),
+        listLocalMemoryEvents({ limit: 25 }),
+        listLocalMemoryReviewQueue(50),
+      ]);
+      setLocalMemoryRecords(records);
+      setLocalMemoryReviewQueue(reviewQueue);
+      setLocalMemorySelectedReviewIds((current) => {
+        const available = new Set(reviewQueue.map((memory) => memory.id));
+        return current.filter((id) => available.has(id));
+      });
+      setLocalMemoryEntities(entities.slice(0, 50));
+      setLocalMemoryEvents(events);
+    } catch (error) {
+      setLocalMemoryError(
+        error instanceof Error ? error.message : "Unable to load local memories.",
+      );
+    } finally {
+      setLocalMemoryActionLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (localMemoryStatus?.enabled) {
+      void refreshLocalMemoryData();
+    } else {
+      setLocalMemoryRecords([]);
+      setLocalMemoryReviewQueue([]);
+      setLocalMemorySelectedReviewIds([]);
+      setLocalMemoryEntities([]);
+      setLocalMemoryEvents([]);
+    }
+  }, [localMemoryStatus?.enabled, refreshLocalMemoryData]);
+
+  useEffect(() => {
+    setLocalMemoryDbPathDraft(localMemoryStatus?.dbPath ?? "");
+  }, [localMemoryStatus?.dbPath]);
 
   useEffect(() => {
     let active = true;
@@ -397,6 +570,413 @@ export const useSettingsFeaturesSection = ({
     })();
   }, [localMemoryStatus?.enabled]);
 
+  const onApplyLocalMemoryDbPath = useCallback(() => {
+    void (async () => {
+      const dbPath = localMemoryDbPathDraft.trim();
+      if (!dbPath || dbPath === localMemoryStatus?.dbPath) {
+        return;
+      }
+      setLocalMemoryActionLoading(true);
+      setLocalMemoryError(null);
+      try {
+        const status = await setLocalMemoryDbPath(dbPath);
+        setLocalMemoryStatus(status);
+        setLocalMemoryConnection(null);
+      } catch (error) {
+        setLocalMemoryError(
+          error instanceof Error
+            ? error.message
+            : "Unable to update local memory database path.",
+        );
+      } finally {
+        setLocalMemoryActionLoading(false);
+      }
+    })();
+  }, [localMemoryDbPathDraft, localMemoryStatus?.dbPath]);
+
+  const onApplyLocalMemoryEmbeddingModel = useCallback(
+    (embeddingModel: string) => {
+      void (async () => {
+        const nextModel = embeddingModel.trim();
+        if (!nextModel || nextModel === localMemoryStatus?.embeddingModel) {
+          return;
+        }
+        setLocalMemoryActionLoading(true);
+        setLocalMemoryError(null);
+        try {
+          const status = await setLocalMemoryEmbeddingModel(nextModel);
+          setLocalMemoryStatus(status);
+          setLocalMemoryConnection(null);
+        } catch (error) {
+          setLocalMemoryError(
+            error instanceof Error
+              ? error.message
+              : "Unable to update local memory embedding model.",
+          );
+        } finally {
+          setLocalMemoryActionLoading(false);
+        }
+      })();
+    },
+    [localMemoryStatus?.embeddingModel],
+  );
+
+  const onCheckLocalMemoryConnection = useCallback(() => {
+    void (async () => {
+      setLocalMemoryActionLoading(true);
+      setLocalMemoryError(null);
+      try {
+        const result = await checkLocalMemoryConnection();
+        setLocalMemoryConnection(result);
+        if (!result.ok && result.error) {
+          setLocalMemoryError(result.error);
+        }
+      } catch (error) {
+        setLocalMemoryConnection(null);
+        setLocalMemoryError(
+          error instanceof Error
+            ? error.message
+            : "Unable to check local memory MCP connection.",
+        );
+      } finally {
+        setLocalMemoryActionLoading(false);
+      }
+    })();
+  }, []);
+
+  const onSearchLocalMemories = useCallback(() => {
+    void (async () => {
+      setLocalMemoryActionLoading(true);
+      setLocalMemoryError(null);
+      try {
+        const query = localMemoryQuery.trim();
+        const records = query
+          ? await searchLocalMemories({ query, limit: 50 })
+          : await listLocalMemories({ limit: 50 });
+        setLocalMemoryRecords(records);
+      } catch (error) {
+        setLocalMemoryError(
+          error instanceof Error ? error.message : "Unable to search local memories.",
+        );
+      } finally {
+        setLocalMemoryActionLoading(false);
+      }
+    })();
+  }, [localMemoryQuery]);
+
+  const onAddLocalMemory = useCallback(() => {
+    void (async () => {
+      const content = localMemoryDraft.trim();
+      if (!content) {
+        return;
+      }
+      setLocalMemoryActionLoading(true);
+      setLocalMemoryError(null);
+      try {
+        await addLocalMemory({
+          content,
+          scope: "user",
+          kind: "user_preferences",
+          categories: ["manual"],
+        });
+        setLocalMemoryDraft("");
+        await refreshLocalMemoryData();
+      } catch (error) {
+        setLocalMemoryError(
+          error instanceof Error ? error.message : "Unable to add local memory.",
+        );
+      } finally {
+        setLocalMemoryActionLoading(false);
+      }
+    })();
+  }, [localMemoryDraft, refreshLocalMemoryData]);
+
+  const onUpdateLocalMemory = useCallback(
+    (memory: LocalMemoryRecord) => {
+      void (async () => {
+        const next = window.prompt("Update memory content", memory.content);
+        if (next == null || next.trim() === memory.content.trim()) {
+          return;
+        }
+        setLocalMemoryActionLoading(true);
+        setLocalMemoryError(null);
+        try {
+          await updateLocalMemory(memory.id, next);
+          await refreshLocalMemoryData();
+        } catch (error) {
+          setLocalMemoryError(
+            error instanceof Error ? error.message : "Unable to update local memory.",
+          );
+        } finally {
+          setLocalMemoryActionLoading(false);
+        }
+      })();
+    },
+    [refreshLocalMemoryData],
+  );
+
+  const onDeleteLocalMemory = useCallback(
+    (id: string) => {
+      void (async () => {
+        setLocalMemoryActionLoading(true);
+        setLocalMemoryError(null);
+        try {
+          await deleteLocalMemory(id);
+          await refreshLocalMemoryData();
+        } catch (error) {
+          setLocalMemoryError(
+            error instanceof Error ? error.message : "Unable to delete local memory.",
+          );
+        } finally {
+          setLocalMemoryActionLoading(false);
+        }
+      })();
+    },
+    [refreshLocalMemoryData],
+  );
+
+  const onDeleteAllLocalMemories = useCallback(() => {
+    void (async () => {
+      if (!window.confirm("Delete all local memories?")) {
+        return;
+      }
+      setLocalMemoryActionLoading(true);
+      setLocalMemoryError(null);
+      try {
+        await deleteAllLocalMemories();
+        await refreshLocalMemoryData();
+      } catch (error) {
+        setLocalMemoryError(
+          error instanceof Error ? error.message : "Unable to delete local memories.",
+        );
+      } finally {
+        setLocalMemoryActionLoading(false);
+      }
+    })();
+  }, [refreshLocalMemoryData]);
+
+  const onDeleteLocalMemoryEntities = useCallback(() => {
+    void (async () => {
+      setLocalMemoryActionLoading(true);
+      setLocalMemoryError(null);
+      try {
+        await deleteLocalMemoryEntities();
+        await refreshLocalMemoryData();
+      } catch (error) {
+        setLocalMemoryError(
+          error instanceof Error ? error.message : "Unable to delete memory entities.",
+        );
+      } finally {
+        setLocalMemoryActionLoading(false);
+      }
+    })();
+  }, [refreshLocalMemoryData]);
+
+  const onRebuildLocalMemoryIndexes = useCallback(() => {
+    void (async () => {
+      setLocalMemoryActionLoading(true);
+      setLocalMemoryError(null);
+      try {
+        await rebuildLocalMemoryIndexes();
+        await refreshLocalMemoryData();
+      } catch (error) {
+        setLocalMemoryError(
+          error instanceof Error ? error.message : "Unable to rebuild memory indexes.",
+        );
+      } finally {
+        setLocalMemoryActionLoading(false);
+      }
+    })();
+  }, [refreshLocalMemoryData]);
+
+  const onExportLocalMemories = useCallback(() => {
+    const payload = JSON.stringify(
+      { memories: localMemoryRecords, entities: localMemoryEntities, events: localMemoryEvents },
+      null,
+      2,
+    );
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "codex-local-memory-export.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [localMemoryEntities, localMemoryEvents, localMemoryRecords]);
+
+  const onImportLocalMemories = useCallback(() => {
+    void (async () => {
+      const raw = window.prompt("Paste a codex-local-memory-export.json payload");
+      if (!raw?.trim()) {
+        return;
+      }
+      setLocalMemoryActionLoading(true);
+      setLocalMemoryError(null);
+      try {
+        const memories = importRecordsFromJson(raw);
+        if (memories.length === 0) {
+          throw new Error("No memories found in import payload.");
+        }
+        await importLocalMemories({ memories });
+        await refreshLocalMemoryData();
+      } catch (error) {
+        setLocalMemoryError(
+          error instanceof Error ? error.message : "Unable to import local memories.",
+        );
+      } finally {
+        setLocalMemoryActionLoading(false);
+      }
+    })();
+  }, [refreshLocalMemoryData]);
+
+  const onApproveLocalMemory = useCallback(
+    (id: string) => {
+      void (async () => {
+        setLocalMemoryActionLoading(true);
+        setLocalMemoryError(null);
+        try {
+          await approveLocalMemory(id);
+          await refreshLocalMemoryData();
+        } catch (error) {
+          setLocalMemoryError(
+            error instanceof Error ? error.message : "Unable to approve local memory.",
+          );
+        } finally {
+          setLocalMemoryActionLoading(false);
+        }
+      })();
+    },
+    [refreshLocalMemoryData],
+  );
+
+  const onEditAndApproveLocalMemory = useCallback(
+    (memory: LocalMemoryRecord) => {
+      void (async () => {
+        const next = window.prompt("Edit and approve memory content", memory.content);
+        if (next == null) {
+          return;
+        }
+        const content = next.trim();
+        if (!content) {
+          setLocalMemoryError("Memory content is empty.");
+          return;
+        }
+        setLocalMemoryActionLoading(true);
+        setLocalMemoryError(null);
+        try {
+          if (content !== memory.content.trim()) {
+            await updateLocalMemory(memory.id, content);
+          }
+          await approveLocalMemory(memory.id);
+          await refreshLocalMemoryData();
+        } catch (error) {
+          setLocalMemoryError(
+            error instanceof Error
+              ? error.message
+              : "Unable to edit and approve local memory.",
+          );
+        } finally {
+          setLocalMemoryActionLoading(false);
+        }
+      })();
+    },
+    [refreshLocalMemoryData],
+  );
+
+  const onApproveSelectedLocalMemories = useCallback(() => {
+    void (async () => {
+      if (localMemorySelectedReviewIds.length === 0) {
+        return;
+      }
+      setLocalMemoryActionLoading(true);
+      setLocalMemoryError(null);
+      try {
+        await Promise.all(
+          localMemorySelectedReviewIds.map((id) => approveLocalMemory(id)),
+        );
+        setLocalMemorySelectedReviewIds([]);
+        await refreshLocalMemoryData();
+      } catch (error) {
+        setLocalMemoryError(
+          error instanceof Error
+            ? error.message
+            : "Unable to approve selected local memories.",
+        );
+      } finally {
+        setLocalMemoryActionLoading(false);
+      }
+    })();
+  }, [localMemorySelectedReviewIds, refreshLocalMemoryData]);
+
+  const onRejectLocalMemory = useCallback(
+    (id: string) => {
+      void (async () => {
+        setLocalMemoryActionLoading(true);
+        setLocalMemoryError(null);
+        try {
+          await rejectLocalMemory(id);
+          await refreshLocalMemoryData();
+        } catch (error) {
+          setLocalMemoryError(
+            error instanceof Error ? error.message : "Unable to reject local memory.",
+          );
+        } finally {
+          setLocalMemoryActionLoading(false);
+        }
+      })();
+    },
+    [refreshLocalMemoryData],
+  );
+
+  const onRejectSelectedLocalMemories = useCallback(() => {
+    void (async () => {
+      if (localMemorySelectedReviewIds.length === 0) {
+        return;
+      }
+      setLocalMemoryActionLoading(true);
+      setLocalMemoryError(null);
+      try {
+        await Promise.all(localMemorySelectedReviewIds.map((id) => rejectLocalMemory(id)));
+        setLocalMemorySelectedReviewIds([]);
+        await refreshLocalMemoryData();
+      } catch (error) {
+        setLocalMemoryError(
+          error instanceof Error
+            ? error.message
+            : "Unable to reject selected local memories.",
+        );
+      } finally {
+        setLocalMemoryActionLoading(false);
+      }
+    })();
+  }, [localMemorySelectedReviewIds, refreshLocalMemoryData]);
+
+  const onToggleLocalMemoryReviewSelection = useCallback((id: string) => {
+    setLocalMemorySelectedReviewIds((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
+    );
+  }, []);
+
+  const onToggleAllLocalMemoryReviewSelection = useCallback((ids: string[]) => {
+    setLocalMemorySelectedReviewIds((current) => {
+      const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+      if (uniqueIds.length === 0) {
+        return current;
+      }
+      const selected = new Set(current);
+      const allSelected = uniqueIds.every((id) => selected.has(id));
+      if (allSelected) {
+        return current.filter((id) => !uniqueIds.includes(id));
+      }
+      for (const id of uniqueIds) {
+        selected.add(id);
+      }
+      return Array.from(selected);
+    });
+  }, []);
+
   return {
     appSettings,
     hasFeatureWorkspace: featureWorkspaceId != null,
@@ -411,10 +991,47 @@ export const useSettingsFeaturesSection = ({
     localMemoryLoading,
     localMemoryUpdating,
     localMemoryError,
+    localMemoryQuery,
+    localMemoryDraft,
+    localMemoryDbPathDraft,
+    localMemoryReviewFilter,
+    localMemorySelectedReviewIds,
+    localMemoryRecords,
+    localMemoryReviewQueue,
+    localMemoryEntities,
+    localMemoryEvents,
+    localMemoryConnection,
+    localMemoryActionLoading,
     onOpenConfig: () => {
       void handleOpenConfig();
     },
     onToggleLocalMemory,
+    onLocalMemoryQueryChange: setLocalMemoryQuery,
+    onLocalMemoryDraftChange: setLocalMemoryDraft,
+    onLocalMemoryDbPathDraftChange: setLocalMemoryDbPathDraft,
+    onLocalMemoryReviewFilterChange: setLocalMemoryReviewFilter,
+    onApplyLocalMemoryDbPath,
+    onApplyLocalMemoryEmbeddingModel,
+    onCheckLocalMemoryConnection,
+    onRefreshLocalMemories: () => {
+      void refreshLocalMemoryData();
+    },
+    onSearchLocalMemories,
+    onAddLocalMemory,
+    onUpdateLocalMemory,
+    onDeleteLocalMemory,
+    onDeleteAllLocalMemories,
+    onDeleteLocalMemoryEntities,
+    onRebuildLocalMemoryIndexes,
+    onExportLocalMemories,
+    onImportLocalMemories,
+    onToggleLocalMemoryReviewSelection,
+    onToggleAllLocalMemoryReviewSelection,
+    onApproveLocalMemory,
+    onEditAndApproveLocalMemory,
+    onApproveSelectedLocalMemories,
+    onRejectLocalMemory,
+    onRejectSelectedLocalMemories,
     onToggleCodexFeature,
     onUpdateAppSettings,
   };

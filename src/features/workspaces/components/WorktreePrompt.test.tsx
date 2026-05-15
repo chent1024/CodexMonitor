@@ -58,7 +58,7 @@ describe("WorktreePrompt", () => {
       />,
     );
 
-    const branchInput = screen.getByLabelText("Branch name");
+    const branchInput = screen.getByLabelText("分支名称");
     fireEvent.keyDown(branchInput, {
       key: "Escape",
       code: "Escape",

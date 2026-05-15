@@ -31,6 +31,7 @@ type ThreadListProps = {
   onToggleExpanded: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
+  onToggleThreadPin: (workspaceId: string, threadId: string, isPinned: boolean) => void;
   onShowThreadMenu: (
     event: MouseEvent,
     workspaceId: string,
@@ -60,6 +61,7 @@ function ThreadListInner({
   onToggleExpanded,
   onLoadOlderThreads,
   onSelectThread,
+  onToggleThreadPin,
   onShowThreadMenu,
 }: ThreadListProps) {
   const indentUnit = nested ? 10 : 14;
@@ -111,6 +113,7 @@ function ThreadListInner({
           getThreadArgsBadge={getThreadArgsBadge}
           isThreadPinned={isThreadPinned}
           onSelectThread={onSelectThread}
+          onToggleThreadPin={onToggleThreadPin}
           onShowThreadMenu={onShowThreadMenu}
           hasSubagentChildren={pinnedVisibility.rowsWithChildren.has(row)}
           subagentsExpanded={!collapsedThreadKeys.has(`${workspaceId}:${row.thread.id}`)}
@@ -134,6 +137,7 @@ function ThreadListInner({
           getThreadArgsBadge={getThreadArgsBadge}
           isThreadPinned={isThreadPinned}
           onSelectThread={onSelectThread}
+          onToggleThreadPin={onToggleThreadPin}
           onShowThreadMenu={onShowThreadMenu}
           hasSubagentChildren={unpinnedVisibility.rowsWithChildren.has(row)}
           subagentsExpanded={!collapsedThreadKeys.has(`${workspaceId}:${row.thread.id}`)}
@@ -148,7 +152,7 @@ function ThreadListInner({
             onToggleExpanded(workspaceId);
           }}
         >
-          {isExpanded ? "Show less" : "More..."}
+          {isExpanded ? "收起" : "更多..."}
         </button>
       )}
       {showLoadOlder && nextCursor && (isExpanded || totalThreadRoots <= 3) && (
@@ -161,10 +165,10 @@ function ThreadListInner({
           disabled={isPaging}
         >
           {isPaging
-            ? "Loading..."
+            ? "加载中..."
             : totalThreadRoots === 0
-              ? "Search older..."
-              : "Load older..."}
+              ? "查找更早会话..."
+              : "加载更早会话..."}
         </button>
       )}
     </div>
@@ -267,6 +271,7 @@ const ThreadList = memo(
     prev.onToggleExpanded === next.onToggleExpanded &&
     prev.onLoadOlderThreads === next.onLoadOlderThreads &&
     prev.onSelectThread === next.onSelectThread &&
+    prev.onToggleThreadPin === next.onToggleThreadPin &&
     prev.onShowThreadMenu === next.onShowThreadMenu &&
     prev.getThreadTime === next.getThreadTime &&
     prev.getThreadArgsBadge === next.getThreadArgsBadge &&

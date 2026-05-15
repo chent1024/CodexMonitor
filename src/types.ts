@@ -354,6 +354,7 @@ export type OpenAppTarget = {
 export type AppSettings = {
   codexBin: string | null;
   codexArgs: string | null;
+  terminalShell: string | null;
   backendMode: BackendMode;
   remoteBackendProvider: RemoteBackendProvider;
   remoteBackendHost: string;
@@ -395,6 +396,7 @@ export type AppSettings = {
   uiFontSize: number;
   codeFontFamily: string;
   codeFontSize: number;
+  fontSmoothingEnabled: boolean;
   notificationSoundsEnabled: boolean;
   systemNotificationsEnabled: boolean;
   subagentSystemNotificationsEnabled: boolean;
@@ -451,6 +453,25 @@ export type TcpDaemonStatus = {
   startedAtMs: number | null;
   lastError: string | null;
   listenAddr: string | null;
+};
+
+export type DaemonHealthStatus = {
+  connected: boolean;
+  name: string | null;
+  version: string | null;
+  appVersion: string;
+  mode: string | null;
+  pid: number | null;
+  binaryPath: string | null;
+  terminalRpcVersion: number | null;
+  requiredTerminalRpcVersion: number;
+  terminalRpcSupported: boolean;
+  restartSafeProtocolVersion: number | null;
+  requiredRestartSafeProtocolVersion: number;
+  restartSafeProtocolCompatible: boolean;
+  warnings: string[];
+  lastError: string | null;
+  roundTripMs: number;
 };
 
 export type TailscaleStatus = {

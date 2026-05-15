@@ -29,13 +29,13 @@ export function buildTraySessionUsage(
   }
 
   const usageLabel = showRemaining
-    ? `${sessionPercent}% remaining`
-    : `${sessionPercent}% used`;
+    ? `${sessionPercent}% 剩余`
+    : `${sessionPercent}% 已使用`;
   const weeklyUsageLabel =
     typeof weeklyPercent === "number"
       ? showRemaining
-        ? `${weeklyPercent}% remaining`
-        : `${weeklyPercent}% used`
+        ? `${weeklyPercent}% 剩余`
+        : `${weeklyPercent}% 已使用`
       : null;
 
   return {

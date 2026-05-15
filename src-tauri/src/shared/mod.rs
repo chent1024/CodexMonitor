@@ -10,6 +10,7 @@ pub(crate) mod git_rpc;
 pub(crate) mod git_ui_core;
 #[allow(dead_code)]
 pub(crate) mod local_memory_core;
+pub(crate) mod local_memory_integration_core;
 pub(crate) mod local_usage_core;
 pub(crate) mod process_core;
 pub(crate) mod prompts_core;

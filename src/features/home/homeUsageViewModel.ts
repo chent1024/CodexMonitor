@@ -108,120 +108,120 @@ export function buildHomeUsageViewModel({
     usageMetric === "tokens"
       ? [
           {
-            label: "Today",
+            label: "今天",
             value: formatCompactNumber(latestUsageDay?.totalTokens ?? 0),
-            suffix: "tokens",
+            suffix: "Token",
             caption: latestUsageDay
               ? `${formatDayLabel(latestUsageDay.day)} · ${formatCount(
                   latestUsageDay.inputTokens,
-                )} in / ${formatCount(latestUsageDay.outputTokens)} out`
-              : "Latest available day",
+                )} 输入 / ${formatCount(latestUsageDay.outputTokens)} 输出`
+              : "最近可用日期",
           },
           {
-            label: "Last 7 days",
+            label: "近 7 天",
             value: formatCompactNumber(usageTotals?.last7DaysTokens ?? last7Tokens),
-            suffix: "tokens",
-            caption: `Avg ${formatCompactNumber(usageTotals?.averageDailyTokens)} / day`,
+            suffix: "Token",
+            caption: `日均 ${formatCompactNumber(usageTotals?.averageDailyTokens)}`,
           },
           {
-            label: "Last 30 days",
+            label: "近 30 天",
             value: formatCompactNumber(usageTotals?.last30DaysTokens ?? last7Tokens),
-            suffix: "tokens",
-            caption: `Total ${formatCount(usageTotals?.last30DaysTokens ?? last7Tokens)}`,
+            suffix: "Token",
+            caption: `合计 ${formatCount(usageTotals?.last30DaysTokens ?? last7Tokens)}`,
           },
           {
-            label: "Cache hit rate",
+            label: "缓存命中率",
             value: usageTotals
               ? `${usageTotals.cacheHitRatePercent.toFixed(1)}%`
               : "--",
-            caption: "Last 7 days",
+            caption: "近 7 天",
           },
           {
-            label: "Cached tokens",
+            label: "缓存 Token",
             value: formatCompactNumber(last7Cached),
-            suffix: "saved",
+            suffix: "已节省",
             caption:
               last7Input > 0
-                ? `${((last7Cached / last7Input) * 100).toFixed(1)}% of prompt tokens`
-                : "Last 7 days",
+                ? `${((last7Cached / last7Input) * 100).toFixed(1)}% 提示词 Token`
+                : "近 7 天",
           },
           {
-            label: "Avg / run",
+            label: "平均 / 次",
             value:
               averageTokensPerRun === null
                 ? "--"
                 : formatCompactNumber(averageTokensPerRun),
-            suffix: "tokens",
+            suffix: "Token",
             caption:
               last7AgentRuns > 0
-                ? `${formatCount(last7AgentRuns)} runs in last 7 days`
-                : "No runs yet",
+                ? `近 7 天 ${formatCount(last7AgentRuns)} 次运行`
+                : "暂无运行",
           },
           {
-            label: "Peak day",
+            label: "峰值日期",
             value: formatDayLabel(usageTotals?.peakDay),
-            caption: `${formatCompactNumber(usageTotals?.peakDayTokens)} tokens`,
+            caption: `${formatCompactNumber(usageTotals?.peakDayTokens)} Token`,
           },
         ]
       : [
           {
-            label: "Last 7 days",
+            label: "近 7 天",
             value: formatDurationCompact(last7AgentMs),
-            suffix: "agent time",
-            caption: `Avg ${formatDurationCompact(averageDailyAgentMs)} / day`,
+            suffix: "智能体时长",
+            caption: `日均 ${formatDurationCompact(averageDailyAgentMs)}`,
           },
           {
-            label: "Last 30 days",
+            label: "近 30 天",
             value: formatDurationCompact(last30AgentMs),
-            suffix: "agent time",
-            caption: `Total ${formatDuration(last30AgentMs)}`,
+            suffix: "智能体时长",
+            caption: `合计 ${formatDuration(last30AgentMs)}`,
           },
           {
-            label: "Runs",
+            label: "运行次数",
             value: formatCount(last7AgentRuns),
-            suffix: "runs",
-            caption: `Last 30 days: ${formatCount(last30AgentRuns)} runs`,
+            suffix: "次",
+            caption: `近 30 天：${formatCount(last30AgentRuns)} 次`,
           },
           {
-            label: "Avg / run",
+            label: "平均 / 次",
             value: formatDurationCompact(averageRunDurationMs),
             caption:
               last7AgentRuns > 0
-                ? `Across ${formatCount(last7AgentRuns)} runs`
-                : "No runs yet",
+                ? `基于 ${formatCount(last7AgentRuns)} 次运行`
+                : "暂无运行",
           },
           {
-            label: "Avg / active day",
+            label: "平均 / 活跃日",
             value: formatDurationCompact(averageActiveDayAgentMs),
             caption:
               last7ActiveDays > 0
-                ? `${formatCount(last7ActiveDays)} active days in last 7`
-                : "No active days yet",
+                ? `近 7 天 ${formatCount(last7ActiveDays)} 个活跃日`
+                : "暂无活跃日",
           },
           {
-            label: "Peak day",
+            label: "峰值日期",
             value: formatDayLabel(peakAgentDay?.day ?? null),
-            caption: `${formatDurationCompact(peakAgentDay?.agentTimeMs ?? 0)} agent time`,
+            caption: `${formatDurationCompact(peakAgentDay?.agentTimeMs ?? 0)} 智能体时长`,
           },
         ];
 
   const usageInsights = [
     {
-      label: "Longest streak",
+      label: "最长连续活跃",
       value: longestStreak > 0 ? formatDayCount(longestStreak) : "--",
       caption:
         longestStreak > 0
-          ? "Across current usage range"
-          : "No active streak yet",
+          ? "当前统计范围内"
+          : "暂无连续活跃",
       compact: true,
     },
     {
-      label: "Active days",
+      label: "活跃天数",
       value: last7Days.length > 0 ? `${last7ActiveDays} / ${last7Days.length}` : "--",
       caption:
         usageDays.length > 0
-          ? `${last30ActiveDays} / ${usageDays.length} in current range`
-          : "No activity yet",
+          ? `当前范围 ${last30ActiveDays} / ${usageDays.length}`
+          : "暂无活动",
       compact: true,
     },
   ] satisfies HomeStatCard[];
@@ -233,24 +233,24 @@ export function buildHomeUsageViewModel({
 
   if (usagePercentLabels.sessionPercent !== null) {
     accountCards.push({
-      label: usageShowRemaining ? "Session left" : "Session usage",
+      label: usageShowRemaining ? "会话剩余" : "会话已用",
       value: `${usagePercentLabels.sessionPercent}%`,
       caption: buildWindowCaption(
         usagePercentLabels.sessionResetLabel,
         accountRateLimits?.primary?.windowDurationMins,
-        "Current window",
+        "当前窗口",
       ),
     });
   }
 
   if (usagePercentLabels.showWeekly && usagePercentLabels.weeklyPercent !== null) {
     accountCards.push({
-      label: usageShowRemaining ? "Weekly left" : "Weekly usage",
+      label: usageShowRemaining ? "每周剩余" : "每周已用",
       value: `${usagePercentLabels.weeklyPercent}%`,
       caption: buildWindowCaption(
         usagePercentLabels.weeklyResetLabel,
         accountRateLimits?.secondary?.windowDurationMins,
-        "Longer window",
+        "长周期窗口",
       ),
     });
   }
@@ -259,22 +259,22 @@ export function buildHomeUsageViewModel({
     accountCards.push(
       accountRateLimits.credits.unlimited
         ? {
-            label: "Credits",
-            value: "Unlimited",
-            caption: "Available balance",
+            label: "额度",
+            value: "不限量",
+            caption: "可用余额",
           }
         : {
-            label: "Credits",
+            label: "额度",
             value: creditsBalance ?? "--",
-            suffix: creditsBalance ? "credits" : null,
-            caption: "Available balance",
+            suffix: creditsBalance ? "额度" : null,
+            caption: "可用余额",
           },
     );
   }
 
   if (planLabel) {
     accountCards.push({
-      label: "Plan",
+      label: "套餐",
       value: planLabel,
       caption: formatAccountTypeLabel(accountInfo?.type),
     });
@@ -284,7 +284,7 @@ export function buildHomeUsageViewModel({
     accountCards,
     accountMeta: accountInfo?.email ?? null,
     updatedLabel: localUsageSnapshot
-      ? `Updated ${formatRelativeTime(localUsageSnapshot.updatedAt)}`
+      ? `更新于 ${formatRelativeTime(localUsageSnapshot.updatedAt)}`
       : null,
     usageCards,
     usageDays,

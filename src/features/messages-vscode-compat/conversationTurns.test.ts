@@ -137,6 +137,49 @@ describe("vscode-compatible conversation turns", () => {
     });
   });
 
+  it("does not duplicate a steering user message that repeats the turn prompt", () => {
+    const entries: MessageListEntry[] = [
+      {
+        kind: "item",
+        item: {
+          id: "user-1",
+          kind: "message",
+          role: "user",
+          text: "Check Amazon listing APIs",
+        },
+      },
+      {
+        kind: "item",
+        item: {
+          id: "steering-user-duplicate",
+          kind: "message",
+          role: "user",
+          itemType: "user-message",
+          steeringStatus: "Steered conversation",
+          text: "Check Amazon listing APIs",
+        },
+      },
+      {
+        kind: "item",
+        item: {
+          id: "assistant-1",
+          kind: "message",
+          role: "assistant",
+          text: "I will verify the current docs.",
+        },
+      },
+    ];
+
+    const turns = buildVscodeConversationTurns(entries);
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0]).toMatchObject({
+      id: "user:user-1",
+      userEntry: entries[0],
+      agentEntries: [entries[2]],
+    });
+  });
+
   it("builds stable search metadata for assistant entries", () => {
     const assistantTurn: MessageListEntry = {
       kind: "assistantTurn",

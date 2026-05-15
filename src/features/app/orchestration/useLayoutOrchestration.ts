@@ -8,7 +8,6 @@ type UseAppShellOrchestrationOptions = {
   isTablet: boolean;
   sidebarCollapsed: boolean;
   rightPanelCollapsed: boolean;
-  shouldReduceTransparency: boolean;
   isWorkspaceDropActive: boolean;
   centerMode: "chat" | "diff";
   selectedDiffPath: string | null;
@@ -22,7 +21,11 @@ type UseAppShellOrchestrationOptions = {
   debugPanelHeight: number;
   appSettings: Pick<
     AppSettings,
-    "uiFontFamily" | "uiFontSize" | "codeFontFamily" | "codeFontSize"
+    | "uiFontFamily"
+    | "uiFontSize"
+    | "codeFontFamily"
+    | "codeFontSize"
+    | "fontSmoothingEnabled"
   >;
 };
 
@@ -32,7 +35,6 @@ export function useAppShellOrchestration({
   isTablet,
   sidebarCollapsed,
   rightPanelCollapsed,
-  shouldReduceTransparency,
   isWorkspaceDropActive,
   centerMode,
   selectedDiffPath,
@@ -53,8 +55,7 @@ export function useAppShellOrchestration({
   const appClassName = `app ${isCompact ? "layout-compact" : "layout-desktop"}${
     isPhone ? " layout-phone" : ""
   }${isTablet ? " layout-tablet" : ""}${
-    shouldReduceTransparency ? " reduced-transparency" : ""
-  }${!isCompact && sidebarCollapsed ? " sidebar-collapsed" : ""}${
+    !isCompact && sidebarCollapsed ? " sidebar-collapsed" : ""}${
     !isCompact && rightPanelCollapsed ? " right-panel-collapsed" : ""
   }${isWindows ? " is-windows" : ""}`;
 
@@ -72,6 +73,13 @@ export function useAppShellOrchestration({
       "--ui-font-size": `${appSettings.uiFontSize}px`,
       "--code-font-family": appSettings.codeFontFamily,
       "--code-font-size": `${appSettings.codeFontSize}px`,
+      "--font-smoothing-webkit": appSettings.fontSmoothingEnabled
+        ? "antialiased"
+        : "auto",
+      "--font-smoothing-moz": appSettings.fontSmoothingEnabled ? "grayscale" : "auto",
+      "--font-text-rendering": appSettings.fontSmoothingEnabled
+        ? "optimizeLegibility"
+        : "auto",
       "--sidebar-top-padding": isWindows ? "10px" : "36px",
       "--right-panel-top-padding": isWindows
         ? "calc(var(--main-topbar-height, 44px) + 6px)"
@@ -90,6 +98,8 @@ export function useAppShellOrchestration({
             "--titlebar-collapsed-left-extra": "0px",
             "--titlebar-toggle-size": "32px",
             "--titlebar-toggle-side-gap": "7px",
+            "--titlebar-sidebar-toggle-left": "0px",
+            "--titlebar-sidebar-toggle-top": "calc(var(--main-topbar-height, 42px) / 2)",
             "--titlebar-toggle-title-offset": "0px",
             "--titlebar-toggle-offset": "0px",
           }
@@ -98,6 +108,7 @@ export function useAppShellOrchestration({
     [
       appSettings.codeFontFamily,
       appSettings.codeFontSize,
+      appSettings.fontSmoothingEnabled,
       appSettings.uiFontFamily,
       appSettings.uiFontSize,
       chatDiffSplitPositionPercent,
@@ -117,7 +128,7 @@ export function useAppShellOrchestration({
     showGitDetail,
     isThreadOpen,
     dropOverlayActive: isWorkspaceDropActive,
-    dropOverlayText: "Drop Project Here",
+    dropOverlayText: "拖放项目到这里",
     appClassName,
     appStyle,
   };

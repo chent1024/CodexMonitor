@@ -37,6 +37,7 @@ export type SettingsCodexSectionProps = {
   onRefreshDefaultModels: () => void;
   codexPathDraft: string;
   codexArgsDraft: string;
+  terminalShellDraft: string;
   codexDirty: boolean;
   isSavingSettings: boolean;
   doctorState: {
@@ -63,6 +64,7 @@ export type SettingsCodexSectionProps = {
   globalConfigSaveLabel: string;
   onSetCodexPathDraft: Dispatch<SetStateAction<string>>;
   onSetCodexArgsDraft: Dispatch<SetStateAction<string>>;
+  onSetTerminalShellDraft: Dispatch<SetStateAction<string>>;
   onSetGlobalAgentsContent: (value: string) => void;
   onSetGlobalConfigContent: (value: string) => void;
   onBrowseCodex: () => Promise<void>;
@@ -84,6 +86,7 @@ export const useSettingsCodexSection = ({
 }: UseSettingsCodexSectionArgs): SettingsCodexSectionProps => {
   const [codexPathDraft, setCodexPathDraft] = useState(appSettings.codexBin ?? "");
   const [codexArgsDraft, setCodexArgsDraft] = useState(appSettings.codexArgs ?? "");
+  const [terminalShellDraft, setTerminalShellDraft] = useState(appSettings.terminalShell ?? "");
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [doctorState, setDoctorState] = useState<{
     status: "idle" | "running" | "done";
@@ -152,11 +155,17 @@ export const useSettingsCodexSection = ({
     setCodexArgsDraft(appSettings.codexArgs ?? "");
   }, [appSettings.codexArgs]);
 
+  useEffect(() => {
+    setTerminalShellDraft(appSettings.terminalShell ?? "");
+  }, [appSettings.terminalShell]);
+
   const nextCodexBin = codexPathDraft.trim() ? codexPathDraft.trim() : null;
   const nextCodexArgs = normalizeCodexArgsInput(codexArgsDraft);
+  const nextTerminalShell = terminalShellDraft.trim() ? terminalShellDraft.trim() : null;
   const codexDirty =
     nextCodexBin !== (appSettings.codexBin ?? null) ||
-    nextCodexArgs !== (appSettings.codexArgs ?? null);
+    nextCodexArgs !== (appSettings.codexArgs ?? null) ||
+    nextTerminalShell !== (appSettings.terminalShell ?? null);
 
   const handleBrowseCodex = async () => {
     const selection = await open({ multiple: false, directory: false });
@@ -173,6 +182,7 @@ export const useSettingsCodexSection = ({
         ...appSettings,
         codexBin: nextCodexBin,
         codexArgs: nextCodexArgs,
+        terminalShell: nextTerminalShell,
       });
     } finally {
       setIsSavingSettings(false);
@@ -253,6 +263,7 @@ export const useSettingsCodexSection = ({
     },
     codexPathDraft,
     codexArgsDraft,
+    terminalShellDraft,
     codexDirty,
     isSavingSettings,
     doctorState,
@@ -273,6 +284,7 @@ export const useSettingsCodexSection = ({
     globalConfigSaveLabel: globalConfigEditorMeta.saveLabel,
     onSetCodexPathDraft: setCodexPathDraft,
     onSetCodexArgsDraft: setCodexArgsDraft,
+    onSetTerminalShellDraft: setTerminalShellDraft,
     onSetGlobalAgentsContent: setGlobalAgentsContent,
     onSetGlobalConfigContent: setGlobalConfigContent,
     onBrowseCodex: handleBrowseCodex,

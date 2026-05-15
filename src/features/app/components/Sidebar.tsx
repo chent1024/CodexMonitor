@@ -712,6 +712,16 @@ export const Sidebar = memo(function Sidebar({
     (workspaceId: string) => workspaceNameById.get(workspaceId) ?? null,
     [workspaceNameById],
   );
+  const handleToggleThreadPin = useCallback(
+    (workspaceId: string, threadId: string, isPinned: boolean) => {
+      if (isPinned) {
+        unpinThread(workspaceId, threadId);
+        return;
+      }
+      pinThread(workspaceId, threadId);
+    },
+    [pinThread, unpinThread],
+  );
 
   const groupedWorkspacesForRender =
     threadListOrganizeMode === "by_project_activity"
@@ -902,10 +912,10 @@ export const Sidebar = memo(function Sidebar({
       >
         <div
           className={`workspace-drop-overlay-text${
-            workspaceDropText === "Adding Project..." ? " is-busy" : ""
+            workspaceDropText === "正在添加项目..." ? " is-busy" : ""
           }`}
         >
-          {workspaceDropText === "Drop Project Here" && (
+          {workspaceDropText === "拖放项目到这里" && (
             <FolderOpen className="workspace-drop-overlay-icon" aria-hidden />
           )}
           {workspaceDropText}
@@ -922,7 +932,7 @@ export const Sidebar = memo(function Sidebar({
           {pinnedThreadRows.length > 0 && (
             <div className="pinned-section">
               <div className="sidebar-section-header">
-                <div className="sidebar-section-title">置顶会话</div>
+                <div className="sidebar-section-title">置顶</div>
                 <div className="sidebar-section-count">{pinnedRootCount}</div>
               </div>
               <PinnedThreadList
@@ -935,6 +945,7 @@ export const Sidebar = memo(function Sidebar({
                 getThreadArgsBadge={getThreadArgsBadge}
                 isThreadPinned={isThreadPinned}
                 onSelectThread={onSelectThread}
+                onToggleThreadPin={handleToggleThreadPin}
                 onShowThreadMenu={showThreadMenu}
                 getWorkspaceLabel={getWorkspaceLabel}
               />
@@ -952,6 +963,7 @@ export const Sidebar = memo(function Sidebar({
                   getThreadArgsBadge={getThreadArgsBadge}
                   isThreadPinned={isThreadPinned}
                   onSelectThread={onSelectThread}
+                  onToggleThreadPin={handleToggleThreadPin}
                   onShowThreadMenu={showThreadMenu}
                   getWorkspaceLabel={getWorkspaceLabel}
                   addMenuOpen={allThreadsAddMenuOpen}
@@ -1005,6 +1017,7 @@ export const Sidebar = memo(function Sidebar({
                   onAddCloneAgent={onAddCloneAgent}
                   onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
                   onSelectThread={onSelectThread}
+                  onToggleThreadPin={handleToggleThreadPin}
                   onShowThreadMenu={showThreadMenu}
                   onShowWorkspaceMenu={showWorkspaceMenu}
                   onShowWorktreeMenu={showWorktreeMenu}

@@ -1,20 +1,13 @@
 :root {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
-    "Noto Sans SC", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: 微软雅黑, "YaHei Consolas Hybird", Consolas, "Courier New", monospace;
   color: var(--text-primary);
   background-color: transparent;
   font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  text-rendering: var(--font-text-rendering, auto);
   color-scheme: light dark;
-  --ui-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
-    "Noto Sans SC", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ui-font-family: 微软雅黑, "YaHei Consolas Hybird", Consolas, "Courier New", monospace;
   --ui-font-size: 13px;
-  --code-font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono",
-    "Sarasa Mono SC", "Noto Sans Mono CJK SC", "Source Han Mono SC", Menlo,
-    Monaco, Consolas, "PingFang SC", "Microsoft YaHei", "Liberation Mono",
-    "Courier New", monospace;
+  --code-font-family: 微软雅黑, "YaHei Consolas Hybird", Consolas, "Courier New", monospace;
   --code-font-size: 11px;
   --code-font-weight: 400;
   --code-line-height: 1.28;
@@ -86,12 +79,4 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-}
-
-:root[data-theme="dark"] .app.is-windows:not(.reduced-transparency) {
-  --surface-sidebar: rgba(37, 37, 38, 1);
-  --surface-right-panel: rgba(37, 37, 38, 1);
-  --surface-topbar: rgba(24, 24, 24, 0.15);
-  --surface-messages: rgba(30, 30, 30, 1);
-  --surface-composer: rgba(37, 37, 38, 1);
 }

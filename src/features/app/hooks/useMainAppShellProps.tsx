@@ -1,5 +1,7 @@
 import type { ComponentProps } from "react";
 import { MainAppShell } from "@app/components/MainAppShell";
+import { SidebarCollapseButton } from "@/features/layout/components/SidebarToggleControls";
+import { isWindowsPlatform } from "@utils/platformPaths";
 
 type UseMainAppShellPropsArgs = {
   shell: Pick<
@@ -58,8 +60,14 @@ export function useMainAppShellProps({
     </span>
   ) : null;
 
+  const sidebarCollapseButton =
+    !topbar.isCompact && isWindowsPlatform() ? (
+      <SidebarCollapseButton {...shell.sidebarToggleProps} />
+    ) : null;
+
   const desktopTopbarLeftNodeWithToggle = !topbar.isCompact ? (
     <div className="topbar-leading">
+      {sidebarCollapseButton}
       {topbar.desktopTopbarLeftNode}
     </div>
   ) : (

@@ -2,6 +2,7 @@ use super::rpc_client::{
     probe_daemon, request_daemon_shutdown, wait_for_daemon_shutdown, DaemonInfo, DaemonProbe,
 };
 use super::*;
+use crate::shared::terminal_core::TERMINAL_RPC_VERSION;
 
 const EXPECTED_DAEMON_NAME: &str = "codex-monitor-daemon";
 const EXPECTED_DAEMON_MODE: &str = "tcp";
@@ -22,6 +23,9 @@ fn should_restart_daemon(info: Option<&DaemonInfo>) -> bool {
     !is_managed_daemon(info)
         || info.version != CURRENT_APP_VERSION
         || info.mode != EXPECTED_DAEMON_MODE
+        || !info
+            .terminal_rpc_version
+            .is_some_and(|version| version >= TERMINAL_RPC_VERSION)
 }
 
 fn daemon_restart_reason(info: Option<&DaemonInfo>) -> String {
@@ -41,6 +45,15 @@ fn daemon_restart_reason(info: Option<&DaemonInfo>) -> String {
         return format!(
             "Daemon mode `{}` does not match expected `{}`",
             info.mode, EXPECTED_DAEMON_MODE
+        );
+    }
+    if !info
+        .terminal_rpc_version
+        .is_some_and(|version| version >= TERMINAL_RPC_VERSION)
+    {
+        return format!(
+            "Daemon terminal RPC capability {:?} is below required {}",
+            info.terminal_rpc_version, TERMINAL_RPC_VERSION
         );
     }
     "Daemon restart required".to_string()
@@ -443,6 +456,7 @@ mod tests {
             pid: Some(42),
             mode: EXPECTED_DAEMON_MODE.to_string(),
             binary_path: Some("/tmp/codex-monitor-daemon".to_string()),
+            terminal_rpc_version: Some(crate::shared::terminal_core::TERMINAL_RPC_VERSION),
         }
     }
 
@@ -456,6 +470,13 @@ mod tests {
     fn no_restart_for_same_version_and_mode() {
         let info = daemon_info(CURRENT_APP_VERSION);
         assert!(!should_restart_daemon(Some(&info)));
+    }
+
+    #[test]
+    fn restart_required_for_missing_terminal_rpc_capability() {
+        let mut info = daemon_info(CURRENT_APP_VERSION);
+        info.terminal_rpc_version = None;
+        assert!(should_restart_daemon(Some(&info)));
     }
 
     #[test]

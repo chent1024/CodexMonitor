@@ -42,6 +42,7 @@ describe("WorktreeSection", () => {
         onConnectWorkspace={vi.fn()}
         onToggleWorkspaceCollapse={vi.fn()}
         onSelectThread={vi.fn()}
+        onToggleThreadPin={vi.fn()}
         onShowThreadMenu={vi.fn()}
         onShowWorktreeMenu={vi.fn()}
         onToggleExpanded={vi.fn()}
@@ -50,10 +51,10 @@ describe("WorktreeSection", () => {
     );
 
     expect(
-      screen.queryByRole("button", { name: "Search older..." }),
+      screen.queryByRole("button", { name: "查找更早会话..." }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Load older..." }),
+      screen.queryByRole("button", { name: "加载更早会话..." }),
     ).toBeNull();
   });
 });

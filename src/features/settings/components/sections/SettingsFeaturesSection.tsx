@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { CodexFeature } from "@/types";
 import {
   SettingsSection,
@@ -79,6 +80,38 @@ function featureSubtitle(feature: CodexFeature): string {
   return `功能键：features.${feature.name}`;
 }
 
+type LocalMemoryReviewItem =
+  SettingsFeaturesSectionProps["localMemoryReviewQueue"][number];
+
+function memoryMetadataValue(
+  metadata: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function memoryReviewLabel(memory: LocalMemoryReviewItem): string {
+  const capture = memoryMetadataValue(memory.metadata, "capture");
+  const trigger = memoryMetadataValue(memory.metadata, "trigger");
+  const source = memoryMetadataValue(memory.metadata, "source");
+  return [memory.scope, memory.kind, capture, trigger, source].filter(Boolean).join(" / ");
+}
+
+function memoryReviewSearchText(memory: LocalMemoryReviewItem): string {
+  return [
+    memory.content,
+    memory.scope,
+    memory.kind,
+    memory.workspacePath,
+    memory.threadId,
+    memoryReviewLabel(memory),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 export function SettingsFeaturesSection({
   appSettings,
   hasFeatureWorkspace,
@@ -93,11 +126,66 @@ export function SettingsFeaturesSection({
   localMemoryLoading,
   localMemoryUpdating,
   localMemoryError,
+  localMemoryQuery,
+  localMemoryDraft,
+  localMemoryDbPathDraft,
+  localMemoryReviewFilter,
+  localMemorySelectedReviewIds,
+  localMemoryRecords,
+  localMemoryReviewQueue,
+  localMemoryEntities,
+  localMemoryEvents,
+  localMemoryConnection,
+  localMemoryActionLoading,
   onOpenConfig,
   onToggleLocalMemory,
+  onLocalMemoryQueryChange,
+  onLocalMemoryDraftChange,
+  onLocalMemoryDbPathDraftChange,
+  onLocalMemoryReviewFilterChange,
+  onApplyLocalMemoryDbPath,
+  onApplyLocalMemoryEmbeddingModel,
+  onCheckLocalMemoryConnection,
+  onRefreshLocalMemories,
+  onSearchLocalMemories,
+  onAddLocalMemory,
+  onUpdateLocalMemory,
+  onDeleteLocalMemory,
+  onDeleteAllLocalMemories,
+  onDeleteLocalMemoryEntities,
+  onRebuildLocalMemoryIndexes,
+  onExportLocalMemories,
+  onImportLocalMemories,
+  onToggleLocalMemoryReviewSelection,
+  onToggleAllLocalMemoryReviewSelection,
+  onApproveLocalMemory,
+  onEditAndApproveLocalMemory,
+  onApproveSelectedLocalMemories,
+  onRejectLocalMemory,
+  onRejectSelectedLocalMemories,
   onToggleCodexFeature,
   onUpdateAppSettings,
 }: SettingsFeaturesSectionProps) {
+  const visibleReviewQueue = useMemo(() => {
+    const query = localMemoryReviewFilter.trim().toLowerCase();
+    if (!query) {
+      return localMemoryReviewQueue;
+    }
+    return localMemoryReviewQueue.filter((memory) =>
+      memoryReviewSearchText(memory).includes(query),
+    );
+  }, [localMemoryReviewFilter, localMemoryReviewQueue]);
+  const selectedReviewIds = useMemo(
+    () => new Set(localMemorySelectedReviewIds),
+    [localMemorySelectedReviewIds],
+  );
+  const visibleReviewIds = visibleReviewQueue.map((memory) => memory.id);
+  const selectedVisibleReviewCount = visibleReviewIds.filter((id) =>
+    selectedReviewIds.has(id),
+  ).length;
+  const allVisibleReviewSelected =
+    visibleReviewIds.length > 0 && selectedVisibleReviewCount === visibleReviewIds.length;
+
   return (
     <SettingsSection
       title="功能特性"
@@ -123,6 +211,10 @@ export function SettingsFeaturesSection({
                 <code>{localMemoryStatus.serverName}</code>
                 {" -> "}
                 <code>{localMemoryStatus.dbPath}</code>
+                <br />
+                <code>{localMemoryStatus.embeddingModel}</code>
+                {" / "}
+                <code>{localMemoryStatus.embeddingDim}d</code>
               </>
             ) : null}
           </>
@@ -135,6 +227,315 @@ export function SettingsFeaturesSection({
         />
       </SettingsToggleRow>
       {localMemoryError && <div className="settings-help">{localMemoryError}</div>}
+      {localMemoryStatus?.enabled && (
+        <div className="settings-memory-manager">
+          <div className="settings-memory-path-row">
+            <input
+              className="settings-input"
+              value={localMemoryDbPathDraft}
+              onChange={(event) => onLocalMemoryDbPathDraftChange(event.target.value)}
+              placeholder="Local memory database path"
+              aria-label="Local memory database path"
+            />
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={onApplyLocalMemoryDbPath}
+              disabled={
+                localMemoryActionLoading ||
+                localMemoryDbPathDraft.trim() === localMemoryStatus.dbPath
+              }
+            >
+              Apply Path
+            </button>
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={onCheckLocalMemoryConnection}
+              disabled={localMemoryActionLoading}
+            >
+              Check MCP
+            </button>
+          </div>
+          {localMemoryConnection && (
+            <div className="settings-memory-connection">
+              <span>{localMemoryConnection.ok ? "MCP connected" : "MCP failed"}</span>
+              {localMemoryConnection.protocolVersion && (
+                <span>{localMemoryConnection.protocolVersion}</span>
+              )}
+              {localMemoryConnection.toolCount != null && (
+                <span>{localMemoryConnection.toolCount} tools</span>
+              )}
+            </div>
+          )}
+          <div className="settings-memory-embedding-row">
+            <select
+              className="settings-select"
+              value={localMemoryStatus.embeddingModel}
+              onChange={(event) => onApplyLocalMemoryEmbeddingModel(event.target.value)}
+              aria-label="Local memory embedding model"
+              disabled={localMemoryActionLoading}
+            >
+              {(localMemoryStatus.embeddingModels ?? []).map((model) => (
+                <option value={model.id} key={model.id}>
+                  {model.label} ({model.dim}d)
+                </option>
+              ))}
+            </select>
+            {localMemoryStatus.indexRebuildRecommended && (
+              <span className="settings-memory-rebuild-hint">
+                Rebuild recommended
+              </span>
+            )}
+          </div>
+          <div className="settings-memory-toolbar">
+            <input
+              className="settings-input"
+              value={localMemoryQuery}
+              onChange={(event) => onLocalMemoryQueryChange(event.target.value)}
+              placeholder="Search local memory"
+              aria-label="Search local memory"
+            />
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={onSearchLocalMemories}
+              disabled={localMemoryActionLoading}
+            >
+              Search
+            </button>
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={onRefreshLocalMemories}
+              disabled={localMemoryActionLoading}
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={onRebuildLocalMemoryIndexes}
+              disabled={localMemoryActionLoading}
+            >
+              Rebuild
+            </button>
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={onExportLocalMemories}
+              disabled={localMemoryActionLoading || localMemoryRecords.length === 0}
+            >
+              Export
+            </button>
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={onImportLocalMemories}
+              disabled={localMemoryActionLoading}
+            >
+              Import
+            </button>
+          </div>
+          <div className="settings-memory-add">
+            <textarea
+              className="settings-textarea"
+              value={localMemoryDraft}
+              onChange={(event) => onLocalMemoryDraftChange(event.target.value)}
+              placeholder="Add a durable memory"
+              aria-label="Add local memory"
+              rows={3}
+            />
+            <button
+              type="button"
+              className="primary settings-button-compact"
+              onClick={onAddLocalMemory}
+              disabled={localMemoryActionLoading || !localMemoryDraft.trim()}
+            >
+              Add
+            </button>
+          </div>
+          <div className="settings-memory-summary">
+            <span>{localMemoryRecords.length} memories</span>
+            <span>{localMemoryReviewQueue.length} pending</span>
+            <span>{localMemoryEntities.length} entities</span>
+            <span>{localMemoryEvents.length} events</span>
+            {localMemoryActionLoading && <span>Working...</span>}
+          </div>
+          {localMemoryReviewQueue.length > 0 && (
+            <div className="settings-memory-review">
+              <div className="settings-memory-review-title">
+                <span>Pending review</span>
+                <span>
+                  {visibleReviewQueue.length} / {localMemoryReviewQueue.length}
+                </span>
+              </div>
+              <div className="settings-memory-review-toolbar">
+                <input
+                  className="settings-input"
+                  value={localMemoryReviewFilter}
+                  onChange={(event) =>
+                    onLocalMemoryReviewFilterChange(event.target.value)
+                  }
+                  placeholder="Filter pending memory"
+                  aria-label="Filter pending memory"
+                />
+                <button
+                  type="button"
+                  className="ghost settings-button-compact"
+                  onClick={() => onToggleAllLocalMemoryReviewSelection(visibleReviewIds)}
+                  disabled={localMemoryActionLoading || visibleReviewIds.length === 0}
+                >
+                  {allVisibleReviewSelected ? "Clear visible" : "Select visible"}
+                </button>
+                <button
+                  type="button"
+                  className="ghost settings-button-compact"
+                  onClick={onApproveSelectedLocalMemories}
+                  disabled={
+                    localMemoryActionLoading ||
+                    localMemorySelectedReviewIds.length === 0
+                  }
+                >
+                  Approve selected
+                </button>
+                <button
+                  type="button"
+                  className="ghost settings-button-compact"
+                  onClick={onRejectSelectedLocalMemories}
+                  disabled={
+                    localMemoryActionLoading ||
+                    localMemorySelectedReviewIds.length === 0
+                  }
+                >
+                  Reject selected
+                </button>
+              </div>
+              {visibleReviewQueue.length === 0 && (
+                <div className="settings-memory-review-empty">
+                  No pending memories match the current filter.
+                </div>
+              )}
+              {visibleReviewQueue.map((memory) => (
+                <div className="settings-memory-row" key={memory.id}>
+                  <label className="settings-memory-review-check">
+                    <input
+                      type="checkbox"
+                      checked={selectedReviewIds.has(memory.id)}
+                      onChange={() => onToggleLocalMemoryReviewSelection(memory.id)}
+                      disabled={localMemoryActionLoading}
+                      aria-label={`Select pending memory ${memory.id}`}
+                    />
+                  </label>
+                  <div className="settings-memory-row-main">
+                    <div className="settings-memory-row-meta">
+                      {memoryReviewLabel(memory)}
+                    </div>
+                    <div className="settings-memory-row-content">{memory.content}</div>
+                  </div>
+                  <div className="settings-memory-row-actions">
+                    <button
+                      type="button"
+                      className="ghost settings-button-compact"
+                      onClick={() => onEditAndApproveLocalMemory(memory)}
+                      disabled={localMemoryActionLoading}
+                    >
+                      Edit approve
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost settings-button-compact"
+                      onClick={() => onApproveLocalMemory(memory.id)}
+                      disabled={localMemoryActionLoading}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost settings-button-compact"
+                      onClick={() => onRejectLocalMemory(memory.id)}
+                      disabled={localMemoryActionLoading}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="settings-memory-list">
+            {localMemoryRecords.map((memory) => (
+              <div className="settings-memory-row" key={memory.id}>
+                <div className="settings-memory-row-main">
+                  <div className="settings-memory-row-meta">
+                    {memory.scope} / {memory.kind}
+                  </div>
+                  <div className="settings-memory-row-content">{memory.content}</div>
+                </div>
+                <div className="settings-memory-row-actions">
+                  <button
+                    type="button"
+                    className="ghost settings-button-compact"
+                    onClick={() => onUpdateLocalMemory(memory)}
+                    disabled={localMemoryActionLoading}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost settings-button-compact"
+                    onClick={() => onDeleteLocalMemory(memory.id)}
+                    disabled={localMemoryActionLoading}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+            {localMemoryRecords.length === 0 && (
+              <div className="settings-help">No local memories found.</div>
+            )}
+          </div>
+          {localMemoryEntities.length > 0 && (
+            <div className="settings-memory-entities">
+              {localMemoryEntities.slice(0, 24).map((entity) => (
+                <span className="settings-memory-entity" key={entity.id}>
+                  {entity.name} ({entity.memoryCount})
+                </span>
+              ))}
+            </div>
+          )}
+          {localMemoryEvents.length > 0 && (
+            <div className="settings-memory-events">
+              {localMemoryEvents.slice(0, 8).map((event) => (
+                <div className="settings-memory-event" key={event.id}>
+                  <span>{event.event}</span>
+                  <span>{event.status}</span>
+                  {event.resultCount != null && <span>{event.resultCount} results</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="settings-memory-danger">
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={onDeleteLocalMemoryEntities}
+              disabled={localMemoryActionLoading || localMemoryEntities.length === 0}
+            >
+              Clear Entities
+            </button>
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={onDeleteAllLocalMemories}
+              disabled={localMemoryActionLoading || localMemoryRecords.length === 0}
+            >
+              Delete All
+            </button>
+          </div>
+        </div>
+      )}
       <SettingsSubsection
         title="稳定功能"
         subtitle="默认启用、可用于生产的功能。"

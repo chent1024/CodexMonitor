@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
+import capabilities from "../../../../src-tauri/capabilities/default.json";
 
 const currentMonitorMock = vi.hoisted(() => vi.fn());
 const getCurrentWindowMock = vi.hoisted(() => vi.fn());
@@ -102,6 +103,18 @@ describe("windowZoom", () => {
     expect(handle.setSize).toHaveBeenCalledWith(new PhysicalSize(1440, 875));
   });
 
+  it("does not subtract the current frame delta when zooming to the work area", async () => {
+    const handle = windowHandle({
+      outerSize: new PhysicalSize(900, 650),
+      innerSize: new PhysicalSize(872, 611),
+    });
+
+    await toggleWindowZoomWithinCurrentDisplay(handle as never);
+
+    expect(handle.setPosition).toHaveBeenCalledWith(new PhysicalPosition(0, 25));
+    expect(handle.setSize).toHaveBeenCalledWith(new PhysicalSize(1440, 875));
+  });
+
   it("restores the previous bounds after a custom zoom", async () => {
     const handle = windowHandle();
 
@@ -123,5 +136,27 @@ describe("windowZoom", () => {
 
     expect(handle.setPosition).toHaveBeenCalledWith(new PhysicalPosition(120, 113));
     expect(handle.setSize).toHaveBeenCalledWith(new PhysicalSize(1200, 700));
+  });
+
+  it("keeps Tauri desktop permissions in sync with window zoom APIs", () => {
+    const desktopCapability = capabilities.capabilities.find(
+      (capability) => capability.identifier === "desktop-default",
+    );
+    expect(desktopCapability).toBeTruthy();
+    const permissions = desktopCapability?.permissions ?? [];
+
+    expect(permissions).toEqual(
+      expect.arrayContaining([
+        "core:window:allow-current-monitor",
+        "core:window:allow-inner-size",
+        "core:window:allow-is-maximized",
+        "core:window:allow-outer-position",
+        "core:window:allow-outer-size",
+        "core:window:allow-set-position",
+        "core:window:allow-set-size",
+        "core:window:allow-toggle-maximize",
+        "core:window:allow-unmaximize",
+      ]),
+    );
   });
 });

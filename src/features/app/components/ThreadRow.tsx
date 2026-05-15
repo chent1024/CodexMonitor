@@ -1,4 +1,5 @@
 import { memo, useCallback, type CSSProperties, type MouseEvent } from "react";
+import Pin from "lucide-react/dist/esm/icons/pin";
 
 import type { ThreadSummary } from "../../../types";
 import { getThreadStatusClass, type ThreadStatusById } from "../../../utils/threadStatus";
@@ -53,6 +54,7 @@ type ThreadRowProps = {
   getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   onSelectThread: (workspaceId: string, threadId: string) => void;
+  onToggleThreadPin?: (workspaceId: string, threadId: string, isPinned: boolean) => void;
   onShowThreadMenu: (
     event: MouseEvent,
     workspaceId: string,
@@ -78,6 +80,7 @@ export const ThreadRow = memo(function ThreadRow({
   getThreadArgsBadge,
   isThreadPinned,
   onSelectThread,
+  onToggleThreadPin,
   onShowThreadMenu,
   hasSubagentChildren = false,
   subagentsExpanded = true,
@@ -141,6 +144,14 @@ export const ThreadRow = memo(function ThreadRow({
     }
     onSelectThread(workspaceId, thread.id);
   }, [isActive, onSelectThread, thread.id, workspaceId]);
+  const handleTogglePin = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!canPin) {
+      return;
+    }
+    onToggleThreadPin?.(workspaceId, thread.id, isPinned);
+  }, [canPin, isPinned, onToggleThreadPin, thread.id, workspaceId]);
 
   return (
     <div
@@ -162,6 +173,20 @@ export const ThreadRow = memo(function ThreadRow({
         }
       }}
     >
+      {canPin && (
+        <button
+          type="button"
+          className={`thread-pin-button${isPinned ? " is-pinned" : ""}`}
+          aria-label={isPinned ? "Unpin thread" : "Pin thread"}
+          aria-pressed={isPinned}
+          title={isPinned ? "Unpin" : "Pin"}
+          onClick={handleTogglePin}
+          onKeyDown={(event) => event.stopPropagation()}
+          data-tauri-drag-region="false"
+        >
+          <Pin aria-hidden />
+        </button>
+      )}
       <span className={`thread-status ${statusClass}`} aria-hidden />
       <div className="thread-content">
         <div className="thread-headline">

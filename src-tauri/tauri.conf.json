@@ -25,7 +25,7 @@
           "x": 19,
           "y": 24
         },
-        "transparent": true,
+        "transparent": false,
         "devtools": true
       }
     ],

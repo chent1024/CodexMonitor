@@ -250,7 +250,15 @@ export function HomeUsageSection({
                     ? `${formatDayLabel(day.day)} · ${formatCount(day.totalTokens)} Token`
                     : `${formatDayLabel(day.day)} · ${formatDuration(day.agentTimeMs ?? 0)} 智能体时长`;
                 return (
-                  <div className="home-usage-bar" key={day.day} data-value={tooltip}>
+                  <div
+                    className="home-usage-bar"
+                    key={day.day}
+                    data-value={tooltip}
+                    title={tooltip}
+                    role="img"
+                    aria-label={tooltip}
+                    tabIndex={0}
+                  >
                     <span
                       className="home-usage-bar-fill"
                       style={{ height: `${height}%` }}

@@ -3,8 +3,9 @@ import Settings from "lucide-react/dist/esm/icons/settings";
 import User from "lucide-react/dist/esm/icons/user";
 import X from "lucide-react/dist/esm/icons/x";
 import { useCallback, useEffect, useState } from "react";
-import type { TcpDaemonStatus } from "@/types";
+import type { DaemonHealthStatus, TcpDaemonStatus } from "@/types";
 import {
+  daemonHealthStatus,
   getRestartSafeSessionDebugStatus,
   tailscaleDaemonStatus,
   type RestartSafeDebugStatus,
@@ -50,6 +51,22 @@ type DaemonIndicatorState = {
   title: string;
   details: string[];
 };
+
+function restartSafeCount(
+  status: RestartSafeDebugStatus,
+  field: keyof RestartSafeDebugStatus,
+  fallbackField?: keyof RestartSafeDebugStatus,
+) {
+  const value = status[field];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  const fallbackValue = fallbackField ? status[fallbackField] : null;
+  if (typeof fallbackValue === "number" && Number.isFinite(fallbackValue)) {
+    return fallbackValue;
+  }
+  return 0;
+}
 
 function isTauriRuntime() {
   if (typeof window === "undefined") {
@@ -100,6 +117,7 @@ function formatDaemonDetailLines(
   status: TcpDaemonStatus,
   restartSafeStatus: RestartSafeDebugStatus | null,
   restartSafeError: string | null,
+  healthStatus: DaemonHealthStatus | null,
 ) {
   const lines: string[] = [];
   if (status.state === "running") {
@@ -117,6 +135,16 @@ function formatDaemonDetailLines(
   if (restartSafeError) {
     lines.push(`重启保护 ${restartSafeError}`);
   }
+  if (healthStatus?.connected) {
+    lines.push(
+      healthStatus.terminalRpcSupported
+        ? `Terminal RPC ${healthStatus.terminalRpcVersion}`
+        : `Terminal RPC 缺失，需要 ${healthStatus.requiredTerminalRpcVersion}`,
+    );
+    lines.push(...healthStatus.warnings);
+  } else if (healthStatus?.lastError) {
+    lines.push(healthStatus.lastError);
+  }
   return lines;
 }
 
@@ -124,10 +152,17 @@ function formatRestartSafeDetailLines(status: RestartSafeDebugStatus | null) {
   if (!status) {
     return [];
   }
-  const processingSessionCount = status.processingSessionCount ?? 0;
+  const retainedSessionCount = restartSafeCount(
+    status,
+    "retainedSessionCount",
+    "sessionCount",
+  );
+  const processingSessionCount = restartSafeCount(status, "processingSessionCount");
+  const pendingRequestCount = restartSafeCount(status, "pendingRequestCount");
+  const journalEventCount = restartSafeCount(status, "journalEventCount");
   return [
-    `会话 ${status.retainedSessionCount} 已保留 · ${processingSessionCount} 处理中 · ${status.pendingRequestCount} 待处理`,
-    `事件 ${status.journalEventCount} 已缓存 · ${
+    `会话 ${retainedSessionCount} 已保留 · ${processingSessionCount} 处理中 · ${pendingRequestCount} 待处理`,
+    `事件 ${journalEventCount} 已缓存 · ${
       status.idleShutdownAllowed ? "空闲后可退出" : "将继续保留"
     }`,
   ];
@@ -173,6 +208,7 @@ function useDaemonIndicatorState(): [DaemonIndicatorState, () => void] {
         const daemonStatus = await tailscaleDaemonStatus();
         let restartSafeStatus: RestartSafeDebugStatus | null = null;
         let restartSafeError: string | null = null;
+        let healthStatus: DaemonHealthStatus | null = null;
         if (daemonStatus.state === "running") {
           try {
             restartSafeStatus = await getRestartSafeSessionDebugStatus();
@@ -180,14 +216,41 @@ function useDaemonIndicatorState(): [DaemonIndicatorState, () => void] {
             restartSafeError =
               error instanceof Error ? error.message : String(error);
           }
+          try {
+            healthStatus = await daemonHealthStatus();
+          } catch (error) {
+            healthStatus = {
+              connected: false,
+              name: null,
+              version: null,
+              appVersion: "",
+              mode: null,
+              pid: null,
+              binaryPath: null,
+              terminalRpcVersion: null,
+              requiredTerminalRpcVersion: 1,
+              terminalRpcSupported: false,
+              restartSafeProtocolVersion: null,
+              requiredRestartSafeProtocolVersion: 1,
+              restartSafeProtocolCompatible: true,
+              warnings: [],
+              lastError: error instanceof Error ? error.message : String(error),
+              roundTripMs: 0,
+            };
+          }
         }
         if (cancelled) {
           return;
         }
+        const hasHealthWarning =
+          healthStatus !== null &&
+          (!healthStatus.connected ||
+            healthStatus.warnings.length > 0 ||
+            !healthStatus.terminalRpcSupported);
         setState({
           tone:
             daemonStatus.state === "running"
-              ? restartSafeError
+              ? restartSafeError || hasHealthWarning
                 ? "warning"
                 : "healthy"
               : daemonStatus.state === "error"
@@ -198,6 +261,7 @@ function useDaemonIndicatorState(): [DaemonIndicatorState, () => void] {
             daemonStatus,
             restartSafeStatus,
             restartSafeError,
+            healthStatus,
           ),
         });
       } catch (error) {

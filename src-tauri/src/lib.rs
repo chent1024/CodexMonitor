@@ -126,6 +126,7 @@ pub fn run() {
             {
                 if let Some(main_window) = app.get_webview_window("main") {
                     let _ = main_window.set_decorations(false);
+                    let _ = main_window.set_shadow(false);
                     // Keep menu accelerators wired while suppressing a visible native menu bar.
                     let _ = main_window.hide_menu();
                 }
@@ -177,7 +178,6 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
 
     let app = builder
-        .plugin(tauri_plugin_liquid_glass::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
@@ -282,6 +282,25 @@ pub fn run() {
             codex::get_local_memory_status,
             codex::get_local_memory_debug_status,
             codex::set_local_memory_enabled,
+            codex::set_local_memory_db_path,
+            codex::set_local_memory_embedding_model,
+            codex::check_local_memory_connection,
+            codex::add_local_memory,
+            codex::search_local_memories,
+            codex::list_local_memories,
+            codex::get_local_memory,
+            codex::update_local_memory,
+            codex::delete_local_memory,
+            codex::delete_all_local_memories,
+            codex::import_local_memories,
+            codex::list_local_memory_review_queue,
+            codex::approve_local_memory,
+            codex::reject_local_memory,
+            codex::list_local_memory_entities,
+            codex::delete_local_memory_entities,
+            codex::rebuild_local_memory_indexes,
+            codex::list_local_memory_events,
+            codex::get_local_memory_event_status,
             codex::get_agents_settings,
             codex::set_agents_core_settings,
             codex::create_agent,
@@ -315,6 +334,7 @@ pub fn run() {
             tailscale::tailscale_daemon_start,
             tailscale::tailscale_daemon_stop,
             tailscale::tailscale_daemon_status,
+            remote_backend::daemon_health_status,
             is_mobile_runtime,
             perform_window_zoom
         ])

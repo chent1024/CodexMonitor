@@ -22,6 +22,7 @@ type PinnedThreadListProps = {
   getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   onSelectThread: (workspaceId: string, threadId: string) => void;
+  onToggleThreadPin: (workspaceId: string, threadId: string, isPinned: boolean) => void;
   onShowThreadMenu: (
     event: MouseEvent,
     workspaceId: string,
@@ -41,6 +42,7 @@ function PinnedThreadList({
   getThreadArgsBadge,
   isThreadPinned,
   onSelectThread,
+  onToggleThreadPin,
   onShowThreadMenu,
 }: PinnedThreadListProps) {
   const [collapsedThreadKeys, setCollapsedThreadKeys] = useState<Set<string>>(new Set());
@@ -86,6 +88,7 @@ function PinnedThreadList({
             getThreadArgsBadge={getThreadArgsBadge}
             isThreadPinned={isThreadPinned}
             onSelectThread={onSelectThread}
+            onToggleThreadPin={onToggleThreadPin}
             onShowThreadMenu={onShowThreadMenu}
             hasSubagentChildren={visibility.rowsWithChildren.has(row)}
             subagentsExpanded={!collapsedThreadKeys.has(threadKey)}
@@ -165,6 +168,7 @@ const PinnedThreadListMemo = memo(
     prev.getThreadArgsBadge === next.getThreadArgsBadge &&
     prev.isThreadPinned === next.isThreadPinned &&
     prev.onSelectThread === next.onSelectThread &&
+    prev.onToggleThreadPin === next.onToggleThreadPin &&
     prev.onShowThreadMenu === next.onShowThreadMenu &&
     prev.rows === next.rows &&
     !hasPinnedStatusChanged(prev, next) &&

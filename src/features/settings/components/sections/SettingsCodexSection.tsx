@@ -23,6 +23,7 @@ type SettingsCodexSectionProps = {
   onRefreshDefaultModels: () => void;
   codexPathDraft: string;
   codexArgsDraft: string;
+  terminalShellDraft: string;
   codexDirty: boolean;
   isSavingSettings: boolean;
   doctorState: {
@@ -49,6 +50,7 @@ type SettingsCodexSectionProps = {
   globalConfigSaveLabel: string;
   onSetCodexPathDraft: Dispatch<SetStateAction<string>>;
   onSetCodexArgsDraft: Dispatch<SetStateAction<string>>;
+  onSetTerminalShellDraft: Dispatch<SetStateAction<string>>;
   onSetGlobalAgentsContent: (value: string) => void;
   onSetGlobalConfigContent: (value: string) => void;
   onBrowseCodex: () => Promise<void>;
@@ -115,6 +117,7 @@ export function SettingsCodexSection({
   onRefreshDefaultModels,
   codexPathDraft,
   codexArgsDraft,
+  terminalShellDraft,
   codexDirty,
   isSavingSettings,
   doctorState,
@@ -135,6 +138,7 @@ export function SettingsCodexSection({
   globalConfigSaveLabel,
   onSetCodexPathDraft,
   onSetCodexArgsDraft,
+  onSetTerminalShellDraft,
   onSetGlobalAgentsContent,
   onSetGlobalConfigContent,
   onBrowseCodex,
@@ -293,6 +297,28 @@ export function SettingsCodexSection({
           <code>-s</code>/<code>--sandbox</code>, <code>--full-auto</code>,{" "}
           <code>--dangerously-bypass-approvals-and-sandbox</code>, <code>--oss</code>,{" "}
           <code>--local-provider</code> 和 <code>--no-alt-screen</code>。
+        </div>
+        <label className="settings-field-label" htmlFor="terminal-shell">
+          Terminal shell
+        </label>
+        <div className="settings-field-row">
+          <input
+            id="terminal-shell"
+            className="settings-input"
+            value={terminalShellDraft}
+            placeholder="cmd.exe, powershell.exe, pwsh.exe"
+            onChange={(event) => onSetTerminalShellDraft(event.target.value)}
+          />
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => onSetTerminalShellDraft("")}
+          >
+            Clear
+          </button>
+        </div>
+        <div className="settings-help">
+          Leave empty to use the system default shell. New terminal sessions pick this up after save.
         </div>
         <div className="settings-field-actions">
           {codexDirty && (

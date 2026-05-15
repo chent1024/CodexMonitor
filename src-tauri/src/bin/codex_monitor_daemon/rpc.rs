@@ -1,4 +1,6 @@
 use super::*;
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
 
 #[path = "rpc/codex.rs"]
 mod codex;
@@ -149,13 +151,6 @@ pub(super) fn parse_optional_u32(value: &Value, key: &str) -> Option<u32> {
     }
 }
 
-pub(super) fn parse_optional_u64(value: &Value, key: &str) -> Option<u64> {
-    match value {
-        Value::Object(map) => map.get(key).and_then(|value| value.as_u64()),
-        _ => None,
-    }
-}
-
 pub(super) fn parse_optional_bool(value: &Value, key: &str) -> Option<bool> {
     match value {
         Value::Object(map) => map.get(key).and_then(|value| value.as_bool()),
@@ -189,6 +184,10 @@ pub(super) fn parse_optional_value(value: &Value, key: &str) -> Option<Value> {
     }
 }
 
+pub(super) fn parse_params<T: DeserializeOwned>(params: &Value) -> Result<T, String> {
+    serde_json::from_value(params.clone()).map_err(|err| err.to_string())
+}
+
 pub(super) async fn handle_rpc_request(
     state: &DaemonState,
     method: &str,
@@ -198,8 +197,55 @@ pub(super) async fn handle_rpc_request(
     dispatcher::dispatch_rpc_request(state, method, &params, &client_version).await
 }
 
+#[derive(Clone, Debug, Default)]
+struct DaemonEventFilter {
+    workspace_ids: HashSet<String>,
+    session_ids: HashSet<String>,
+    terminal_ids: HashSet<String>,
+}
+
+impl DaemonEventFilter {
+    fn matches(&self, event: &DaemonEvent) -> bool {
+        if self.workspace_ids.is_empty()
+            && self.session_ids.is_empty()
+            && self.terminal_ids.is_empty()
+        {
+            return true;
+        }
+
+        match event {
+            DaemonEvent::AppServer(payload) => self.workspace_ids.contains(&payload.workspace_id),
+            DaemonEvent::RestartSafeSession(payload) => {
+                self.workspace_ids.contains(&payload.workspace_id)
+                    || self.session_ids.contains(&payload.session_id)
+                    || self.session_ids.contains(&payload.session_instance_id)
+            }
+            DaemonEvent::TerminalOutput(payload) => {
+                self.workspace_ids.contains(&payload.workspace_id)
+                    || self.terminal_ids.contains(&payload.terminal_id)
+            }
+            DaemonEvent::TerminalExit(payload) => {
+                self.workspace_ids.contains(&payload.workspace_id)
+                    || self.terminal_ids.contains(&payload.terminal_id)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EventSubscribeParams {
+    #[serde(default)]
+    workspace_ids: Vec<String>,
+    #[serde(default)]
+    session_ids: Vec<String>,
+    #[serde(default)]
+    terminal_ids: Vec<String>,
+}
+
 pub(super) struct RpcConnectionState {
     attached_restart_safe_sessions: Mutex<HashSet<String>>,
+    event_filter: Mutex<DaemonEventFilter>,
     closed: std::sync::atomic::AtomicBool,
 }
 
@@ -207,8 +253,31 @@ impl RpcConnectionState {
     pub(super) fn new() -> Self {
         Self {
             attached_restart_safe_sessions: Mutex::new(HashSet::new()),
+            event_filter: Mutex::new(DaemonEventFilter::default()),
             closed: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    async fn update_event_filter(&self, params: EventSubscribeParams) -> Value {
+        let filter = DaemonEventFilter {
+            workspace_ids: params.workspace_ids.into_iter().collect(),
+            session_ids: params.session_ids.into_iter().collect(),
+            terminal_ids: params.terminal_ids.into_iter().collect(),
+        };
+        let workspace_count = filter.workspace_ids.len();
+        let session_count = filter.session_ids.len();
+        let terminal_count = filter.terminal_ids.len();
+        *self.event_filter.lock().await = filter;
+        json!({
+            "ok": true,
+            "workspaceFilterCount": workspace_count,
+            "sessionFilterCount": session_count,
+            "terminalFilterCount": terminal_count,
+        })
+    }
+
+    async fn matches_event(&self, event: &DaemonEvent) -> bool {
+        self.event_filter.lock().await.clone().matches(event)
     }
 
     async fn track_session_attach(&self, state: &DaemonState, session_id: String) {
@@ -244,6 +313,7 @@ impl RpcConnectionState {
 pub(super) async fn forward_events(
     mut rx: broadcast::Receiver<DaemonEvent>,
     out_tx_events: mpsc::Sender<String>,
+    connection_state: Arc<RpcConnectionState>,
 ) {
     loop {
         let event = match rx.recv().await {
@@ -259,6 +329,10 @@ pub(super) async fn forward_events(
             }
             Err(broadcast::error::RecvError::Closed) => break,
         };
+
+        if !connection_state.matches_event(&event).await {
+            continue;
+        }
 
         let Some(payload) = build_event_notification(event) else {
             continue;
@@ -282,7 +356,14 @@ pub(super) fn spawn_rpc_response_task(
 ) {
     tokio::spawn(async move {
         let session_id = parse_optional_string(&params, "sessionId");
-        let result = handle_rpc_request(&state, &method, params, client_version).await;
+        let result = if method == "event/subscribe" || method == "events/subscribe" {
+            match parse_params::<EventSubscribeParams>(&params) {
+                Ok(parsed) => Ok(connection_state.update_event_filter(parsed).await),
+                Err(err) => Err(err),
+            }
+        } else {
+            handle_rpc_request(&state, &method, params, client_version).await
+        };
         if result.is_ok() {
             if let Some(session_id) = session_id.as_deref() {
                 match method.as_str() {
@@ -311,8 +392,12 @@ pub(super) fn spawn_rpc_response_task(
 
 #[cfg(test)]
 mod tests {
-    use super::build_event_gap_notification;
-    use serde_json::Value;
+    use super::{build_event_gap_notification, DaemonEventFilter};
+    use crate::backend::events::AppServerEvent;
+    use crate::shared::restart_safe_sessions_core::RestartSafeSessionEvent;
+    use crate::DaemonEvent;
+    use serde_json::{json, Value};
+    use std::collections::HashSet;
 
     #[test]
     fn event_gap_notification_is_app_server_event() {
@@ -339,5 +424,45 @@ mod tests {
                 .and_then(Value::as_u64),
             Some(7)
         );
+    }
+
+    #[test]
+    fn event_filter_matches_workspace_and_session_instance_ids() {
+        let workspace_filter = DaemonEventFilter {
+            workspace_ids: HashSet::from(["ws-1".to_string()]),
+            session_ids: HashSet::new(),
+            terminal_ids: HashSet::new(),
+        };
+        assert!(
+            workspace_filter.matches(&DaemonEvent::AppServer(AppServerEvent {
+                workspace_id: "ws-1".to_string(),
+                message: json!({}),
+            }))
+        );
+        assert!(
+            !workspace_filter.matches(&DaemonEvent::AppServer(AppServerEvent {
+                workspace_id: "ws-2".to_string(),
+                message: json!({}),
+            }))
+        );
+
+        let session_filter = DaemonEventFilter {
+            workspace_ids: HashSet::new(),
+            session_ids: HashSet::from(["session:ws-2:abc".to_string()]),
+            terminal_ids: HashSet::new(),
+        };
+        assert!(session_filter.matches(&DaemonEvent::RestartSafeSession(
+            RestartSafeSessionEvent {
+                session_id: "workspace:ws-2".to_string(),
+                session_instance_id: "session:ws-2:abc".to_string(),
+                workspace_id: "ws-2".to_string(),
+                thread_id: None,
+                turn_id: None,
+                event_seq: 1,
+                timestamp_ms: 1,
+                event_kind: "session/start".to_string(),
+                payload: json!({}),
+            },
+        )));
     }
 }

@@ -104,13 +104,13 @@ describe("Home", () => {
       />,
     );
 
-    expect(screen.getAllByText("agent time").length).toBeGreaterThan(0);
-    expect(screen.getByText("Runs")).toBeTruthy();
-    expect(screen.getByText("Peak day")).toBeTruthy();
-    expect(screen.getByText("Avg / run")).toBeTruthy();
-    expect(screen.getByText("Avg / active day")).toBeTruthy();
-    expect(screen.getByText("Longest streak")).toBeTruthy();
-    expect(screen.getByText("Active days")).toBeTruthy();
+    expect(screen.getAllByText("智能体时长").length).toBeGreaterThan(0);
+    expect(screen.getByText("运行次数")).toBeTruthy();
+    expect(screen.getByText("峰值日期")).toBeTruthy();
+    expect(screen.getByText("平均 / 次")).toBeTruthy();
+    expect(screen.getByText("平均 / 活跃日")).toBeTruthy();
+    expect(screen.getByText("最长连续活跃")).toBeTruthy();
+    expect(screen.getByText("活跃天数")).toBeTruthy();
   });
 
   it("renders expanded token stats and account limits", () => {
@@ -284,17 +284,17 @@ describe("Home", () => {
       />,
     );
 
-    expect(screen.getByText("Cached tokens")).toBeTruthy();
-    expect(screen.getByText("Avg / run")).toBeTruthy();
-    expect(screen.getByText("Longest streak")).toBeTruthy();
-    expect(screen.getByText("4 days")).toBeTruthy();
+    expect(screen.getByText("缓存 Token")).toBeTruthy();
+    expect(screen.getByText("平均 / 次")).toBeTruthy();
+    expect(screen.getByText("最长连续活跃")).toBeTruthy();
+    expect(screen.getByText("4 天")).toBeTruthy();
     expect(screen.getByText("账户额度")).toBeTruthy();
-    expect(screen.getByText("Unlimited")).toBeTruthy();
+    expect(screen.getByText("不限量")).toBeTruthy();
     expect(screen.getByText("Pro")).toBeTruthy();
     expect(screen.getByText(/user@example\.com/)).toBeTruthy();
     expect(screen.queryByText("Workspace CodexMonitor")).toBeNull();
 
-    const todayCard = screen.getByText("Today").closest(".home-usage-card");
+    const todayCard = screen.getByText("今天").closest(".home-usage-card");
     expect(todayCard).toBeTruthy();
     if (!(todayCard instanceof HTMLElement)) {
       throw new Error("Expected today usage card");
@@ -309,12 +309,11 @@ describe("Home", () => {
         .disabled,
     ).toBe(true);
     const latestDayLabel = formatDayLabel("2026-01-20");
-    expect(
-      screen
-        .getByText(latestDayLabel)
-        .closest(".home-usage-bar")
-        ?.getAttribute("data-value"),
-    ).toBe(`${latestDayLabel} · 36 Token`);
+    const latestBar = screen.getByText(latestDayLabel).closest(".home-usage-bar");
+    const expectedTooltip = `${latestDayLabel} · 36 Token`;
+    expect(latestBar?.getAttribute("data-value")).toBe(expectedTooltip);
+    expect(latestBar?.getAttribute("title")).toBe(expectedTooltip);
+    expect(latestBar?.getAttribute("aria-label")).toBe(expectedTooltip);
 
     fireEvent.click(screen.getByRole("button", { name: "查看上一周" }));
 

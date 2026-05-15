@@ -26,7 +26,6 @@ describe("SettingsDisplaySection", () => {
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
         }
-        reduceTransparency={false}
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
@@ -35,7 +34,6 @@ describe("SettingsDisplaySection", () => {
         codeFontDraft=""
         codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
@@ -64,6 +62,61 @@ describe("SettingsDisplaySection", () => {
       expect.objectContaining({ threadTitleAutogenerationEnabled: true }),
     );
   });
+
+  it("toggles font smoothing", () => {
+    const onUpdateAppSettings = vi.fn(async () => {});
+
+    render(
+      <SettingsDisplaySection
+        appSettings={
+          ({
+            theme: "system",
+            usageShowRemaining: false,
+            showMessageFilePath: true,
+            threadTitleAutogenerationEnabled: false,
+            uiFontFamily: "",
+            codeFontFamily: "",
+            codeFontSize: 14,
+            fontSmoothingEnabled: false,
+            notificationSoundsEnabled: true,
+            systemNotificationsEnabled: true,
+          } as unknown) as AppSettings
+        }
+        scaleShortcutTitle=""
+        scaleShortcutText=""
+        scaleDraft="100%"
+        uiFontDraft=""
+        uiFontSizeDraft={14}
+        codeFontDraft=""
+        codeFontSizeDraft={14}
+        onUpdateAppSettings={onUpdateAppSettings}
+        onSetScaleDraft={vi.fn() as any}
+        onCommitScale={vi.fn(async () => {})}
+        onResetScale={vi.fn(async () => {})}
+        onSetUiFontDraft={vi.fn() as any}
+        onCommitUiFont={vi.fn(async () => {})}
+        onSetUiFontSizeDraft={vi.fn() as any}
+        onCommitUiFontSize={vi.fn(async () => {})}
+        onSetCodeFontDraft={vi.fn() as any}
+        onCommitCodeFont={vi.fn(async () => {})}
+        onSetCodeFontSizeDraft={vi.fn() as any}
+        onCommitCodeFontSize={vi.fn(async () => {})}
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+      />,
+    );
+
+    const row = screen.getByText("字体平滑").closest(".settings-toggle-row");
+    expect(row).toBeTruthy();
+    const button = within(row as HTMLElement).getByRole("button");
+
+    fireEvent.click(button);
+
+    expect(onUpdateAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ fontSmoothingEnabled: true }),
+    );
+  });
+
   it("toggles unlimited chat history", () => {
     const onUpdateAppSettings = vi.fn(async () => {});
 
@@ -83,7 +136,6 @@ describe("SettingsDisplaySection", () => {
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
         }
-        reduceTransparency={false}
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
@@ -92,7 +144,6 @@ describe("SettingsDisplaySection", () => {
         codeFontDraft=""
         codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
@@ -139,7 +190,6 @@ describe("SettingsDisplaySection", () => {
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
         }
-        reduceTransparency={false}
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
@@ -148,7 +198,6 @@ describe("SettingsDisplaySection", () => {
         codeFontDraft=""
         codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
@@ -201,7 +250,6 @@ describe("SettingsDisplaySection", () => {
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
         }
-        reduceTransparency={false}
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
@@ -210,7 +258,6 @@ describe("SettingsDisplaySection", () => {
         codeFontDraft=""
         codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
@@ -254,7 +301,6 @@ describe("SettingsDisplaySection", () => {
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
         }
-        reduceTransparency={false}
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
@@ -263,7 +309,6 @@ describe("SettingsDisplaySection", () => {
         codeFontDraft=""
         codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
@@ -317,7 +362,6 @@ describe("SettingsDisplaySection", () => {
             systemNotificationsEnabled: true,
           } as unknown) as AppSettings
         }
-        reduceTransparency={false}
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
@@ -326,7 +370,6 @@ describe("SettingsDisplaySection", () => {
         codeFontDraft=""
         codeFontSizeDraft={14}
         onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}

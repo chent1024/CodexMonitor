@@ -1139,6 +1139,14 @@
   background: transparent;
 }
 
+.pinned-thread-list .thread-row.is-pinned {
+  padding-left: calc(44px + var(--thread-indent, 0px));
+}
+
+.pinned-thread-list .thread-row.is-pinned > .thread-status:not(.ready) {
+  opacity: 1;
+}
+
 .thread-row.is-nested {
   margin-left: 3px;
   gap: 5px;
@@ -1185,6 +1193,70 @@
 
 .thread-status.ready {
   display: none;
+}
+
+.thread-pin-button {
+  position: absolute;
+  left: calc(7px + var(--thread-indent, 0px));
+  top: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease,
+    opacity 0.14s ease;
+}
+
+.thread-pin-button svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
+
+.thread-row:hover .thread-pin-button,
+.thread-row:focus-within .thread-pin-button,
+.thread-pin-button.is-pinned {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.thread-row:hover > .thread-status:not(.ready),
+.thread-row:focus-within > .thread-status:not(.ready),
+.thread-row.is-pinned > .thread-status:not(.ready) {
+  opacity: 0;
+}
+
+.thread-pin-button:focus-visible {
+  color: var(--text-strong);
+}
+
+.thread-pin-button:hover:not(:disabled),
+.thread-pin-button:active:not(:disabled) {
+  background: transparent;
+  box-shadow: none;
+  filter: none;
+  transform: translateY(-50%);
+}
+
+.thread-pin-button:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.thread-pin-button.is-pinned {
+  color: var(--accent);
 }
 
 .thread-row:hover {
@@ -1303,8 +1375,7 @@
   );
 }
 
-:root[data-theme="light"] .thread-subagent-pill,
-:root[data-theme="light"] .app.reduced-transparency .thread-subagent-pill {
+:root[data-theme="light"] .thread-subagent-pill {
   color: hsl(
     var(--thread-subagent-pill-hue, 228)
     calc(var(--thread-subagent-pill-saturation, 72%) - 4%)
@@ -1325,8 +1396,7 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .thread-subagent-pill,
-  :root:not([data-theme]) .app.reduced-transparency .thread-subagent-pill {
+  :root:not([data-theme]) .thread-subagent-pill {
     color: hsl(
       var(--thread-subagent-pill-hue, 228)
       calc(var(--thread-subagent-pill-saturation, 72%) - 4%)
@@ -2232,11 +2302,6 @@
     background-position: -200% 0;
   }
 }
-.app.reduced-transparency .sidebar {
-  background: var(--surface-sidebar-opaque);
-  backdrop-filter: none;
-}
-
 .app.sidebar-collapsed .sidebar {
   opacity: 0;
   transform: translateX(-12px);

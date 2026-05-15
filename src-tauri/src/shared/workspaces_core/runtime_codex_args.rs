@@ -180,6 +180,7 @@ mod tests {
             owner_workspace_id: "test-owner".to_string(),
             workspace_ids: Mutex::new(HashSet::from(["test-owner".to_string()])),
             workspace_roots: Mutex::new(HashMap::new()),
+            assistant_memory_buffers: Mutex::new(HashMap::new()),
         }
     }
 

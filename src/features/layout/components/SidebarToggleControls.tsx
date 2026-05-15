@@ -27,9 +27,9 @@ export function SidebarCollapseButton({
       className="ghost main-header-action ds-tooltip-trigger"
       onClick={onCollapseSidebar}
       data-tauri-drag-region="false"
-      aria-label="Hide threads sidebar"
-      title="Hide threads sidebar"
-      data-tooltip="Hide threads sidebar"
+      aria-label="隐藏线程侧栏"
+      title="隐藏线程侧栏"
+      data-tooltip="隐藏线程侧栏"
       data-tooltip-placement="bottom"
     >
       <PanelLeftClose size={14} aria-hidden />

@@ -38,6 +38,7 @@ const baseProps = {
   threadStatusById: statusMap,
   getThreadTime: () => "2m",
   isThreadPinned: () => false,
+  onToggleThreadPin: vi.fn(),
   onToggleExpanded: vi.fn(),
   onLoadOlderThreads: vi.fn(),
   onSelectThread: vi.fn(),
@@ -91,7 +92,7 @@ describe("ThreadList", () => {
       />,
     );
 
-    const moreButton = screen.getByRole("button", { name: "More..." });
+    const moreButton = screen.getByRole("button", { name: "更多..." });
     fireEvent.click(moreButton);
     expect(onToggleExpanded).toHaveBeenCalledWith("ws-1");
   });
@@ -106,7 +107,7 @@ describe("ThreadList", () => {
       />,
     );
 
-    const loadButton = screen.getByRole("button", { name: "Load older..." });
+    const loadButton = screen.getByRole("button", { name: "加载更早会话..." });
     fireEvent.click(loadButton);
     expect(onLoadOlderThreads).toHaveBeenCalledWith("ws-1");
   });
@@ -139,6 +140,36 @@ describe("ThreadList", () => {
       "thread-2",
       false,
     );
+  });
+
+  it("pins a root thread from the inline pin button without selecting it", () => {
+    const onSelectThread = vi.fn();
+    const onToggleThreadPin = vi.fn();
+    render(
+      <ThreadList
+        {...baseProps}
+        activeThreadId="thread-other"
+        onSelectThread={onSelectThread}
+        onToggleThreadPin={onToggleThreadPin}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Pin thread" }));
+
+    expect(onToggleThreadPin).toHaveBeenCalledWith("ws-1", "thread-1", false);
+    expect(onSelectThread).not.toHaveBeenCalled();
+  });
+
+  it("does not show inline pin controls for nested sub-agent rows", () => {
+    render(
+      <ThreadList
+        {...baseProps}
+        unpinnedRows={[{ thread: nestedThread, depth: 1 }]}
+        activeThreadId="thread-2"
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Pin thread" })).toBeNull();
   });
 
   it("shows the subagent nickname pill with role styling", () => {

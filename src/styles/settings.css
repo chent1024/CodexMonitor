@@ -29,10 +29,6 @@
   background: var(--surface-topbar);
 }
 
-.app.reduced-transparency .settings-titlebar {
-  backdrop-filter: none;
-}
-
 .settings-title {
   font-size: 15px;
   font-weight: 600;
@@ -180,6 +176,180 @@
 
 .settings-help-inline {
   margin-right: 4px;
+}
+
+.settings-memory-manager {
+  display: grid;
+  gap: 10px;
+  padding: 10px 0 16px;
+}
+
+.settings-memory-toolbar,
+.settings-memory-add,
+.settings-memory-path-row,
+.settings-memory-embedding-row,
+.settings-memory-summary,
+.settings-memory-danger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-memory-toolbar .settings-input {
+  min-width: min(280px, 100%);
+  flex: 1 1 240px;
+}
+
+.settings-memory-path-row .settings-input {
+  min-width: min(420px, 100%);
+  flex: 1 1 360px;
+}
+
+.settings-memory-connection {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-memory-embedding-row .settings-select {
+  min-width: min(320px, 100%);
+  flex: 1 1 260px;
+}
+
+.settings-memory-rebuild-hint {
+  color: var(--accent-warning, #9a6700);
+  font-size: 12px;
+}
+
+.settings-memory-add {
+  align-items: flex-start;
+}
+
+.settings-memory-add .settings-textarea {
+  min-width: min(360px, 100%);
+  flex: 1 1 320px;
+}
+
+.settings-memory-summary {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-memory-list {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-memory-review {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.settings-memory-review-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.settings-memory-review-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.settings-memory-review-toolbar .settings-input {
+  min-width: min(260px, 100%);
+  flex: 1 1 220px;
+}
+
+.settings-memory-review-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-memory-review .settings-memory-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.settings-memory-review-check {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.settings-memory-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.settings-memory-row-main {
+  min-width: 0;
+}
+
+.settings-memory-row-meta {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-memory-row-content {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.settings-memory-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.settings-memory-entities {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.settings-memory-entity {
+  padding: 3px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-memory-events {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-memory-event {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .settings-mobile-remotes {
@@ -1244,11 +1414,6 @@
 .settings-toggle.on {
   background: linear-gradient(135deg, rgba(100, 200, 255, 0.6), rgba(120, 235, 190, 0.6));
   border-color: var(--border-accent);
-}
-
-.app.reduced-transparency .settings-toggle:not(.on) {
-  background: var(--surface-control-hover);
-  border-color: var(--border-stronger);
 }
 
 .settings-toggle-knob {

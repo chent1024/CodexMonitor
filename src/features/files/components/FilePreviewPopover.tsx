@@ -82,56 +82,17 @@ export function FilePreviewPopover({
   return (
     <PopoverSurface className="file-preview-popover" style={style}>
       <div className="file-preview-header">
-        <div className="file-preview-title">
-          <span className="file-preview-path">{path}</span>
-          {truncated && (
-            <span className="file-preview-warning">Truncated</span>
-          )}
-        </div>
-        <button
-          type="button"
-          className="icon-button file-preview-close"
-          onClick={onClose}
-          aria-label="Close preview"
-          title="Close preview"
-        >
-          <X size={14} aria-hidden />
-        </button>
-      </div>
-      {isLoading ? (
-        <div className="file-preview-status">Loading file...</div>
-      ) : error ? (
-        <div className="file-preview-status file-preview-error">{error}</div>
-      ) : isImagePreview ? (
-        <div className="file-preview-body file-preview-body--image">
-          <div className="file-preview-toolbar">
-            <span className="file-preview-selection">{selectionLabel}</span>
-            <div className="file-preview-actions">
-              <OpenAppMenu
-                path={absolutePath}
-                openTargets={openTargets}
-                selectedOpenAppId={selectedOpenAppId}
-                onSelectOpenAppId={onSelectOpenAppId}
-                iconById={openAppIconById}
-              />
-            </div>
+        <div className="file-preview-heading">
+          <div className="file-preview-title">
+            <span className="file-preview-path">{path}</span>
+            {truncated && (
+              <span className="file-preview-warning">Truncated</span>
+            )}
           </div>
-          {imageSrc ? (
-            <div className="file-preview-image">
-              <img src={imageSrc} alt={path} />
-            </div>
-          ) : (
-            <div className="file-preview-status file-preview-error">
-              Image preview unavailable.
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="file-preview-body">
-          <div className="file-preview-toolbar">
+          {!isLoading && !error && (
             <div className="file-preview-selection-group">
               <span className="file-preview-selection">{selectionLabel}</span>
-              {selectionHints.length > 0 ? (
+              {!isImagePreview && selectionHints.length > 0 ? (
                 <div className="file-preview-hints" aria-label="Selection hints">
                   {selectionHints.map((hint) => (
                     <span key={hint} className="file-preview-hint">
@@ -141,14 +102,20 @@ export function FilePreviewPopover({
                 </div>
               ) : null}
             </div>
-            <div className="file-preview-actions">
-              <OpenAppMenu
-                path={absolutePath}
-                openTargets={openTargets}
-                selectedOpenAppId={selectedOpenAppId}
-                onSelectOpenAppId={onSelectOpenAppId}
-                iconById={openAppIconById}
-              />
+          )}
+        </div>
+        <div className="file-preview-actions" role="toolbar" aria-label="File preview actions">
+          {!isLoading && !error && (
+            <OpenAppMenu
+              path={absolutePath}
+              openTargets={openTargets}
+              selectedOpenAppId={selectedOpenAppId}
+              onSelectOpenAppId={onSelectOpenAppId}
+              iconById={openAppIconById}
+            />
+          )}
+          {!isLoading && !error && !isImagePreview && (
+            <>
               <button
                 type="button"
                 className="ghost file-preview-action"
@@ -165,8 +132,37 @@ export function FilePreviewPopover({
               >
                 Add to chat
               </button>
+            </>
+          )}
+          <button
+            type="button"
+            className="icon-button file-preview-close"
+            onClick={onClose}
+            aria-label="Close preview"
+            title="Close preview"
+          >
+            <X size={14} aria-hidden />
+          </button>
+        </div>
+      </div>
+      {isLoading ? (
+        <div className="file-preview-status">Loading file...</div>
+      ) : error ? (
+        <div className="file-preview-status file-preview-error">{error}</div>
+      ) : isImagePreview ? (
+        <div className="file-preview-body file-preview-body--image">
+          {imageSrc ? (
+            <div className="file-preview-image">
+              <img src={imageSrc} alt={path} />
             </div>
-          </div>
+          ) : (
+            <div className="file-preview-status file-preview-error">
+              Image preview unavailable.
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="file-preview-body">
           <div className="file-preview-lines" role="list">
             {lines.map((_, index) => {
               const html = highlightedLines[index] ?? "&nbsp;";

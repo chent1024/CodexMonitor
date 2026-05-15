@@ -27,8 +27,6 @@ type UseSettingsViewOrchestrationArgs = {
   workspaceGroups: WorkspaceGroup[];
   groupedWorkspaces: GroupedWorkspaces;
   ungroupedLabel: string;
-  reduceTransparency: boolean;
-  onToggleTransparency: (value: boolean) => void;
   appSettings: AppSettings;
   openAppIconById: Record<string, string>;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
@@ -66,8 +64,6 @@ export function useSettingsViewOrchestration({
   workspaceGroups,
   groupedWorkspaces,
   ungroupedLabel,
-  reduceTransparency,
-  onToggleTransparency,
   appSettings,
   openAppIconById,
   onUpdateAppSettings,
@@ -152,8 +148,6 @@ export function useSettingsViewOrchestration({
 
   const displaySectionProps = useSettingsDisplaySection({
     appSettings,
-    reduceTransparency,
-    onToggleTransparency,
     onUpdateAppSettings,
     scaleShortcutTitle,
     scaleShortcutText,

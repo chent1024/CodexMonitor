@@ -1,4 +1,35 @@
 use super::*;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionIdParams {
+    session_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionReplayParams {
+    session_id: String,
+    #[serde(default)]
+    from_seq: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionRespondParams {
+    session_id: String,
+    request_id: Value,
+    result: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionInterruptParams {
+    session_id: String,
+    thread_id: String,
+    turn_id: String,
+}
 
 pub(super) async fn try_handle(
     state: &DaemonState,
@@ -13,120 +44,96 @@ pub(super) async fn try_handle(
                 .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
         ),
         "session/status" => {
-            let session_id = match parse_string(params, "sessionId") {
+            let parsed = match parse_params::<SessionIdParams>(params) {
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
             Some(
                 state
-                    .session_status(session_id)
+                    .session_status(parsed.session_id)
                     .await
                     .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
             )
         }
         "session/attach" => {
-            let session_id = match parse_string(params, "sessionId") {
+            let parsed = match parse_params::<SessionReplayParams>(params) {
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
-            let from_seq = parse_optional_u64(params, "fromSeq").unwrap_or(0);
             Some(
                 state
-                    .session_attach(session_id, from_seq)
+                    .session_attach(parsed.session_id, parsed.from_seq.unwrap_or(0))
                     .await
                     .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
             )
         }
         "session/detach" => {
-            let session_id = match parse_string(params, "sessionId") {
+            let parsed = match parse_params::<SessionIdParams>(params) {
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
             Some(
                 state
-                    .session_detach(session_id)
+                    .session_detach(parsed.session_id)
                     .await
                     .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
             )
         }
         "session/replay_events" => {
-            let session_id = match parse_string(params, "sessionId") {
+            let parsed = match parse_params::<SessionReplayParams>(params) {
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
-            let from_seq = parse_optional_u64(params, "fromSeq").unwrap_or(0);
             Some(
                 state
-                    .session_replay_events(session_id, from_seq)
+                    .session_replay_events(parsed.session_id, parsed.from_seq.unwrap_or(0))
                     .await
                     .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
             )
         }
         "session/pending_requests" => {
-            let session_id = match parse_string(params, "sessionId") {
+            let parsed = match parse_params::<SessionIdParams>(params) {
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
             Some(
                 state
-                    .session_pending_requests(session_id)
+                    .session_pending_requests(parsed.session_id)
                     .await
                     .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
             )
         }
         "session/respond_request" => {
-            let session_id = match parse_string(params, "sessionId") {
+            let parsed = match parse_params::<SessionRespondParams>(params) {
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
-            let map = match params.as_object().ok_or("missing requestId") {
-                Ok(value) => value,
-                Err(err) => return Some(Err(err.to_string())),
-            };
-            let request_id = match map
-                .get("requestId")
-                .cloned()
-                .filter(|value| value.is_number() || value.is_string())
-                .ok_or("missing requestId")
-            {
-                Ok(value) => value,
-                Err(err) => return Some(Err(err.to_string())),
-            };
-            let result = match map.get("result").cloned().ok_or("missing `result`") {
-                Ok(value) => value,
-                Err(err) => return Some(Err(err.to_string())),
-            };
+            if !parsed.request_id.is_number() && !parsed.request_id.is_string() {
+                return Some(Err("missing requestId".to_string()));
+            }
             Some(
                 state
-                    .session_respond_request(session_id, request_id, result)
+                    .session_respond_request(parsed.session_id, parsed.request_id, parsed.result)
                     .await,
             )
         }
         "session/interrupt" => {
-            let session_id = match parse_string(params, "sessionId") {
-                Ok(value) => value,
-                Err(err) => return Some(Err(err)),
-            };
-            let thread_id = match parse_string(params, "threadId") {
-                Ok(value) => value,
-                Err(err) => return Some(Err(err)),
-            };
-            let turn_id = match parse_string(params, "turnId") {
+            let parsed = match parse_params::<SessionInterruptParams>(params) {
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
             Some(
                 state
-                    .session_interrupt(session_id, thread_id, turn_id)
+                    .session_interrupt(parsed.session_id, parsed.thread_id, parsed.turn_id)
                     .await,
             )
         }
         "session/stop" => {
-            let session_id = match parse_string(params, "sessionId") {
+            let parsed = match parse_params::<SessionIdParams>(params) {
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
-            Some(state.session_stop(session_id).await)
+            Some(state.session_stop(parsed.session_id).await)
         }
         "session/debug_status" => Some(
             state

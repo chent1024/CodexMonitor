@@ -13,8 +13,14 @@ import {
   getAgentsSettings,
   getCodexFeatureFlag,
   getExperimentalFeatureList,
+  checkLocalMemoryConnection,
+  approveLocalMemory,
   getLocalMemoryDebugStatus,
   getLocalMemoryStatus,
+  importLocalMemories,
+  listLocalMemoryEvents,
+  listLocalMemoryReviewQueue,
+  getLocalMemoryEventStatus,
   getGitHubIssues,
   getGitLog,
   getGitStatus,
@@ -35,6 +41,9 @@ import {
   sendNotification,
   setCodexFeatureFlag,
   setLocalMemoryEnabled,
+  setLocalMemoryDbPath,
+  setLocalMemoryEmbeddingModel,
+  rejectLocalMemory,
   setAgentsCoreSettings,
   setTrayRecentThreads,
   setTraySessionUsage,
@@ -466,6 +475,107 @@ describe("tauri invoke wrappers", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("set_local_memory_enabled", {
       enabled: true,
+    });
+  });
+
+  it("maps input for set_local_memory_db_path", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ enabled: true });
+
+    await setLocalMemoryDbPath("C:/Users/me/.codex/local-memory/custom.sqlite");
+
+    expect(invokeMock).toHaveBeenCalledWith("set_local_memory_db_path", {
+      input: { dbPath: "C:/Users/me/.codex/local-memory/custom.sqlite" },
+    });
+  });
+
+  it("maps input for set_local_memory_embedding_model", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ enabled: true });
+
+    await setLocalMemoryEmbeddingModel("codex-monitor-local-ngram-v1");
+
+    expect(invokeMock).toHaveBeenCalledWith("set_local_memory_embedding_model", {
+      input: { embeddingModel: "codex-monitor-local-ngram-v1" },
+    });
+  });
+
+  it("invokes check_local_memory_connection", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ ok: true });
+
+    await checkLocalMemoryConnection();
+
+    expect(invokeMock).toHaveBeenCalledWith("check_local_memory_connection");
+  });
+
+  it("maps input for import_local_memories", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ imported: 1, skipped: 0, rebuiltIndexes: true });
+
+    await importLocalMemories({
+      memories: [{ content: "Remember imported memory.", scope: "user" }],
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("import_local_memories", {
+      input: {
+        memories: [{ content: "Remember imported memory.", scope: "user" }],
+      },
+    });
+  });
+
+  it("invokes list_local_memory_review_queue", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce([]);
+
+    await listLocalMemoryReviewQueue(10);
+
+    expect(invokeMock).toHaveBeenCalledWith("list_local_memory_review_queue", {
+      limit: 10,
+    });
+  });
+
+  it("maps id for approve_local_memory", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce(null);
+
+    await approveLocalMemory("mem-1");
+
+    expect(invokeMock).toHaveBeenCalledWith("approve_local_memory", {
+      id: "mem-1",
+    });
+  });
+
+  it("maps id for reject_local_memory", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce(true);
+
+    await rejectLocalMemory("mem-1");
+
+    expect(invokeMock).toHaveBeenCalledWith("reject_local_memory", {
+      id: "mem-1",
+    });
+  });
+
+  it("maps input for list_local_memory_events", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce([]);
+
+    await listLocalMemoryEvents({ limit: 5, event: "search" });
+
+    expect(invokeMock).toHaveBeenCalledWith("list_local_memory_events", {
+      input: { limit: 5, event: "search" },
+    });
+  });
+
+  it("maps id for get_local_memory_event_status", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce(null);
+
+    await getLocalMemoryEventStatus("event-1");
+
+    expect(invokeMock).toHaveBeenCalledWith("get_local_memory_event_status", {
+      id: "event-1",
     });
   });
 

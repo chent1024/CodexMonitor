@@ -9,6 +9,7 @@ pub(super) struct DaemonInfo {
     pub(super) pid: Option<u32>,
     pub(super) mode: String,
     pub(super) binary_path: Option<String>,
+    pub(super) terminal_rpc_version: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +70,10 @@ fn parse_daemon_info(value: &Value) -> Result<DaemonInfo, String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string);
+    let terminal_rpc_version = value
+        .get("capabilities")
+        .and_then(|value| value.get("terminalRpcVersion"))
+        .and_then(Value::as_u64);
 
     Ok(DaemonInfo {
         name,
@@ -76,6 +81,7 @@ fn parse_daemon_info(value: &Value) -> Result<DaemonInfo, String> {
         pid,
         mode,
         binary_path,
+        terminal_rpc_version,
     })
 }
 

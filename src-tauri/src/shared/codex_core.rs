@@ -16,6 +16,7 @@ use crate::codex::config as codex_config;
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::rules;
 use crate::shared::account::{build_account_response, read_auth_account};
+use crate::shared::local_memory_integration_core;
 use crate::types::WorkspaceEntry;
 
 const LOGIN_START_TIMEOUT: Duration = Duration::from_secs(30);
@@ -259,9 +260,16 @@ pub(crate) async fn start_thread_core(
         "cwd": workspace_path,
         "approvalPolicy": "on-request"
     });
-    session
+    let response = session
         .send_request_for_workspace(&workspace_id, "thread/start", params)
-        .await
+        .await?;
+    local_memory_integration_core::capture_lifecycle_checkpoint(
+        &workspace_id,
+        &workspace_path,
+        extract_thread_id_from_response(&response).as_deref(),
+        "session_start",
+    );
+    Ok(response)
 }
 
 pub(crate) async fn resume_thread_core(
@@ -409,10 +417,19 @@ pub(crate) async fn archive_thread_core(
 
 pub(crate) async fn compact_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: String,
     thread_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
+    if let Ok(workspace_path) = resolve_workspace_path_core(workspaces, &workspace_id).await {
+        local_memory_integration_core::capture_lifecycle_checkpoint(
+            &workspace_id,
+            &workspace_path,
+            Some(&thread_id),
+            "pre_compaction",
+        );
+    }
     let params = json!({ "threadId": thread_id });
     session
         .send_request_for_workspace(&workspace_id, "thread/compact/start", params)
@@ -506,6 +523,23 @@ pub(crate) fn insert_optional_nullable_string(
     }
 }
 
+fn extract_thread_id_from_response(response: &Value) -> Option<String> {
+    fn read_thread_id(value: &Value) -> Option<String> {
+        value
+            .get("threadId")
+            .or_else(|| value.get("thread_id"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    }
+
+    read_thread_id(response)
+        .or_else(|| response.get("result").and_then(read_thread_id))
+        .or_else(|| response.get("response").and_then(read_thread_id))
+        .or_else(|| response.get("thread").and_then(read_thread_id))
+}
+
 pub(crate) async fn send_user_message_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
@@ -539,7 +573,13 @@ pub(crate) async fn send_user_message_core(
         "on-request"
     };
 
-    let input = build_turn_input_items(text, images, app_mentions)?;
+    let memory_turn = local_memory_integration_core::prepare_user_turn(
+        text.clone(),
+        &workspace_id,
+        &workspace_path,
+        &thread_id,
+    );
+    let input = build_turn_input_items(memory_turn.text, images, app_mentions)?;
 
     let mut params = Map::new();
     params.insert("threadId".to_string(), json!(thread_id));
@@ -555,13 +595,22 @@ pub(crate) async fn send_user_message_core(
             params.insert("collaborationMode".to_string(), mode);
         }
     }
-    session
+    let response = session
         .send_request_for_workspace(&workspace_id, "turn/start", Value::Object(params))
-        .await
+        .await?;
+    local_memory_integration_core::capture_user_turn(
+        &text,
+        &workspace_id,
+        &workspace_path,
+        &thread_id,
+        memory_turn.retrieved_count,
+    );
+    Ok(response)
 }
 
 pub(crate) async fn turn_steer_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: String,
     thread_id: String,
     turn_id: String,
@@ -573,15 +622,30 @@ pub(crate) async fn turn_steer_core(
         return Err("missing active turn id".to_string());
     }
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let input = build_turn_input_items(text, images, app_mentions)?;
+    let workspace_path = resolve_workspace_path_core(workspaces, &workspace_id).await?;
+    let memory_turn = local_memory_integration_core::prepare_user_turn(
+        text.clone(),
+        &workspace_id,
+        &workspace_path,
+        &thread_id,
+    );
+    let input = build_turn_input_items(memory_turn.text, images, app_mentions)?;
     let params = json!({
         "threadId": thread_id,
         "expectedTurnId": turn_id,
         "input": input
     });
-    session
+    let response = session
         .send_request_for_workspace(&workspace_id, "turn/steer", params)
-        .await
+        .await?;
+    local_memory_integration_core::capture_user_turn(
+        &text,
+        &workspace_id,
+        &workspace_path,
+        &thread_id,
+        memory_turn.retrieved_count,
+    );
+    Ok(response)
 }
 
 pub(crate) async fn collaboration_mode_list_core(
@@ -1056,6 +1120,26 @@ mod tests {
 
         insert_optional_nullable_string(&mut params, "serviceTier", Some(Some("fast".to_string())));
         assert_eq!(params.get("serviceTier"), Some(&json!("fast")));
+    }
+
+    #[test]
+    fn extract_thread_id_from_start_response_reads_common_shapes() {
+        assert_eq!(
+            extract_thread_id_from_response(&json!({ "threadId": "thread-a" })),
+            Some("thread-a".to_string())
+        );
+        assert_eq!(
+            extract_thread_id_from_response(&json!({ "result": { "thread_id": "thread-b" } })),
+            Some("thread-b".to_string())
+        );
+        assert_eq!(
+            extract_thread_id_from_response(&json!({ "response": { "threadId": "thread-c" } })),
+            Some("thread-c".to_string())
+        );
+        assert_eq!(
+            extract_thread_id_from_response(&json!({ "thread": { "threadId": "thread-d" } })),
+            Some("thread-d".to_string())
+        );
     }
 
     #[test]

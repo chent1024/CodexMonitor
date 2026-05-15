@@ -62,7 +62,7 @@ const baseProps = {
   onReloadWorkspaceThreads: vi.fn(),
   workspaceDropTargetRef: createRef<HTMLElement>(),
   isWorkspaceDropActive: false,
-  workspaceDropText: "Drop Project Here",
+  workspaceDropText: "拖放项目到这里",
   onWorkspaceDragOver: vi.fn(),
   onWorkspaceDragEnter: vi.fn(),
   onWorkspaceDragLeave: vi.fn(),
@@ -150,7 +150,7 @@ describe("Sidebar", () => {
       />,
     );
 
-    const creditsLabel = screen.getByText(/^Available credits:/);
+    const creditsLabel = screen.getByText(/^可用额度：/);
     expect(creditsLabel.textContent ?? "").toContain("120");
   });
 
@@ -188,7 +188,7 @@ describe("Sidebar", () => {
     expect(weeklyRow?.textContent ?? "").not.toContain("限额");
     expect(weeklyRow?.textContent ?? "").toContain("16%");
     expect(weeklyRow?.textContent ?? "").not.toContain("\u5269\u4f59");
-    expect(weeklyRow?.textContent ?? "").not.toContain("重置");
+    expect(weeklyRow?.textContent ?? "").toContain("重置");
     expect(
       weeklyRow
         ?.querySelector<HTMLElement>(".sidebar-usage-bar-fill")
@@ -271,7 +271,7 @@ describe("Sidebar", () => {
     const renderedNames = Array.from(container.querySelectorAll(".thread-row .thread-name")).map(
       (node) => node.textContent?.trim(),
     );
-    expect(screen.getByText("Recent conversations")).toBeTruthy();
+    expect(screen.getByText("最近会话")).toBeTruthy();
     expect(renderedNames[0]).toBe("Newer thread");
     expect(renderedNames[1]).toBe("Older thread");
     expect(screen.getByText("Alpha Project")).toBeTruthy();
@@ -388,7 +388,7 @@ describe("Sidebar", () => {
       expect(screen.getByText("Alpha Project")).toBeTruthy();
       expect(screen.getByText("Delta thread")).toBeTruthy();
       expect(screen.queryByText("Alpha thread")).toBeNull();
-      expect(screen.queryByText("More...")).toBeNull();
+      expect(screen.queryByText("更多...")).toBeNull();
     });
   });
 
@@ -434,7 +434,7 @@ describe("Sidebar", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Alpha Project")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Search older..." })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "查找更早会话..." })).toBeTruthy();
       expect(screen.queryByText("Current page thread")).toBeNull();
     });
   });
@@ -614,7 +614,7 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "New thread in project" }));
+    fireEvent.click(screen.getByRole("button", { name: "在项目中新建会话" }));
     fireEvent.click(screen.getByRole("button", { name: "Alpha Project" }));
 
     expect(onAddAgent).toHaveBeenCalledTimes(1);

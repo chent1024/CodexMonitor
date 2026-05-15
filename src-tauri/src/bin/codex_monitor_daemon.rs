@@ -88,7 +88,8 @@ use shared::restart_safe_sessions_core::{
 };
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
-    local_usage_core, settings_core, terminal_core, workspaces_core, worktree_core,
+    local_memory_core, local_memory_integration_core, local_usage_core, settings_core,
+    terminal_core, workspaces_core, worktree_core,
 };
 use storage::{read_settings, read_workspaces};
 use types::{
@@ -256,6 +257,9 @@ impl DaemonState {
             "pid": std::process::id(),
             "mode": "tcp",
             "binaryPath": self.daemon_binary_path,
+            "capabilities": {
+                "terminalRpcVersion": terminal_core::TERMINAL_RPC_VERSION,
+            },
         })
     }
 
@@ -278,14 +282,26 @@ impl DaemonState {
         Ok(self.restart_safe_sessions.list_statuses(&active))
     }
 
+    fn workspace_id_for_session(&self, session_id: &str) -> Option<String> {
+        self.restart_safe_sessions
+            .workspace_id_for_session(session_id)
+            .or_else(|| workspace_id_from_session_id(session_id))
+    }
+
+    async fn workspace_path_for_id(&self, workspace_id: &str) -> Option<String> {
+        self.workspaces
+            .lock()
+            .await
+            .get(workspace_id)
+            .map(|workspace| workspace.path.clone())
+    }
+
     async fn session_status(&self, session_id: String) -> Result<RestartSafeSessionStatus, String> {
         let active = self.restart_safe_active_workspace_ids().await;
-        for status in self.restart_safe_sessions.list_statuses(&active) {
-            if status.session_id == session_id {
-                return Ok(status);
-            }
-        }
-        Err("session not found".to_string())
+        let _ = self.restart_safe_sessions.list_statuses(&active);
+        self.restart_safe_sessions
+            .status(&session_id)
+            .ok_or_else(|| "session not found".to_string())
     }
 
     async fn session_attach(
@@ -357,7 +373,8 @@ impl DaemonState {
                 "resolved": resolved,
             }));
         }
-        let workspace_id = workspace_id_from_session_id(&session_id)
+        let workspace_id = self
+            .workspace_id_for_session(&session_id)
             .ok_or_else(|| "invalid session id".to_string())?;
         let was_pending = self
             .restart_safe_sessions
@@ -396,7 +413,8 @@ impl DaemonState {
         thread_id: String,
         turn_id: String,
     ) -> Result<Value, String> {
-        let workspace_id = workspace_id_from_session_id(&session_id)
+        let workspace_id = self
+            .workspace_id_for_session(&session_id)
             .ok_or_else(|| "invalid session id".to_string())?;
         let response = codex_core::turn_interrupt_core(
             &self.sessions,
@@ -418,8 +436,18 @@ impl DaemonState {
     }
 
     async fn session_stop(&self, session_id: String) -> Result<Value, String> {
-        let workspace_id = workspace_id_from_session_id(&session_id)
+        let workspace_id = self
+            .workspace_id_for_session(&session_id)
             .ok_or_else(|| "invalid session id".to_string())?;
+        let workspace_path = self.workspace_path_for_id(&workspace_id).await;
+        if let Some(workspace_path) = workspace_path.as_deref() {
+            local_memory_integration_core::capture_lifecycle_checkpoint(
+                &workspace_id,
+                workspace_path,
+                None,
+                "session_stop",
+            );
+        }
         let session = {
             let mut sessions = self.sessions.lock().await;
             sessions.remove(&workspace_id)
@@ -876,6 +904,125 @@ impl DaemonState {
         codex_config::write_local_memory_enabled(enabled)
     }
 
+    async fn set_local_memory_db_path(
+        &self,
+        input: codex_config::SetLocalMemoryDbPathInput,
+    ) -> Result<codex_config::LocalMemoryConfigStatus, String> {
+        codex_config::write_local_memory_db_path(input)
+    }
+
+    async fn set_local_memory_embedding_model(
+        &self,
+        input: codex_config::SetLocalMemoryEmbeddingModelInput,
+    ) -> Result<codex_config::LocalMemoryConfigStatus, String> {
+        codex_config::write_local_memory_embedding_model(input)
+    }
+
+    async fn check_local_memory_connection(
+        &self,
+    ) -> Result<codex_config::LocalMemoryConnectionCheck, String> {
+        codex_config::check_local_memory_connection()
+    }
+
+    async fn add_local_memory(
+        &self,
+        input: local_memory_core::AddMemoryInput,
+    ) -> Result<local_memory_core::MemoryRecord, String> {
+        codex_config::add_local_memory(input)
+    }
+
+    async fn search_local_memories(
+        &self,
+        input: local_memory_core::SearchMemoryInput,
+    ) -> Result<Vec<local_memory_core::MemorySearchResult>, String> {
+        codex_config::search_local_memories(input)
+    }
+
+    async fn list_local_memories(
+        &self,
+        input: local_memory_core::ListMemoryInput,
+    ) -> Result<Vec<local_memory_core::MemoryRecord>, String> {
+        codex_config::list_local_memories(input)
+    }
+
+    async fn get_local_memory(
+        &self,
+        id: String,
+    ) -> Result<Option<local_memory_core::MemoryRecord>, String> {
+        codex_config::get_local_memory(&id)
+    }
+
+    async fn update_local_memory(
+        &self,
+        id: String,
+        content: String,
+    ) -> Result<Option<local_memory_core::MemoryRecord>, String> {
+        codex_config::update_local_memory(&id, &content)
+    }
+
+    async fn delete_local_memory(&self, id: String) -> Result<bool, String> {
+        codex_config::delete_local_memory(&id)
+    }
+
+    async fn delete_all_local_memories(&self) -> Result<u64, String> {
+        codex_config::delete_all_local_memories()
+    }
+
+    async fn import_local_memories(
+        &self,
+        input: local_memory_core::ImportMemoriesInput,
+    ) -> Result<local_memory_core::ImportMemoriesResult, String> {
+        codex_config::import_local_memories(input)
+    }
+
+    async fn list_local_memory_review_queue(
+        &self,
+        limit: Option<u32>,
+    ) -> Result<Vec<local_memory_core::MemoryRecord>, String> {
+        codex_config::list_local_memory_review_queue(limit)
+    }
+
+    async fn approve_local_memory(
+        &self,
+        id: String,
+    ) -> Result<Option<local_memory_core::MemoryRecord>, String> {
+        codex_config::approve_local_memory(&id)
+    }
+
+    async fn reject_local_memory(&self, id: String) -> Result<bool, String> {
+        codex_config::reject_local_memory(&id)
+    }
+
+    async fn list_local_memory_entities(
+        &self,
+    ) -> Result<Vec<local_memory_core::MemoryEntity>, String> {
+        codex_config::list_local_memory_entities()
+    }
+
+    async fn delete_local_memory_entities(&self) -> Result<u64, String> {
+        codex_config::delete_local_memory_entities()
+    }
+
+    async fn rebuild_local_memory_indexes(
+        &self,
+    ) -> Result<local_memory_core::LocalMemoryDebugStatus, String> {
+        codex_config::rebuild_local_memory_indexes()
+    }
+
+    async fn list_local_memory_events(
+        &self,
+        input: local_memory_core::ListMemoryEventsInput,
+    ) -> Result<Vec<local_memory_core::LocalMemoryAccessLogEntry>, String> {
+        codex_config::list_local_memory_events(input)
+    }
+
+    async fn get_local_memory_event_status(
+        &self,
+        id: String,
+    ) -> Result<Option<local_memory_core::LocalMemoryAccessLogEntry>, String> {
+        codex_config::get_local_memory_event_status(&id)
+    }
+
     async fn get_agents_settings(&self) -> Result<agents_config_core::AgentsSettingsDto, String> {
         agents_config_core::get_agents_settings_core()
     }
@@ -1110,7 +1257,8 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
-        codex_core::compact_thread_core(&self.sessions, workspace_id, thread_id).await
+        codex_core::compact_thread_core(&self.sessions, &self.workspaces, workspace_id, thread_id)
+            .await
     }
 
     async fn set_thread_name(
@@ -1163,6 +1311,7 @@ impl DaemonState {
     ) -> Result<Value, String> {
         codex_core::turn_steer_core(
             &self.sessions,
+            &self.workspaces,
             workspace_id,
             thread_id,
             turn_id,
@@ -1383,7 +1532,12 @@ impl DaemonState {
         terminal_id: String,
         cols: u16,
         rows: u16,
+        terminal_shell: Option<String>,
     ) -> Result<terminal_core::TerminalSessionInfo, String> {
+        let configured_shell = match terminal_shell {
+            Some(value) if !value.trim().is_empty() => Some(value),
+            _ => self.app_settings.lock().await.terminal_shell.clone(),
+        };
         terminal_core::terminal_open_core(
             workspace_id,
             terminal_id,
@@ -1392,6 +1546,7 @@ impl DaemonState {
             &self.workspaces,
             self.terminal_sessions.clone(),
             self.event_sink.clone(),
+            configured_shell,
         )
         .await
     }
@@ -2236,6 +2391,13 @@ mod tests {
                 result.get("version").and_then(Value::as_str),
                 Some(env!("CARGO_PKG_VERSION"))
             );
+            assert_eq!(
+                result
+                    .get("capabilities")
+                    .and_then(|value| value.get("terminalRpcVersion"))
+                    .and_then(Value::as_u64),
+                Some(terminal_core::TERMINAL_RPC_VERSION)
+            );
             let _ = std::fs::remove_dir_all(&tmp);
         });
     }
@@ -2249,6 +2411,7 @@ mod tests {
             processing_session_count: 0,
             retained_session_count: 0,
             journal_event_count: 0,
+            journal_event_bytes: 0,
             pending_request_count: 0,
             attached_client_count: 0,
             idle_shutdown_allowed: true,
@@ -2390,7 +2553,9 @@ fn main() {
         }
     };
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .thread_name("codex-monitor-daemon")
         .enable_all()
         .build()
         .expect("failed to build tokio runtime");

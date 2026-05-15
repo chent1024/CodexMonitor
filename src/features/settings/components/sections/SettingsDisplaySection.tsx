@@ -27,7 +27,6 @@ import {
 
 type SettingsDisplaySectionProps = {
   appSettings: AppSettings;
-  reduceTransparency: boolean;
   scaleShortcutTitle: string;
   scaleShortcutText: string;
   scaleDraft: string;
@@ -36,7 +35,6 @@ type SettingsDisplaySectionProps = {
   codeFontDraft: string;
   codeFontSizeDraft: number;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
-  onToggleTransparency: (value: boolean) => void;
   onSetScaleDraft: Dispatch<SetStateAction<string>>;
   onCommitScale: () => Promise<void>;
   onResetScale: () => Promise<void>;
@@ -54,7 +52,6 @@ type SettingsDisplaySectionProps = {
 
 export function SettingsDisplaySection({
   appSettings,
-  reduceTransparency,
   scaleShortcutTitle,
   scaleShortcutText,
   scaleDraft,
@@ -63,7 +60,6 @@ export function SettingsDisplaySection({
   codeFontDraft,
   codeFontSizeDraft,
   onUpdateAppSettings,
-  onToggleTransparency,
   onSetScaleDraft,
   onCommitScale,
   onResetScale,
@@ -343,15 +339,6 @@ export function SettingsDisplaySection({
           和其他会话条目。
         </div>
       </div>
-      <SettingsToggleRow
-        title="降低透明效果"
-        subtitle="使用实体表面，而不是玻璃质感。"
-      >
-        <SettingsToggleSwitch
-          pressed={reduceTransparency}
-          onClick={() => onToggleTransparency(!reduceTransparency)}
-        />
-      </SettingsToggleRow>
       <div className="settings-toggle-row settings-scale-row">
         <div>
           <div className="settings-toggle-title">界面缩放</div>
@@ -471,6 +458,20 @@ export function SettingsDisplaySection({
         </div>
         <div className="settings-help">调整侧栏、顶部栏、按钮和设置面板等界面文字大小。</div>
       </div>
+      <SettingsToggleRow
+        title="字体平滑"
+        subtitle="开启后使用抗锯齿字体渲染；如果中文或等宽字体变虚，可以关闭。"
+      >
+        <SettingsToggleSwitch
+          pressed={appSettings.fontSmoothingEnabled}
+          onClick={() =>
+            void onUpdateAppSettings({
+              ...appSettings,
+              fontSmoothingEnabled: !appSettings.fontSmoothingEnabled,
+            })
+          }
+        />
+      </SettingsToggleRow>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="code-font-family">
           代码字体

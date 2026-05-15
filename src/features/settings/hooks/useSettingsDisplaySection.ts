@@ -12,8 +12,6 @@ import {
 
 type UseSettingsDisplaySectionArgs = {
   appSettings: AppSettings;
-  reduceTransparency: boolean;
-  onToggleTransparency: (value: boolean) => void;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
   scaleShortcutTitle: string;
   scaleShortcutText: string;
@@ -23,7 +21,6 @@ type UseSettingsDisplaySectionArgs = {
 
 export type SettingsDisplaySectionProps = {
   appSettings: AppSettings;
-  reduceTransparency: boolean;
   scaleShortcutTitle: string;
   scaleShortcutText: string;
   scaleDraft: string;
@@ -32,7 +29,6 @@ export type SettingsDisplaySectionProps = {
   codeFontDraft: string;
   codeFontSizeDraft: number;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
-  onToggleTransparency: (value: boolean) => void;
   onSetScaleDraft: Dispatch<SetStateAction<string>>;
   onCommitScale: () => Promise<void>;
   onResetScale: () => Promise<void>;
@@ -50,8 +46,6 @@ export type SettingsDisplaySectionProps = {
 
 export const useSettingsDisplaySection = ({
   appSettings,
-  reduceTransparency,
-  onToggleTransparency,
   onUpdateAppSettings,
   scaleShortcutTitle,
   scaleShortcutText,
@@ -172,7 +166,6 @@ export const useSettingsDisplaySection = ({
 
   return {
     appSettings,
-    reduceTransparency,
     scaleShortcutTitle,
     scaleShortcutText,
     scaleDraft,
@@ -181,7 +174,6 @@ export const useSettingsDisplaySection = ({
     codeFontDraft,
     codeFontSizeDraft,
     onUpdateAppSettings,
-    onToggleTransparency,
     onSetScaleDraft: setScaleDraft,
     onCommitScale: handleCommitScale,
     onResetScale: handleResetScale,

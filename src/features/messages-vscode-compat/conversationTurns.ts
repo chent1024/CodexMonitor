@@ -10,6 +10,30 @@ export type VscodeConversationTurn = {
   orphan: boolean;
 };
 
+function normalizeUserMessageText(text: string) {
+  return text.trim().replace(/\s+/g, " ");
+}
+
+function isDuplicateSteeringPrompt(
+  activeTurn: VscodeConversationTurn | null,
+  entry: Extract<MessageListEntry, { kind: "item" }>,
+) {
+  const userEntry = activeTurn?.userEntry;
+  if (
+    !userEntry ||
+    userEntry.item.kind !== "message" ||
+    userEntry.item.role !== "user" ||
+    entry.item.kind !== "message" ||
+    entry.item.role !== "user"
+  ) {
+    return false;
+  }
+
+  const promptText = normalizeUserMessageText(userEntry.item.text);
+  const steeringText = normalizeUserMessageText(entry.item.text);
+  return promptText.length > 0 && promptText === steeringText;
+}
+
 export function buildVscodeConversationTurns(groupedItems: MessageListEntry[]) {
   const turns: VscodeConversationTurn[] = [];
   let activeTurn: VscodeConversationTurn | null = null;
@@ -42,6 +66,9 @@ export function buildVscodeConversationTurns(groupedItems: MessageListEntry[]) {
       entry.item.itemType === "user-message" &&
       entry.item.steeringStatus != null
     ) {
+      if (isDuplicateSteeringPrompt(activeTurn, entry)) {
+        return;
+      }
       const entryId = entry.item.id;
       ensureAgentTurn(entryId).agentEntries.push(entry);
       return;

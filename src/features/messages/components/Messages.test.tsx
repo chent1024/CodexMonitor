@@ -2969,6 +2969,46 @@ describe("Messages", () => {
     expect(container.querySelectorAll("[data-turn-key]").length).toBe(2);
   });
 
+  it("does not render the same prompt twice when a steering user message repeats it", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "prompt-user",
+        kind: "message",
+        role: "user",
+        text: "Does Amazon marketplace have listing APIs?",
+      },
+      {
+        id: "prompt-steering-duplicate",
+        kind: "message",
+        role: "user",
+        itemType: "user-message",
+        steeringStatus: "Steered conversation",
+        text: "Does Amazon marketplace have listing APIs?",
+      },
+      {
+        id: "prompt-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "I will verify the official docs first.",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={true}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelectorAll('[data-message-author-role="user"]')).toHaveLength(1);
+    expect(screen.getAllByText("Does Amazon marketplace have listing APIs?")).toHaveLength(1);
+    expect(screen.getByText("I will verify the official docs first.")).toBeTruthy();
+  });
+
   it("uses staged disclosure and pending MCP body attributes for top-level tool groups", async () => {
     const items: ConversationItem[] = [
       {

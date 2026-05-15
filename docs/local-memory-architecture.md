@@ -29,18 +29,21 @@ Codex app-server
      - entity links
      - audit and access logs
   -> local embedding provider
-     - Ollama, local GGUF, or another local embedding backend
+     - provider abstraction with a packaged deterministic local implementation
 ```
 
 The Codex MCP config should point to a local stdio server:
 
 ```toml
+[features]
+memories = true
+
 [mcp_servers.local_memory]
 command = "G:\\code\\codex-app\\target\\debug\\codex-monitor-memory-mcp.exe"
 args = ["--db", "C:\\Users\\ql\\.codex\\local-memory\\memory.sqlite"]
 ```
 
-The server name should be `local_memory`. Do not also configure the remote `mem0` MCP server in the same Codex profile.
+The server name should be `local_memory`. The feature flag and MCP server entry must both be present for CodexMonitor to treat local memory as enabled. Do not also configure the remote `mem0` MCP server in the same Codex profile.
 
 ## Repository Placement
 
@@ -69,6 +72,10 @@ Expose Mem0-compatible tool names where practical:
 - `delete_all_memories`
 - `list_entities`
 - `delete_entities`
+- `import_memories`
+- `rebuild_indexes`
+- `list_events`
+- `get_event_status`
 
 Tool payloads should support these common filters:
 
@@ -152,7 +159,7 @@ CREATE TABLE memory_access_log (
 );
 ```
 
-Vector storage should use `sqlite-vec` with a dimension fixed by the selected embedding model. Store the embedding model id and dimension in metadata or a settings table so index rebuilds are explicit when the model changes.
+Vector storage uses the local embedding provider selected by CodexMonitor. Packaged providers are `codex-monitor-hash-embedding-v2` and `codex-monitor-local-ngram-v1`, both with 64 dimensions and no network dependency. The provider exposes a model id and dimension through config/debug status so index rebuilds are explicit when the provider changes. The selected id is stored in `[local_memory].embedding_model` and passed to the MCP server as `--embedding-model`.
 
 Prefer `sqlite-vec` over `sqlite-vss`. `sqlite-vec` is the actively developed successor, has no Faiss dependency, and is easier to package for Windows.
 
@@ -171,6 +178,8 @@ Use stable memory kinds so retrieval, retention, and UI behavior are predictable
 
 Long-lived kinds should be superseded or tombstoned, not removed by age. Short-lived kinds can use `expires_at`.
 
+Active memory reads exclude tombstoned, superseded, and expired rows. Direct insertion may return the inserted row for acknowledgement, but list, search, entity, count, and normal get paths only expose active rows.
+
 ## Write Pipeline
 
 Use add-only extraction as the default.
@@ -179,14 +188,19 @@ Use add-only extraction as the default.
 input conversation or fact
   -> normalize scope and metadata
   -> retrieve related memories for deduplication context
-  -> extract distinct new facts
+  -> extract distinct new facts through the memory fact extractor
   -> hash exact content for duplicate prevention
+  -> place automatic captures in pending review
   -> embed extracted memories
   -> extract and link entities
   -> insert memory rows and indexes
 ```
 
 Do not default to UPDATE or DELETE decisions during extraction. If a new memory replaces old state, mark the old memory with `superseded_by_id` and keep an audit trail.
+
+Current supersession behavior supports explicit `supersedes_id` on add/import and a conservative same-scope, same-kind subject match for long-lived memory kinds. Superseded rows remain in SQLite for auditability while their FTS/vector/entity links are removed from active retrieval.
+
+Automatic captures are stored with the `pending-review` category. Pending rows remain visible through the review queue only; they are excluded from normal list, search, entity, count, and index rebuild paths until approved. Approving a row removes `pending-review`, adds `approved`, and indexes it. Rejecting a row tombstones it.
 
 ## Search Pipeline
 
@@ -204,7 +218,7 @@ query
   -> top-k output with reasons and scores
 ```
 
-Use semantic search as the recall base. Keyword and entity signals can boost ranking and can also provide fallback candidates when the vector index is unavailable.
+Use semantic search as the primary recall base. Keyword and entity signals boost ranking and can also provide fallback candidates when the vector index is unavailable.
 
 ## Fusion And Decay
 
@@ -257,9 +271,27 @@ Search should prefer narrower matching scopes, then fall back to broader scopes.
 
 The local MCP server provides storage and retrieval. Hooks and skills drive agent behavior.
 
+Current runtime integration:
+
+- `src-tauri/src/shared/local_memory_integration_core.rs` is the shared automatic memory integration layer.
+- `src-tauri/src/shared/codex_core.rs` calls the integration layer from `send_user_message_core` and `turn_steer_core`, so local app mode and daemon mode use the same behavior.
+- Before `turn/start` and `turn/steer`, CodexMonitor retrieves relevant thread, workspace, user, and global memories and appends them as a bounded `<local_memory_context>` block.
+- `start_thread_core` writes a `session_start` lifecycle checkpoint after `thread/start` returns, scoped to the returned thread id when available.
+- After a successful `turn/start` or `turn/steer`, CodexMonitor extracts bounded user facts from the original prompt and stores each fact separately. Durable instructions and project facts are classified into long-lived kinds; ordinary prompts are stored as thread-scoped `session_state`.
+- `src-tauri/src/backend/app_server.rs` accumulates `item/agentMessage/delta` text. After `turn/completed`, CodexMonitor extracts bounded assistant learning facts and stores each fact as thread-scoped `task_learnings`.
+- `compact_thread_core` writes a `pre_compaction` lifecycle checkpoint before `thread/compact/start`.
+- The daemon `session_stop` path writes a `session_stop` lifecycle checkpoint before removing and killing the session process.
+- `src-tauri/src/shared/local_memory_core.rs` uses semantic, keyword, entity, scope, confidence, and temporal signals in the fused search score.
+- `src-tauri/src/shared/local_memory_core.rs` routes vector generation through an embedding provider abstraction; automatic capture uses the configured local embedding model.
+- Memory add, update, delete, delete-all, import, entity listing, entity clearing, review approval, review rejection, and index rebuild are available through app commands, daemon RPC, and the local MCP server.
+- Memory events are backed by `memory_access_log` and exposed through `list_events` and `get_event_status` in MCP, app commands, and daemon RPC.
+- The configured database path is read from `[mcp_servers.local_memory].args`. The settings and daemon surfaces can update the `--db` path without disabling the memory server entry.
+- MCP connectivity can be checked from the app or daemon by launching the configured stdio server and issuing `initialize` plus `tools/list`.
+- Automatic memory failures are non-blocking; a memory database or retrieval issue must not fail the user turn.
+
 Recommended Codex behavior:
 
-- `SessionStart`: retrieve workspace and user bootstrap memories.
+- `SessionStart`: retrieve workspace and user bootstrap memories and capture the session-start checkpoint.
 - `UserPromptSubmit`: inject relevant memories for the current prompt.
 - `Stop`: ask the agent to persist durable learnings and session state.
 - Before compaction: persist unresolved session state.
@@ -270,17 +302,21 @@ Codex plugin hooks are not required for the MCP server itself, but they are usef
 
 Add a settings surface only after the local MCP server works from config.
 
-Minimum settings:
+Current settings:
 
 - Enable local memory MCP.
 - Select database path.
-- Select embedding provider and model.
-- Show embedding dimension and index status.
+- Apply database path.
+- Check MCP connection status.
+- Show feature status and database path.
+- Select the local embedding provider model and show model id, dimension, and rebuild recommendation.
+- Review, filter, batch approve, batch reject, and edit automatic memory captures before they enter retrieval.
+- Search, refresh, edit, tombstone, delete all, import, and export memories.
+- Add manual durable memories.
+- List and clear extracted entities.
 - Rebuild vector index.
-- View, search, edit, tombstone, and export memories.
-- Show MCP connection status.
 
-Avoid storing API keys for remote Mem0. Local embedding credentials, if any, should follow existing secret-handling patterns.
+Avoid storing API keys for remote Mem0. The current implementation does not expose an external embedding provider selector; if one is added later, local embedding credentials, if any, should follow existing secret-handling patterns.
 
 ## Validation
 
@@ -293,15 +329,16 @@ For implementation changes:
 - For Rust backend changes, run `cd src-tauri && cargo check`.
 - For local memory core, add focused Rust tests around schema migration, add/search/delete, score fusion, decay, and supersession.
 - For MCP behavior, add protocol-level tests for each tool payload and error shape.
+- For end-to-end memory smoke checks, enable local memory, send a prompt that should be captured, confirm it appears in pending review, edit or approve it, verify search returns it, switch embedding model, rebuild indexes, and verify search still returns it.
 
 ## Implementation Order
 
 1. Add `local_memory_core` schema, migrations, and repository API.
-2. Add local embedding provider abstraction and one Ollama-backed implementation.
-3. Add `sqlite-vec` vector indexing and FTS5 keyword indexing.
-4. Add hybrid search, score fusion, and kind-aware decay.
+2. Add local embedding generation, vector indexing, and FTS5 keyword indexing.
+3. Add hybrid search, score fusion, and kind-aware ranking.
+4. Add entity extraction and linking.
 5. Add the stdio MCP binary and Mem0-compatible tools.
 6. Wire Codex config helper commands for enabling the local MCP server.
-7. Add settings UI and daemon parity.
-8. Add hooks and skills for automatic retrieval and capture.
-
+7. Add app commands, daemon RPC parity, and frontend IPC wrappers.
+8. Add settings UI for status, manual memory management, entities, index rebuild, and export.
+9. Keep automatic retrieval and capture wired through the shared turn integration; plugin hooks remain optional extensions for `SessionStart`, `Stop`, and pre-compaction capture.

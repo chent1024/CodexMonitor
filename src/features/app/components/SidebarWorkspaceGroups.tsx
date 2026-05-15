@@ -70,6 +70,7 @@ type SidebarWorkspaceGroupsProps = {
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
+  onToggleThreadPin: (workspaceId: string, threadId: string, isPinned: boolean) => void;
   onShowThreadMenu: (
     event: MouseEvent,
     workspaceId: string,
@@ -133,6 +134,7 @@ function SidebarWorkspaceEntry({
   onAddCloneAgent,
   onToggleWorkspaceCollapse,
   onSelectThread,
+  onToggleThreadPin,
   onShowThreadMenu,
   onShowWorkspaceMenu,
   onShowWorktreeMenu,
@@ -229,7 +231,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<Plus aria-hidden />}
             >
-              New agent
+              新建智能体
             </PopoverMenuItem>
             <PopoverMenuItem
               className="workspace-add-option"
@@ -240,7 +242,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<GitBranch aria-hidden />}
             >
-              New worktree agent
+              新建工作树智能体
             </PopoverMenuItem>
             <PopoverMenuItem
               className="workspace-add-option"
@@ -251,7 +253,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<Copy aria-hidden />}
             >
-              New clone agent
+              新建克隆智能体
             </PopoverMenuItem>
           </PopoverSurface>,
           document.body,
@@ -300,6 +302,7 @@ function SidebarWorkspaceEntry({
           onConnectWorkspace={onConnectWorkspace}
           onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
           onSelectThread={onSelectThread}
+          onToggleThreadPin={onToggleThreadPin}
           onShowThreadMenu={onShowThreadMenu}
           onShowWorktreeMenu={onShowCloneMenu}
           onToggleExpanded={onToggleExpanded}
@@ -334,6 +337,7 @@ function SidebarWorkspaceEntry({
           onConnectWorkspace={onConnectWorkspace}
           onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
           onSelectThread={onSelectThread}
+          onToggleThreadPin={onToggleThreadPin}
           onShowThreadMenu={onShowThreadMenu}
           onShowWorktreeMenu={onShowWorktreeMenu}
           onToggleExpanded={onToggleExpanded}
@@ -362,6 +366,7 @@ function SidebarWorkspaceEntry({
           onToggleExpanded={onToggleExpanded}
           onLoadOlderThreads={onLoadOlderThreads}
           onSelectThread={onSelectThread}
+          onToggleThreadPin={onToggleThreadPin}
           onShowThreadMenu={onShowThreadMenu}
         />
       )}

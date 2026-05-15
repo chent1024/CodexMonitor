@@ -6,14 +6,16 @@ use serde_json::{json, Value};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 use crate::shared::restart_safe_sessions_core::RESTART_SAFE_SESSION_PROTOCOL_VERSION;
+use crate::shared::terminal_core::TERMINAL_RPC_VERSION;
 use crate::state::AppState;
-use crate::types::BackendMode;
+use crate::types::{BackendMode, DaemonHealthStatus};
 
 use self::protocol::{build_request_line, DEFAULT_REMOTE_HOST, DISCONNECTED_MESSAGE};
 use self::tcp_transport::TcpTransport;
@@ -23,6 +25,9 @@ const REMOTE_DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 const REMOTE_INTERACTIVE_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 const REMOTE_QUICK_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const REMOTE_SEND_TIMEOUT: Duration = Duration::from_secs(15);
+const EXPECTED_DAEMON_NAME: &str = "codex-monitor-daemon";
+const EXPECTED_DAEMON_MODE: &str = "tcp";
+const CURRENT_APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub(crate) fn normalize_path_for_remote(path: String) -> String {
     let trimmed = path.trim();
@@ -68,6 +73,17 @@ struct RemoteBackendInner {
     pending: Arc<Mutex<PendingMap>>,
     next_id: AtomicU64,
     connected: Arc<std::sync::atomic::AtomicBool>,
+    daemon_info: Mutex<Option<RemoteDaemonInfo>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RemoteDaemonInfo {
+    name: String,
+    version: String,
+    pid: Option<u32>,
+    mode: String,
+    binary_path: Option<String>,
+    terminal_rpc_version: Option<u64>,
 }
 
 impl RemoteBackend {
@@ -109,11 +125,71 @@ impl RemoteBackend {
             }
         }
     }
+
+    async fn daemon_info(&self, refresh: bool) -> Result<RemoteDaemonInfo, String> {
+        if !refresh {
+            if let Some(info) = self.inner.daemon_info.lock().await.clone() {
+                return Ok(info);
+            }
+        }
+        let value = self.call("daemon_info", json!({})).await?;
+        let info = parse_remote_daemon_info(&value)?;
+        *self.inner.daemon_info.lock().await = Some(info.clone());
+        Ok(info)
+    }
+}
+
+fn parse_remote_daemon_info(value: &Value) -> Result<RemoteDaemonInfo, String> {
+    let name = value
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "daemon_info missing `name`".to_string())?
+        .to_string();
+    let version = value
+        .get("version")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "daemon_info missing `version`".to_string())?
+        .to_string();
+    let mode = value
+        .get("mode")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "daemon_info missing `mode`".to_string())?
+        .to_string();
+    let pid = value
+        .get("pid")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok());
+    let binary_path = value
+        .get("binaryPath")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let terminal_rpc_version = value
+        .get("capabilities")
+        .and_then(|value| value.get("terminalRpcVersion"))
+        .and_then(Value::as_u64);
+
+    Ok(RemoteDaemonInfo {
+        name,
+        version,
+        pid,
+        mode,
+        binary_path,
+        terminal_rpc_version,
+    })
 }
 
 fn request_timeout_for_method(method: &str) -> Duration {
     match method {
         "list_thread_turns"
+        | "daemon_info"
         | "read_thread"
         | "thread_unsubscribe"
         | "list_threads"
@@ -125,6 +201,10 @@ fn request_timeout_for_method(method: &str) -> Duration {
         | "session/pending_requests"
         | "session/replay_events"
         | "session/status"
+        | "terminal/close"
+        | "terminal/open"
+        | "terminal/resize"
+        | "terminal/write"
         | "local_usage_snapshot"
         | "account_read"
         | "account_rate_limits"
@@ -153,22 +233,47 @@ pub(crate) async fn call_remote(
         Err(err) if err == DISCONNECTED_MESSAGE => {
             *state.remote_backend.lock().await = None;
             if !can_retry_after_disconnect(method) {
-                return Err(err);
+                return Err(format_remote_backend_error(method, &err));
             }
             let retry_client = ensure_remote_backend(state, app).await?;
             match retry_client.call(method, params).await {
                 Ok(value) => Ok(value),
                 Err(retry_err) => {
                     *state.remote_backend.lock().await = None;
-                    Err(retry_err)
+                    Err(format_remote_backend_error(method, &retry_err))
                 }
             }
         }
         Err(err) => {
             *state.remote_backend.lock().await = None;
-            Err(err)
+            Err(format_remote_backend_error(method, &err))
         }
     }
+}
+
+pub(crate) async fn terminal_rpc_supported(
+    state: &AppState,
+    app: AppHandle,
+) -> Result<bool, String> {
+    let client = ensure_remote_backend(state, app).await?;
+    let info = client.daemon_info(false).await?;
+    Ok(info
+        .terminal_rpc_version
+        .is_some_and(|version| version >= TERMINAL_RPC_VERSION))
+}
+
+fn format_remote_backend_error(method: &str, err: &str) -> String {
+    if err == DISCONNECTED_MESSAGE {
+        return format!(
+            "Remote daemon connection was lost while running `{method}`. The app will reconnect automatically for safe read operations; if this repeats, restart the daemon and check the configured host/token."
+        );
+    }
+    if err.contains("timed out") {
+        return format!(
+            "Remote daemon request `{method}` timed out: {err}. This usually means the daemon is overloaded, unreachable, or the network path is degraded."
+        );
+    }
+    err.to_string()
 }
 
 fn can_retry_after_disconnect(method: &str) -> bool {
@@ -180,13 +285,33 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "collaboration_mode_list"
             | "connect_workspace"
             | "codex_doctor"
+            | "daemon_info"
             | "experimental_feature_list"
             | "get_codex_config_path"
             | "get_codex_feature_flag"
             | "get_open_app_icon"
             | "get_local_memory_status"
             | "get_local_memory_debug_status"
+            | "add_local_memory"
+            | "search_local_memories"
+            | "list_local_memories"
+            | "get_local_memory"
+            | "update_local_memory"
+            | "delete_local_memory"
+            | "delete_all_local_memories"
+            | "list_local_memory_entities"
+            | "delete_local_memory_entities"
+            | "rebuild_local_memory_indexes"
+            | "list_local_memory_events"
+            | "get_local_memory_event_status"
             | "set_local_memory_enabled"
+            | "set_local_memory_db_path"
+            | "set_local_memory_embedding_model"
+            | "check_local_memory_connection"
+            | "import_local_memories"
+            | "list_local_memory_review_queue"
+            | "approve_local_memory"
+            | "reject_local_memory"
             | "set_workspace_runtime_codex_args"
             | "file_read"
             | "get_agents_settings"
@@ -255,6 +380,7 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
             pending: connection.pending,
             next_id: AtomicU64::new(1),
             connected: connection.connected,
+            daemon_info: Mutex::new(None),
         }),
     };
 
@@ -266,6 +392,9 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
                 .map(|_| ())?;
         }
     }
+
+    let daemon_info = client.daemon_info(true).await?;
+    validate_daemon_identity(&daemon_info)?;
 
     {
         let settings = state.app_settings.lock().await;
@@ -293,6 +422,133 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
     }
 
     Ok(client)
+}
+
+fn validate_daemon_identity(info: &RemoteDaemonInfo) -> Result<(), String> {
+    if info.name != EXPECTED_DAEMON_NAME {
+        return Err(format!(
+            "daemon identity mismatch: app expected `{EXPECTED_DAEMON_NAME}`, daemon reported `{}`",
+            info.name
+        ));
+    }
+    if info.version != CURRENT_APP_VERSION {
+        return Err(format!(
+            "daemon version mismatch: app requires {CURRENT_APP_VERSION}, daemon reported {}. Restart the daemon so app and daemon use the same build.",
+            info.version
+        ));
+    }
+    if info.mode != EXPECTED_DAEMON_MODE {
+        return Err(format!(
+            "daemon mode mismatch: app expected `{EXPECTED_DAEMON_MODE}`, daemon reported `{}`",
+            info.mode
+        ));
+    }
+    Ok(())
+}
+
+fn build_daemon_health_status(
+    connected: bool,
+    info: Option<RemoteDaemonInfo>,
+    restart_safe_protocol_version: Option<u64>,
+    last_error: Option<String>,
+    round_trip_ms: u64,
+) -> DaemonHealthStatus {
+    let terminal_rpc_supported = info
+        .as_ref()
+        .and_then(|info| info.terminal_rpc_version)
+        .is_some_and(|version| version >= TERMINAL_RPC_VERSION);
+    let restart_safe_protocol_compatible = match restart_safe_protocol_version {
+        Some(version) => version == u64::from(RESTART_SAFE_SESSION_PROTOCOL_VERSION),
+        None => true,
+    };
+    let mut warnings = Vec::new();
+
+    if let Some(info) = info.as_ref() {
+        if info.name != EXPECTED_DAEMON_NAME {
+            warnings.push(format!(
+                "Identity mismatch: expected `{EXPECTED_DAEMON_NAME}`, got `{}`.",
+                info.name
+            ));
+        }
+        if info.version != CURRENT_APP_VERSION {
+            warnings.push(format!(
+                "Version mismatch: app {CURRENT_APP_VERSION}, daemon {}.",
+                info.version
+            ));
+        }
+        if info.mode != EXPECTED_DAEMON_MODE {
+            warnings.push(format!(
+                "Mode mismatch: expected `{EXPECTED_DAEMON_MODE}`, got `{}`.",
+                info.mode
+            ));
+        }
+        if !terminal_rpc_supported {
+            warnings.push(format!(
+                "Terminal RPC capability {:?} is below required {}.",
+                info.terminal_rpc_version, TERMINAL_RPC_VERSION
+            ));
+        }
+    }
+
+    if !restart_safe_protocol_compatible {
+        warnings.push(format!(
+            "Restart-safe protocol mismatch: app requires {}, daemon reported {:?}.",
+            RESTART_SAFE_SESSION_PROTOCOL_VERSION, restart_safe_protocol_version
+        ));
+    }
+
+    DaemonHealthStatus {
+        connected,
+        name: info.as_ref().map(|info| info.name.clone()),
+        version: info.as_ref().map(|info| info.version.clone()),
+        app_version: CURRENT_APP_VERSION.to_string(),
+        mode: info.as_ref().map(|info| info.mode.clone()),
+        pid: info.as_ref().and_then(|info| info.pid),
+        binary_path: info.as_ref().and_then(|info| info.binary_path.clone()),
+        terminal_rpc_version: info.as_ref().and_then(|info| info.terminal_rpc_version),
+        required_terminal_rpc_version: TERMINAL_RPC_VERSION,
+        terminal_rpc_supported,
+        restart_safe_protocol_version,
+        required_restart_safe_protocol_version: u64::from(RESTART_SAFE_SESSION_PROTOCOL_VERSION),
+        restart_safe_protocol_compatible,
+        warnings,
+        last_error,
+        round_trip_ms,
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn daemon_health_status(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<DaemonHealthStatus, String> {
+    let started = Instant::now();
+    let settings = state.app_settings.lock().await.clone();
+    match ensure_remote_backend(state.inner(), app).await {
+        Ok(client) => {
+            let info = client.daemon_info(true).await?;
+            let restart_safe_protocol_version = if settings.restart_safe_sessions {
+                let status = client.call("session/debug_status", json!({})).await?;
+                status.get("protocolVersion").and_then(Value::as_u64)
+            } else {
+                None
+            };
+            Ok(build_daemon_health_status(
+                true,
+                Some(info),
+                restart_safe_protocol_version,
+                None,
+                started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+            ))
+        }
+        Err(err) => Ok(build_daemon_health_status(
+            false,
+            None,
+            None,
+            Some(err),
+            started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        )),
+    }
 }
 
 fn resolve_transport_config(
@@ -325,12 +581,11 @@ mod tests {
     #[test]
     fn resolve_tcp_transport_uses_remote_host() {
         let mut settings = AppSettings::default();
+        settings.restart_safe_sessions = false;
         settings.remote_backend_host = "tcp.example:4732".to_string();
 
         let config = resolve_transport_config(&settings).expect("transport config");
-        let RemoteTransportConfig::Tcp { host, .. } = config else {
-            panic!("expected tcp transport config");
-        };
+        let RemoteTransportConfig::Tcp { host, .. } = config;
         assert_eq!(host, "tcp.example:4732");
     }
 
@@ -341,6 +596,7 @@ mod tests {
         assert!(can_retry_after_disconnect("list_thread_turns"));
         assert!(can_retry_after_disconnect("thread_unsubscribe"));
         assert!(can_retry_after_disconnect("local_usage_snapshot"));
+        assert!(can_retry_after_disconnect("daemon_info"));
         assert!(!can_retry_after_disconnect("send_user_message"));
         assert!(!can_retry_after_disconnect("start_thread"));
         assert!(!can_retry_after_disconnect("remove_workspace"));
@@ -358,6 +614,10 @@ mod tests {
         );
         assert_eq!(
             request_timeout_for_method("session/attach"),
+            Duration::from_secs(20)
+        );
+        assert_eq!(
+            request_timeout_for_method("daemon_info"),
             Duration::from_secs(20)
         );
         assert_eq!(

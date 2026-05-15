@@ -78,13 +78,11 @@ function frameDelta(bounds: WindowBounds) {
 }
 
 function targetInnerSize(
-  bounds: WindowBounds,
   workArea: NonNullable<Monitor["workArea"]>,
 ) {
-  const frame = frameDelta(bounds);
   return new PhysicalSize(
-    Math.max(360, workArea.size.width - frame.width),
-    Math.max(600, workArea.size.height - frame.height),
+    Math.max(360, workArea.size.width),
+    Math.max(600, workArea.size.height),
   );
 }
 
@@ -185,5 +183,5 @@ export async function toggleWindowZoomWithinCurrentDisplay(
   await windowHandle.setPosition(
     new PhysicalPosition(workArea.position.x, workArea.position.y),
   );
-  await windowHandle.setSize(targetInnerSize(bounds, workArea));
+  await windowHandle.setSize(targetInnerSize(workArea));
 }

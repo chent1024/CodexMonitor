@@ -1,31 +1,5 @@
 @import "./themes.css";
 
-.app.reduced-transparency {
-  --surface-sidebar: rgba(37, 37, 38, 0.98);
-  --surface-sidebar-opaque: rgb(37, 37, 38);
-  --surface-topbar: rgba(24, 24, 24, 0.98);
-  --surface-right-panel: rgba(37, 37, 38, 0.98);
-  --surface-composer: rgba(37, 37, 38, 0.98);
-  --surface-messages: rgba(30, 30, 30, 0.98);
-  --surface-card: rgba(37, 37, 38, 0.96);
-  --surface-card-strong: rgba(45, 45, 48, 0.98);
-  --surface-card-muted: rgba(42, 42, 43, 0.94);
-  --surface-item: rgba(43, 43, 43, 0.92);
-  --surface-control: rgba(45, 45, 48, 0.88);
-  --surface-control-hover: rgba(58, 58, 60, 0.92);
-  --surface-control-disabled: rgba(45, 45, 48, 0.62);
-  --surface-hover: rgba(42, 45, 46, 0.86);
-  --surface-active: rgba(100, 200, 255, 0.18);
-  --surface-approval: rgba(37, 37, 38, 0.96);
-  --surface-debug: rgba(37, 37, 38, 0.96);
-  --surface-command: rgba(30, 30, 30, 0.98);
-  --surface-diff-card: rgba(37, 37, 38, 0.94);
-  --surface-bubble: rgba(45, 45, 48, 0.92);
-  --surface-bubble-user: rgba(77, 153, 255, 0.55);
-  --surface-context-core: rgba(37, 37, 38, 0.98);
-  --surface-popover: rgba(37, 37, 38, 0.995);
-}
-
 * {
   box-sizing: border-box;
 }
@@ -91,6 +65,9 @@ body {
   transition: grid-template-columns 220ms ease;
   font-family: var(--ui-font-family);
   font-size: var(--ui-font-size, 13px);
+  -webkit-font-smoothing: var(--font-smoothing-webkit, auto);
+  -moz-osx-font-smoothing: var(--font-smoothing-moz, auto);
+  text-rendering: var(--font-text-rendering, auto);
 }
 
 .app.is-resizing,
@@ -137,6 +114,10 @@ body {
 
 .titlebar-toggle-left {
   left: var(--titlebar-sidebar-toggle-left, calc(5px + var(--titlebar-inset-left, 0px)));
+}
+
+.app.is-windows:not(.sidebar-collapsed) .titlebar-toggle-left {
+  display: none;
 }
 
 .app.sidebar-collapsed .titlebar-toggle-left {

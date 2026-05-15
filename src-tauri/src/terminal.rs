@@ -7,6 +7,11 @@ use crate::shared::terminal_core;
 pub(crate) use crate::shared::terminal_core::TerminalSessionInfo;
 use crate::state::AppState;
 
+fn is_unsupported_remote_terminal_method_error(method: &str, err: &str) -> bool {
+    err.to_ascii_lowercase()
+        .contains(&format!("unknown method: {}", method.to_ascii_lowercase()))
+}
+
 #[tauri::command]
 pub(crate) async fn terminal_open(
     workspace_id: String,
@@ -16,20 +21,41 @@ pub(crate) async fn terminal_open(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<TerminalSessionInfo, String> {
+    let configured_shell = state.app_settings.lock().await.terminal_shell.clone();
     if remote_backend::is_remote_mode(&*state).await {
-        let response = remote_backend::call_remote(
+        if !remote_backend::terminal_rpc_supported(&*state, app.clone()).await? {
+            return terminal_core::terminal_open_core(
+                workspace_id,
+                terminal_id,
+                cols,
+                rows,
+                &state.workspaces,
+                state.terminal_sessions.clone(),
+                TauriEventSink::new(app),
+                configured_shell,
+            )
+            .await;
+        }
+        match remote_backend::call_remote(
             &*state,
-            app,
+            app.clone(),
             "terminal_open",
             json!({
                 "workspaceId": workspace_id,
                 "terminalId": terminal_id,
                 "cols": cols,
-                "rows": rows
+                "rows": rows,
+                "terminalShell": configured_shell.clone()
             }),
         )
-        .await?;
-        return serde_json::from_value(response).map_err(|err| err.to_string());
+        .await
+        {
+            Ok(response) => return serde_json::from_value(response).map_err(|err| err.to_string()),
+            Err(err) if !is_unsupported_remote_terminal_method_error("terminal_open", &err) => {
+                return Err(err);
+            }
+            Err(_) => {}
+        }
     }
 
     terminal_core::terminal_open_core(
@@ -40,6 +66,7 @@ pub(crate) async fn terminal_open(
         &state.workspaces,
         state.terminal_sessions.clone(),
         TauriEventSink::new(app),
+        configured_shell,
     )
     .await
 }
@@ -53,14 +80,20 @@ pub(crate) async fn terminal_write(
     app: AppHandle,
 ) -> Result<(), String> {
     if remote_backend::is_remote_mode(&*state).await {
-        remote_backend::call_remote(
+        match remote_backend::call_remote(
             &*state,
             app,
             "terminal_write",
             json!({ "workspaceId": workspace_id, "terminalId": terminal_id, "data": data }),
         )
-        .await?;
-        return Ok(());
+        .await
+        {
+            Ok(_) => return Ok(()),
+            Err(err) if !is_unsupported_remote_terminal_method_error("terminal_write", &err) => {
+                return Err(err);
+            }
+            Err(_) => {}
+        }
     }
 
     terminal_core::terminal_write_core(
@@ -82,7 +115,7 @@ pub(crate) async fn terminal_resize(
     app: AppHandle,
 ) -> Result<(), String> {
     if remote_backend::is_remote_mode(&*state).await {
-        remote_backend::call_remote(
+        match remote_backend::call_remote(
             &*state,
             app,
             "terminal_resize",
@@ -93,8 +126,14 @@ pub(crate) async fn terminal_resize(
                 "rows": rows
             }),
         )
-        .await?;
-        return Ok(());
+        .await
+        {
+            Ok(_) => return Ok(()),
+            Err(err) if !is_unsupported_remote_terminal_method_error("terminal_resize", &err) => {
+                return Err(err);
+            }
+            Err(_) => {}
+        }
     }
 
     terminal_core::terminal_resize_core(
@@ -115,16 +154,47 @@ pub(crate) async fn terminal_close(
     app: AppHandle,
 ) -> Result<(), String> {
     if remote_backend::is_remote_mode(&*state).await {
-        remote_backend::call_remote(
+        match remote_backend::call_remote(
             &*state,
             app,
             "terminal_close",
             json!({ "workspaceId": workspace_id, "terminalId": terminal_id }),
         )
-        .await?;
-        return Ok(());
+        .await
+        {
+            Ok(_) => return Ok(()),
+            Err(err) if !is_unsupported_remote_terminal_method_error("terminal_close", &err) => {
+                return Err(err);
+            }
+            Err(_) => {}
+        }
     }
 
     terminal_core::terminal_close_core(workspace_id, terminal_id, state.terminal_sessions.clone())
         .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_unsupported_remote_terminal_method_error;
+
+    #[test]
+    fn detects_unsupported_remote_terminal_method_errors() {
+        assert!(is_unsupported_remote_terminal_method_error(
+            "terminal_open",
+            "unknown method: terminal_open"
+        ));
+        assert!(is_unsupported_remote_terminal_method_error(
+            "terminal_open",
+            "Unknown method: TERMINAL_OPEN"
+        ));
+        assert!(!is_unsupported_remote_terminal_method_error(
+            "terminal_open",
+            "Failed to spawn shell: not found"
+        ));
+        assert!(!is_unsupported_remote_terminal_method_error(
+            "terminal_write",
+            "unknown method: terminal_open"
+        ));
+    }
 }

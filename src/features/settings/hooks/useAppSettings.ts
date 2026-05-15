@@ -6,8 +6,8 @@ import { CHAT_SCROLLBACK_DEFAULT, normalizeChatHistoryScrollbackItems } from "@u
 import {
   DEFAULT_CODE_FONT_FAMILY,
   DEFAULT_UI_FONT_FAMILY,
-  LEGACY_DEFAULT_CODE_FONT_FAMILY,
-  LEGACY_DEFAULT_UI_FONT_FAMILY,
+  LEGACY_CODE_FONT_FAMILIES,
+  LEGACY_UI_FONT_FAMILIES,
   CODE_FONT_SIZE_DEFAULT,
   UI_FONT_SIZE_DEFAULT,
   clampCodeFontSize,
@@ -141,6 +141,7 @@ function buildDefaultSettings(): AppSettings {
   return {
     codexBin: null,
     codexArgs: null,
+    terminalShell: null,
     backendMode: isMobile ? "remote" : "local",
     remoteBackendProvider: defaultRemote.provider,
     remoteBackendHost: defaultRemote.host,
@@ -182,6 +183,7 @@ function buildDefaultSettings(): AppSettings {
     uiFontSize: UI_FONT_SIZE_DEFAULT,
     codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
     codeFontSize: CODE_FONT_SIZE_DEFAULT,
+    fontSmoothingEnabled: false,
     notificationSoundsEnabled: true,
     systemNotificationsEnabled: true,
     subagentSystemNotificationsEnabled: true,
@@ -245,12 +247,12 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
   );
   const normalizedUiFontFamily = migrateLegacyFontFamily(
     normalizeFontFamily(settings.uiFontFamily, DEFAULT_UI_FONT_FAMILY),
-    LEGACY_DEFAULT_UI_FONT_FAMILY,
+    LEGACY_UI_FONT_FAMILIES,
     DEFAULT_UI_FONT_FAMILY,
   );
   const normalizedCodeFontFamily = migrateLegacyFontFamily(
     normalizeFontFamily(settings.codeFontFamily, DEFAULT_CODE_FONT_FAMILY),
-    LEGACY_DEFAULT_CODE_FONT_FAMILY,
+    LEGACY_CODE_FONT_FAMILIES,
     DEFAULT_CODE_FONT_FAMILY,
   );
   return {
@@ -258,12 +260,14 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     ...remoteBackendSettings,
     codexBin: settings.codexBin?.trim() ? settings.codexBin.trim() : null,
     codexArgs: settings.codexArgs?.trim() ? settings.codexArgs.trim() : null,
+    terminalShell: settings.terminalShell?.trim() ? settings.terminalShell.trim() : null,
     uiScale: clampUiScale(settings.uiScale),
     theme: allowedThemes.has(settings.theme) ? settings.theme : "system",
     uiFontFamily: normalizedUiFontFamily,
     uiFontSize: clampUiFontSize(settings.uiFontSize),
     codeFontFamily: normalizedCodeFontFamily,
     codeFontSize: clampCodeFontSize(settings.codeFontSize),
+    fontSmoothingEnabled: settings.fontSmoothingEnabled === true,
     personality: allowedPersonality.has(settings.personality)
       ? settings.personality
       : "friendly",

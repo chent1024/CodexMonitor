@@ -8,10 +8,6 @@
   -webkit-backdrop-filter: blur(14px) saturate(1.15);
 }
 
-.app.reduced-transparency .mobile-setup-wizard-overlay .ds-modal-backdrop {
-  background: rgba(8, 12, 18, 0.92);
-}
-
 .mobile-setup-wizard-card {
   width: min(520px, 92vw);
   border-radius: 20px;

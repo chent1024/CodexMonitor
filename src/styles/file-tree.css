@@ -243,9 +243,18 @@
 
 .file-preview-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
+  min-width: 0;
+}
+
+.file-preview-heading {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .file-preview-title {
@@ -257,6 +266,7 @@
 
 .file-preview-path {
   font-size: var(--file-tree-font-size-sm);
+  font-weight: 600;
   color: var(--text-strong);
   white-space: nowrap;
   overflow: hidden;
@@ -271,7 +281,11 @@
 }
 
 .file-preview-close {
-  padding: 4px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  border-radius: 9px;
 }
 
 .file-preview-status {
@@ -314,26 +328,20 @@
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
 }
 
-.file-preview-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: var(--file-tree-font-size-sm);
-  color: var(--text-faint);
-}
-
 .file-preview-selection-group {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   min-width: 0;
+  font-size: var(--file-tree-font-size-sm);
+  color: var(--text-faint);
 }
 
 .file-preview-hints {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px 8px;
   font-size: var(--file-tree-font-size-xs);
   color: var(--text-fainter);
 }
@@ -345,29 +353,49 @@
 .file-preview-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.file-preview-actions .open-app-button {
+  height: 32px;
+  border-radius: 9px;
+}
+
+.file-preview-actions .open-app-action {
+  min-width: 36px;
+  padding: 0 8px;
+}
+
+.file-preview-actions .open-app-toggle {
+  width: 26px;
+  min-width: 26px;
 }
 
 .file-preview-action {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
-  min-height: 30px;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
   font-size: var(--file-tree-font-size-sm);
   line-height: 1.2;
-  border-radius: 10px;
+  border-radius: 9px;
+  white-space: nowrap;
 }
 
 .file-preview-action--add {
   background: var(--surface-active);
   color: var(--text-strong);
   border: 1px solid var(--border-accent);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+  box-shadow: none;
 }
 
 .file-preview-action--add:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+  transform: none;
+  box-shadow: none;
 }
 
 .file-preview-lines {

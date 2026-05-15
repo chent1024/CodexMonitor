@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import X from "lucide-react/dist/esm/icons/x";
 import type {
   AppSettings,
+  DaemonHealthStatus,
   TailscaleDaemonCommandPreview,
   TailscaleStatus,
   TcpDaemonStatus,
@@ -46,6 +47,9 @@ type SettingsServerSectionProps = {
   tailscaleCommandError: string | null;
   tcpDaemonStatus: TcpDaemonStatus | null;
   tcpDaemonBusyAction: "start" | "stop" | "status" | null;
+  daemonHealth: DaemonHealthStatus | null;
+  daemonHealthLoading: boolean;
+  daemonHealthError: string | null;
   restartSafeSessionStatus: RestartSafeDebugStatus | null;
   restartSafeSessionLoading: boolean;
   restartSafeSessionError: string | null;
@@ -65,9 +69,26 @@ type SettingsServerSectionProps = {
   onTcpDaemonStart: () => Promise<void>;
   onTcpDaemonStop: () => Promise<void>;
   onTcpDaemonStatus: () => Promise<void>;
+  onRefreshDaemonHealth: () => void;
   onRefreshRestartSafeSessionStatus: () => void;
   onMobileConnectTest: () => void;
 };
+
+function restartSafeCount(
+  status: RestartSafeDebugStatus,
+  field: keyof RestartSafeDebugStatus,
+  fallbackField?: keyof RestartSafeDebugStatus,
+) {
+  const value = status[field];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  const fallbackValue = fallbackField ? status[fallbackField] : null;
+  if (typeof fallbackValue === "number" && Number.isFinite(fallbackValue)) {
+    return fallbackValue;
+  }
+  return 0;
+}
 
 function formatRestartSafeSessionStatus(
   status: RestartSafeDebugStatus | null,
@@ -75,14 +96,45 @@ function formatRestartSafeSessionStatus(
   if (!status) {
     return "daemon 未连接，暂时无法读取会话状态。";
   }
-  const processingSessionCount = status.processingSessionCount ?? 0;
+  const retainedSessionCount = restartSafeCount(
+    status,
+    "retainedSessionCount",
+    "sessionCount",
+  );
+  const processingSessionCount = restartSafeCount(status, "processingSessionCount");
+  const pendingRequestCount = restartSafeCount(status, "pendingRequestCount");
+  const journalEventCount = restartSafeCount(status, "journalEventCount");
   return [
-    `已保留 ${status.retainedSessionCount}`,
+    `已保留 ${retainedSessionCount}`,
     `处理中 ${processingSessionCount}`,
-    `待处理 ${status.pendingRequestCount}`,
-    `已缓存事件 ${status.journalEventCount}`,
+    `待处理 ${pendingRequestCount}`,
+    `已缓存事件 ${journalEventCount}`,
     status.idleShutdownAllowed ? "空闲后可自动退出" : "daemon 将继续保留",
   ].join(" · ");
+}
+
+function formatDaemonHealthStatus(status: DaemonHealthStatus | null): string {
+  if (!status) {
+    return "daemon health not loaded.";
+  }
+  const connection = status.connected ? "connected" : "disconnected";
+  const identity = [
+    status.name ?? "unknown",
+    status.version ? `v${status.version}` : null,
+    status.pid ? `pid ${status.pid}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const terminal = status.terminalRpcSupported
+    ? `terminal RPC ${status.terminalRpcVersion}`
+    : `terminal RPC missing, requires ${status.requiredTerminalRpcVersion}`;
+  const restartSafe =
+    status.restartSafeProtocolVersion == null
+      ? null
+      : `restart-safe protocol ${status.restartSafeProtocolVersion}/${status.requiredRestartSafeProtocolVersion}`;
+  return [connection, identity, terminal, restartSafe, `${status.roundTripMs}ms`]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function SettingsServerSection({
@@ -110,6 +162,9 @@ export function SettingsServerSection({
   tailscaleCommandError,
   tcpDaemonStatus,
   tcpDaemonBusyAction,
+  daemonHealth,
+  daemonHealthLoading,
+  daemonHealthError,
   restartSafeSessionStatus,
   restartSafeSessionLoading,
   restartSafeSessionError,
@@ -129,6 +184,7 @@ export function SettingsServerSection({
   onTcpDaemonStart,
   onTcpDaemonStop,
   onTcpDaemonStatus,
+  onRefreshDaemonHealth,
   onRefreshRestartSafeSessionStatus,
   onMobileConnectTest,
 }: SettingsServerSectionProps) {
@@ -408,6 +464,52 @@ export function SettingsServerSection({
         {!isMobileSimplified && restartSafeSessionError && (
           <div className="settings-help">{restartSafeSessionError}</div>
         )}
+        {!isMobileSimplified &&
+          (appSettings.restartSafeSessions || appSettings.backendMode === "remote") && (
+            <div className="settings-field">
+              <div className="settings-field-label">Daemon health</div>
+              <div className="settings-field-row">
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={onRefreshDaemonHealth}
+                  disabled={daemonHealthLoading}
+                >
+                  {daemonHealthLoading ? "Refreshing..." : "Refresh health"}
+                </button>
+                {daemonHealth?.warnings.length ? (
+                  <button
+                    type="button"
+                    className="button settings-button-compact"
+                    onClick={() => {
+                      void onTcpDaemonStart();
+                    }}
+                    disabled={tcpDaemonBusyAction !== null}
+                  >
+                    Restart daemon
+                  </button>
+                ) : null}
+              </div>
+              <div
+                className={`settings-help${
+                  daemonHealthError || daemonHealth?.warnings.length
+                    ? " settings-help-error"
+                    : ""
+                }`}
+              >
+                {daemonHealthLoading
+                  ? "Reading daemon health..."
+                  : daemonHealthError ??
+                    daemonHealth?.lastError ??
+                    formatDaemonHealthStatus(daemonHealth)}
+              </div>
+              {daemonHealth?.warnings.map((warning) => (
+                <div className="settings-help settings-help-error" key={warning}>
+                  {warning}
+                </div>
+              ))}
+            </div>
+          )}
 
         {!isMobileSimplified && (
           <SettingsToggleRow

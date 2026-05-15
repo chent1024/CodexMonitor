@@ -21,11 +21,19 @@ import {
   getLocalMemoryStatus,
   isMobileRuntime,
   getModelList,
+  listLocalMemories,
+  listLocalMemoryEntities,
+  listLocalMemoryEvents,
+  listLocalMemoryReviewQueue,
   listWorkspaces,
+  approveLocalMemory,
+  rejectLocalMemory,
   setCodexFeatureFlag,
   setLocalMemoryEnabled,
+  updateLocalMemory,
 } from "@services/tauri";
 import { DEFAULT_COMMIT_MESSAGE_PROMPT } from "@utils/commitMessagePrompt";
+import { DEFAULT_CODE_FONT_FAMILY, DEFAULT_UI_FONT_FAMILY } from "@utils/fonts";
 import { SettingsView } from "./SettingsView";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -46,11 +54,18 @@ vi.mock("@services/tauri", async () => {
     getCodexFeatureFlag: vi.fn(),
     getExperimentalFeatureList: vi.fn(),
     getLocalMemoryStatus: vi.fn(),
+    listLocalMemories: vi.fn(),
+    listLocalMemoryEntities: vi.fn(),
+    listLocalMemoryEvents: vi.fn(),
+    listLocalMemoryReviewQueue: vi.fn(),
     getAgentsSettings: vi.fn(),
     isMobileRuntime: vi.fn(),
     listWorkspaces: vi.fn(),
+    approveLocalMemory: vi.fn(),
+    rejectLocalMemory: vi.fn(),
     setCodexFeatureFlag: vi.fn(),
     setLocalMemoryEnabled: vi.fn(),
+    updateLocalMemory: vi.fn(),
   };
 });
 
@@ -61,14 +76,28 @@ const getConfigModelMock = vi.mocked(getConfigModel);
 const getModelListMock = vi.mocked(getModelList);
 const getExperimentalFeatureListMock = vi.mocked(getExperimentalFeatureList);
 const getLocalMemoryStatusMock = vi.mocked(getLocalMemoryStatus);
+const listLocalMemoriesMock = vi.mocked(listLocalMemories);
+const listLocalMemoryEntitiesMock = vi.mocked(listLocalMemoryEntities);
+const listLocalMemoryEventsMock = vi.mocked(listLocalMemoryEvents);
+const listLocalMemoryReviewQueueMock = vi.mocked(listLocalMemoryReviewQueue);
 const getAgentsSettingsMock = vi.mocked(getAgentsSettings);
 const isMobileRuntimeMock = vi.mocked(isMobileRuntime);
 const listWorkspacesMock = vi.mocked(listWorkspaces);
+const approveLocalMemoryMock = vi.mocked(approveLocalMemory);
+const rejectLocalMemoryMock = vi.mocked(rejectLocalMemory);
 const setCodexFeatureFlagMock = vi.mocked(setCodexFeatureFlag);
 const setLocalMemoryEnabledMock = vi.mocked(setLocalMemoryEnabled);
+const updateLocalMemoryMock = vi.mocked(updateLocalMemory);
 connectWorkspaceMock.mockResolvedValue(undefined);
 getAppBuildTypeMock.mockResolvedValue("release");
 getCodexFeatureFlagMock.mockResolvedValue(false);
+listLocalMemoriesMock.mockResolvedValue([]);
+listLocalMemoryEntitiesMock.mockResolvedValue([]);
+listLocalMemoryEventsMock.mockResolvedValue([]);
+listLocalMemoryReviewQueueMock.mockResolvedValue([]);
+approveLocalMemoryMock.mockResolvedValue(null);
+rejectLocalMemoryMock.mockResolvedValue(true);
+updateLocalMemoryMock.mockResolvedValue(null);
 getLocalMemoryStatusMock.mockResolvedValue({
   enabled: false,
   serverName: "local_memory",
@@ -76,6 +105,17 @@ getLocalMemoryStatusMock.mockResolvedValue({
   commandPath: "/tmp/codex-monitor-memory-mcp",
   dbPath: "/Users/me/.codex/local-memory/memory.sqlite",
   vectorBackend: "sqlite-vec",
+  embeddingModel: "codex-monitor-hash-embedding-v2",
+  embeddingDim: 64,
+  embeddingModels: [
+    {
+      id: "codex-monitor-hash-embedding-v2",
+      label: "Hash embedding v2",
+      dim: 64,
+      default: true,
+    },
+  ],
+  indexRebuildRecommended: false,
 });
 getConfigModelMock.mockResolvedValue(null);
 isMobileRuntimeMock.mockResolvedValue(false);
@@ -88,6 +128,17 @@ setLocalMemoryEnabledMock.mockResolvedValue({
   commandPath: "/tmp/codex-monitor-memory-mcp",
   dbPath: "/Users/me/.codex/local-memory/memory.sqlite",
   vectorBackend: "sqlite-vec",
+  embeddingModel: "codex-monitor-hash-embedding-v2",
+  embeddingDim: 64,
+  embeddingModels: [
+    {
+      id: "codex-monitor-hash-embedding-v2",
+      label: "Hash embedding v2",
+      dim: 64,
+      default: true,
+    },
+  ],
+  indexRebuildRecommended: false,
 });
 getAgentsSettingsMock.mockResolvedValue({
   configPath: "/Users/me/.codex/config.toml",
@@ -100,6 +151,7 @@ getAgentsSettingsMock.mockResolvedValue({
 const baseSettings: AppSettings = {
   codexBin: null,
   codexArgs: null,
+  terminalShell: null,
   backendMode: "local",
   remoteBackendProvider: "tcp",
   remoteBackendHost: "127.0.0.1:4732",
@@ -145,12 +197,11 @@ const baseSettings: AppSettings = {
   chatHistoryScrollbackItems: 200,
   threadTitleAutogenerationEnabled: false,
   automaticAppUpdateChecksEnabled: false,
-  uiFontFamily:
-    'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  uiFontFamily: DEFAULT_UI_FONT_FAMILY,
   uiFontSize: 14,
-  codeFontFamily:
-    'ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+  codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
   codeFontSize: 14,
+  fontSmoothingEnabled: false,
   notificationSoundsEnabled: true,
   systemNotificationsEnabled: true,
   subagentSystemNotificationsEnabled: true,
@@ -217,18 +268,13 @@ const createUpdateResult = () => ({
 const renderDisplaySection = (
   options: {
     appSettings?: Partial<AppSettings>;
-    reduceTransparency?: boolean;
     onUpdateAppSettings?: ComponentProps<typeof SettingsView>["onUpdateAppSettings"];
-    onToggleTransparency?: ComponentProps<typeof SettingsView>["onToggleTransparency"];
   } = {},
 ) => {
   cleanup();
   const onUpdateAppSettings =
     options.onUpdateAppSettings ?? vi.fn().mockResolvedValue(undefined);
-  const onToggleTransparency = options.onToggleTransparency ?? vi.fn();
   const props: ComponentProps<typeof SettingsView> = {
-    reduceTransparency: options.reduceTransparency ?? false,
-    onToggleTransparency,
     appSettings: { ...baseSettings, ...options.appSettings },
     openAppIconById: {},
     onUpdateAppSettings,
@@ -254,7 +300,6 @@ const renderDisplaySection = (
   render(<SettingsView {...props} />);
   fireEvent.click(screen.getByRole("button", { name: "显示与声音" }));
 
-  return { onUpdateAppSettings, onToggleTransparency };
 };
 
 const renderComposerSection = (
@@ -267,8 +312,6 @@ const renderComposerSection = (
   const onUpdateAppSettings =
     options.onUpdateAppSettings ?? vi.fn().mockResolvedValue(undefined);
   const props: ComponentProps<typeof SettingsView> = {
-    reduceTransparency: false,
-    onToggleTransparency: vi.fn(),
     appSettings: { ...baseSettings, ...options.appSettings },
     openAppIconById: {},
     onUpdateAppSettings,
@@ -311,8 +354,6 @@ const renderAboutSection = (
   const onToggleAutomaticAppUpdateChecks =
     options.onToggleAutomaticAppUpdateChecks ?? vi.fn();
   const props: ComponentProps<typeof SettingsView> = {
-    reduceTransparency: false,
-    onToggleTransparency: vi.fn(),
     appSettings: { ...baseSettings, ...options.appSettings },
     openAppIconById: {},
     onUpdateAppSettings,
@@ -363,6 +404,17 @@ const renderFeaturesSection = (
     commandPath: "/tmp/codex-monitor-memory-mcp",
     dbPath: "/Users/me/.codex/local-memory/memory.sqlite",
     vectorBackend: "sqlite-vec",
+    embeddingModel: "codex-monitor-hash-embedding-v2",
+    embeddingDim: 64,
+    embeddingModels: [
+      {
+        id: "codex-monitor-hash-embedding-v2",
+        label: "Hash embedding v2",
+        dim: 64,
+        default: true,
+      },
+    ],
+    indexRebuildRecommended: false,
   });
   setLocalMemoryEnabledMock.mockImplementation(async (enabled) => ({
     enabled,
@@ -371,6 +423,17 @@ const renderFeaturesSection = (
     commandPath: "/tmp/codex-monitor-memory-mcp",
     dbPath: "/Users/me/.codex/local-memory/memory.sqlite",
     vectorBackend: "sqlite-vec",
+    embeddingModel: "codex-monitor-hash-embedding-v2",
+    embeddingDim: 64,
+    embeddingModels: [
+      {
+        id: "codex-monitor-hash-embedding-v2",
+        label: "Hash embedding v2",
+        dim: 64,
+        default: true,
+      },
+    ],
+    indexRebuildRecommended: false,
   }));
   getExperimentalFeatureListMock.mockResolvedValue(
     (options.experimentalFeaturesResponse as Record<string, unknown>) ?? {
@@ -399,8 +462,6 @@ const renderFeaturesSection = (
     },
   );
   const props: ComponentProps<typeof SettingsView> = {
-    reduceTransparency: false,
-    onToggleTransparency: vi.fn(),
     appSettings: { ...baseSettings, ...options.appSettings },
     openAppIconById: {},
     onUpdateAppSettings,
@@ -497,8 +558,6 @@ const renderEnvironmentsSection = (
       groupedWorkspaces?: ComponentProps<typeof SettingsView>["groupedWorkspaces"];
     } = {},
   ): ComponentProps<typeof SettingsView> => ({
-    reduceTransparency: false,
-    onToggleTransparency: vi.fn(),
     appSettings: { ...baseSettings, ...options.appSettings, ...nextOptions.appSettings },
     openAppIconById: {},
     onUpdateAppSettings,
@@ -623,29 +682,6 @@ describe("SettingsView Display", () => {
     });
   });
 
-  it("toggles reduce transparency", async () => {
-    const onToggleTransparency = vi.fn();
-    renderDisplaySection({ onToggleTransparency, reduceTransparency: false });
-
-    const row = screen
-      .getByText("降低透明效果")
-      .closest(".settings-toggle-row") as HTMLElement | null;
-    if (!row) {
-      throw new Error("Expected reduce transparency row");
-    }
-    const toggle = row.querySelector(
-      "button.settings-toggle",
-    ) as HTMLButtonElement | null;
-    if (!toggle) {
-      throw new Error("Expected reduce transparency toggle");
-    }
-    fireEvent.click(toggle);
-
-    await waitFor(() => {
-      expect(onToggleTransparency).toHaveBeenCalledWith(true);
-    });
-  });
-
   it("commits interface scale on blur and enter with clamping", async () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
@@ -709,12 +745,12 @@ describe("SettingsView Display", () => {
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({
-          uiFontFamily: expect.stringContaining("system-ui"),
+          uiFontFamily: DEFAULT_UI_FONT_FAMILY,
         }),
       );
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({
-          codeFontFamily: expect.stringContaining("ui-monospace"),
+          codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
         }),
       );
     });
@@ -1139,8 +1175,6 @@ describe("SettingsView Codex section", () => {
         onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        reduceTransparency={false}
-        onToggleTransparency={vi.fn()}
         appSettings={baseSettings}
         openAppIconById={{}}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -1181,8 +1215,6 @@ describe("SettingsView Codex section", () => {
         onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        reduceTransparency={false}
-        onToggleTransparency={vi.fn()}
         appSettings={{
           ...baseSettings,
           backendMode: "local",
@@ -1252,8 +1284,6 @@ describe("SettingsView Codex section", () => {
           onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
           onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
           onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-          reduceTransparency={false}
-          onToggleTransparency={vi.fn()}
           appSettings={{
             ...baseSettings,
             backendMode: "local",
@@ -1351,8 +1381,6 @@ describe("SettingsView Codex section", () => {
           onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
           onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
           onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-          reduceTransparency={false}
-          onToggleTransparency={vi.fn()}
           appSettings={{
             ...baseSettings,
             remoteBackendProvider: "tcp",
@@ -1568,8 +1596,6 @@ describe("SettingsView Codex defaults", () => {
         onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        reduceTransparency={false}
-        onToggleTransparency={vi.fn()}
         appSettings={baseSettings}
         openAppIconById={{}}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -1661,8 +1687,6 @@ describe("SettingsView Codex defaults", () => {
         onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        reduceTransparency={false}
-        onToggleTransparency={vi.fn()}
         appSettings={baseSettings}
         openAppIconById={{}}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -1844,6 +1868,123 @@ describe("SettingsView Features", () => {
     expect(screen.getByText(/memory\.sqlite/)).toBeTruthy();
   });
 
+  it("filters and batch approves pending local memories", async () => {
+    approveLocalMemoryMock.mockClear();
+    listLocalMemoryReviewQueueMock.mockResolvedValue([
+      {
+        id: "mem-session",
+        scope: "thread",
+        workspaceId: "w-features",
+        workspacePath: "/tmp/w-features",
+        threadId: "thread-1",
+        userId: null,
+        agentId: null,
+        appId: null,
+        runId: null,
+        kind: "session_state",
+        content: "Session start checkpoint needs review.",
+        metadata: { capture: "lifecycle_checkpoint", trigger: "session_start" },
+        categories: ["pending-review"],
+        confidence: 0.45,
+        createdAt: 1,
+        updatedAt: 1,
+        lastUsedAt: null,
+        expiresAt: null,
+        supersedesId: null,
+        supersededById: null,
+      },
+      {
+        id: "mem-assistant",
+        scope: "thread",
+        workspaceId: "w-features",
+        workspacePath: "/tmp/w-features",
+        threadId: "thread-1",
+        userId: null,
+        agentId: null,
+        appId: null,
+        runId: null,
+        kind: "task_learnings",
+        content: "Assistant learning waits for approval.",
+        metadata: { capture: "assistant_output" },
+        categories: ["pending-review"],
+        confidence: 0.7,
+        createdAt: 2,
+        updatedAt: 2,
+        lastUsedAt: null,
+        expiresAt: null,
+        supersedesId: null,
+        supersededById: null,
+      },
+    ]);
+    renderFeaturesSection({
+      experimentalFeaturesResponse: { data: [], nextCursor: null },
+      localMemoryEnabled: true,
+    });
+
+    await screen.findByText("Pending review");
+    fireEvent.change(screen.getByLabelText("Filter pending memory"), {
+      target: { value: "session_start" },
+    });
+    expect(screen.getByText("Session start checkpoint needs review.")).toBeTruthy();
+    expect(screen.queryByText("Assistant learning waits for approval.")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select visible" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve selected" }));
+
+    await waitFor(() => {
+      expect(approveLocalMemoryMock).toHaveBeenCalledWith("mem-session");
+    });
+    expect(approveLocalMemoryMock).not.toHaveBeenCalledWith("mem-assistant");
+  });
+
+  it("edits a pending local memory before approving it", async () => {
+    approveLocalMemoryMock.mockClear();
+    updateLocalMemoryMock.mockClear();
+    const promptSpy = vi
+      .spyOn(window, "prompt")
+      .mockReturnValue("Edited pending memory.");
+    listLocalMemoryReviewQueueMock.mockResolvedValue([
+      {
+        id: "mem-edit",
+        scope: "thread",
+        workspaceId: "w-features",
+        workspacePath: "/tmp/w-features",
+        threadId: "thread-1",
+        userId: null,
+        agentId: null,
+        appId: null,
+        runId: null,
+        kind: "session_state",
+        content: "Draft pending memory.",
+        metadata: { capture: "lifecycle_checkpoint" },
+        categories: ["pending-review"],
+        confidence: 0.45,
+        createdAt: 1,
+        updatedAt: 1,
+        lastUsedAt: null,
+        expiresAt: null,
+        supersedesId: null,
+        supersededById: null,
+      },
+    ]);
+    renderFeaturesSection({
+      experimentalFeaturesResponse: { data: [], nextCursor: null },
+      localMemoryEnabled: true,
+    });
+
+    await screen.findByText("Draft pending memory.");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approve" }));
+
+    await waitFor(() => {
+      expect(updateLocalMemoryMock).toHaveBeenCalledWith(
+        "mem-edit",
+        "Edited pending memory.",
+      );
+      expect(approveLocalMemoryMock).toHaveBeenCalledWith("mem-edit");
+    });
+    promptSpy.mockRestore();
+  });
+
   it("shows fallback description when Codex omits feature description", async () => {
     renderFeaturesSection({
       experimentalFeaturesResponse: {
@@ -1993,8 +2134,6 @@ describe("SettingsView mobile layout", () => {
           onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
           onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
           onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-          reduceTransparency={false}
-          onToggleTransparency={vi.fn()}
           appSettings={baseSettings}
           openAppIconById={{}}
           onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
@@ -2092,8 +2231,6 @@ describe("SettingsView Shortcuts", () => {
         onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        reduceTransparency={false}
-        onToggleTransparency={vi.fn()}
         appSettings={baseSettings}
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
@@ -2132,8 +2269,6 @@ describe("SettingsView Shortcuts", () => {
         onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        reduceTransparency={false}
-        onToggleTransparency={vi.fn()}
         appSettings={baseSettings}
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
@@ -2170,8 +2305,6 @@ describe("SettingsView Shortcuts", () => {
         onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        reduceTransparency={false}
-        onToggleTransparency={vi.fn()}
         appSettings={baseSettings}
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
@@ -2212,8 +2345,6 @@ describe("SettingsView Shortcuts", () => {
         onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        reduceTransparency={false}
-        onToggleTransparency={vi.fn()}
         appSettings={baseSettings}
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}

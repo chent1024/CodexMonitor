@@ -9,6 +9,7 @@ import {
   updateAppSettings,
 } from "@services/tauri";
 import { UI_SCALE_DEFAULT, UI_SCALE_MAX } from "@utils/uiScale";
+import { DEFAULT_CODE_FONT_FAMILY, DEFAULT_UI_FONT_FAMILY } from "@utils/fonts";
 
 vi.mock("@services/tauri", () => ({
   getAppSettings: vi.fn(),
@@ -36,11 +37,13 @@ describe("useAppSettings", () => {
         theme: "nope" as unknown as AppSettings["theme"],
         backendMode: "remote",
         remoteBackendHost: "example:1234",
+        terminalShell: "  pwsh.exe  ",
         personality: "unknown",
         uiFontFamily: "",
         uiFontSize: 50,
         codeFontFamily: "  ",
         codeFontSize: 25,
+        fontSmoothingEnabled: "yes",
       } as unknown) as AppSettings,
     );
 
@@ -50,13 +53,15 @@ describe("useAppSettings", () => {
 
     expect(result.current.settings.uiScale).toBe(UI_SCALE_MAX);
     expect(result.current.settings.theme).toBe("system");
-    expect(result.current.settings.uiFontFamily).toContain("system-ui");
+    expect(result.current.settings.uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
     expect(result.current.settings.uiFontSize).toBe(24);
-    expect(result.current.settings.codeFontFamily).toContain("ui-monospace");
+    expect(result.current.settings.codeFontFamily).toBe(DEFAULT_CODE_FONT_FAMILY);
     expect(result.current.settings.codeFontSize).toBe(24);
+    expect(result.current.settings.fontSmoothingEnabled).toBe(false);
     expect(result.current.settings.personality).toBe("friendly");
     expect(result.current.settings.backendMode).toBe("remote");
     expect(result.current.settings.remoteBackendHost).toBe("example:1234");
+    expect(result.current.settings.terminalShell).toBe("pwsh.exe");
   });
 
   it("keeps defaults when getAppSettings fails", async () => {
@@ -68,8 +73,9 @@ describe("useAppSettings", () => {
 
     expect(result.current.settings.uiScale).toBe(UI_SCALE_DEFAULT);
     expect(result.current.settings.theme).toBe("system");
-    expect(result.current.settings.uiFontFamily).toContain("system-ui");
-    expect(result.current.settings.codeFontFamily).toContain("ui-monospace");
+    expect(result.current.settings.uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
+    expect(result.current.settings.codeFontFamily).toBe(DEFAULT_CODE_FONT_FAMILY);
+    expect(result.current.settings.fontSmoothingEnabled).toBe(false);
     expect(result.current.settings.backendMode).toBe("local");
     expect(result.current.settings.interruptShortcut).toBeTruthy();
   });
@@ -89,6 +95,7 @@ describe("useAppSettings", () => {
       uiFontSize: 2,
       codeFontFamily: "  ",
       codeFontSize: 2,
+      fontSmoothingEnabled: true,
       notificationSoundsEnabled: false,
     };
     const saved: AppSettings = {
@@ -100,6 +107,7 @@ describe("useAppSettings", () => {
       uiFontSize: 14,
       codeFontFamily: "JetBrains Mono, monospace",
       codeFontSize: 13,
+      fontSmoothingEnabled: true,
       notificationSoundsEnabled: false,
     };
     updateAppSettingsMock.mockResolvedValue(saved);
@@ -113,10 +121,11 @@ describe("useAppSettings", () => {
       expect.objectContaining({
         theme: "system",
         uiScale: 0.1,
-        uiFontFamily: expect.stringContaining("system-ui"),
+        uiFontFamily: DEFAULT_UI_FONT_FAMILY,
         uiFontSize: 8,
-        codeFontFamily: expect.stringContaining("ui-monospace"),
+        codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
         codeFontSize: 8,
+        fontSmoothingEnabled: true,
         notificationSoundsEnabled: false,
       }),
     );

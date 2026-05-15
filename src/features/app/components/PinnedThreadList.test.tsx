@@ -34,6 +34,7 @@ const baseProps = {
   threadStatusById: statusMap,
   getThreadTime: () => "1h",
   isThreadPinned: () => true,
+  onToggleThreadPin: vi.fn(),
   onSelectThread: vi.fn(),
   onShowThreadMenu: vi.fn(),
 };
@@ -110,6 +111,24 @@ describe("PinnedThreadList", () => {
       "thread-2",
       true,
     );
+  });
+
+  it("unpins a pinned row from the inline pin button without selecting it", () => {
+    const onSelectThread = vi.fn();
+    const onToggleThreadPin = vi.fn();
+
+    render(
+      <PinnedThreadList
+        {...baseProps}
+        onSelectThread={onSelectThread}
+        onToggleThreadPin={onToggleThreadPin}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Unpin thread" }));
+
+    expect(onToggleThreadPin).toHaveBeenCalledWith("ws-1", "thread-1", true);
+    expect(onSelectThread).not.toHaveBeenCalled();
   });
 
   it("shows blue unread-style status when a pinned thread is waiting for user input", () => {

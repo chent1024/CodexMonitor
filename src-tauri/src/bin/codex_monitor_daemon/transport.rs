@@ -37,7 +37,11 @@ pub(super) async fn handle_client(
     if authenticated {
         let rx = events.subscribe();
         let out_tx_events = out_tx.clone();
-        events_task = Some(tokio::spawn(forward_events(rx, out_tx_events)));
+        events_task = Some(tokio::spawn(forward_events(
+            rx,
+            out_tx_events,
+            Arc::clone(&connection_state),
+        )));
     }
 
     while let Ok(Some(line)) = lines.next_line().await {
@@ -89,7 +93,11 @@ pub(super) async fn handle_client(
 
             let rx = events.subscribe();
             let out_tx_events = out_tx.clone();
-            events_task = Some(tokio::spawn(forward_events(rx, out_tx_events)));
+            events_task = Some(tokio::spawn(forward_events(
+                rx,
+                out_tx_events,
+                Arc::clone(&connection_state),
+            )));
 
             continue;
         }

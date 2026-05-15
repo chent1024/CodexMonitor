@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type {
   AppSettings,
+  DaemonHealthStatus,
   TailscaleDaemonCommandPreview,
   TailscaleStatus,
   TcpDaemonStatus,
 } from "@/types";
 import {
+  daemonHealthStatus,
   listWorkspaces,
   tailscaleDaemonCommandPreview as fetchTailscaleDaemonCommandPreview,
   tailscaleDaemonStart,
@@ -56,6 +58,9 @@ export type SettingsServerSectionProps = {
   tailscaleCommandError: string | null;
   tcpDaemonStatus: TcpDaemonStatus | null;
   tcpDaemonBusyAction: "start" | "stop" | "status" | null;
+  daemonHealth: DaemonHealthStatus | null;
+  daemonHealthLoading: boolean;
+  daemonHealthError: string | null;
   restartSafeSessionStatus: RestartSafeDebugStatus | null;
   restartSafeSessionLoading: boolean;
   restartSafeSessionError: string | null;
@@ -75,6 +80,7 @@ export type SettingsServerSectionProps = {
   onTcpDaemonStart: () => Promise<void>;
   onTcpDaemonStop: () => Promise<void>;
   onTcpDaemonStatus: () => Promise<void>;
+  onRefreshDaemonHealth: () => void;
   onRefreshRestartSafeSessionStatus: () => void;
   onMobileConnectTest: () => void;
 };
@@ -172,6 +178,9 @@ export const useSettingsServerSection = ({
   const [tcpDaemonBusyAction, setTcpDaemonBusyAction] = useState<
     "start" | "stop" | "status" | null
   >(null);
+  const [daemonHealth, setDaemonHealth] = useState<DaemonHealthStatus | null>(null);
+  const [daemonHealthLoading, setDaemonHealthLoading] = useState(false);
+  const [daemonHealthError, setDaemonHealthError] = useState<string | null>(null);
   const [restartSafeSessionStatus, setRestartSafeSessionStatus] =
     useState<RestartSafeDebugStatus | null>(null);
   const [restartSafeSessionLoading, setRestartSafeSessionLoading] = useState(false);
@@ -194,6 +203,30 @@ export const useSettingsServerSection = ({
   useEffect(() => {
     latestSettingsRef.current = appSettings;
   }, [appSettings]);
+
+  const refreshDaemonHealth = useCallback(() => {
+    const shouldReadDaemon =
+      appSettings.restartSafeSessions || appSettings.backendMode === "remote";
+    if (!shouldReadDaemon) {
+      setDaemonHealth(null);
+      setDaemonHealthError(null);
+      setDaemonHealthLoading(false);
+      return;
+    }
+    void (async () => {
+      setDaemonHealthLoading(true);
+      setDaemonHealthError(null);
+      try {
+        const status = await daemonHealthStatus();
+        setDaemonHealth(status);
+      } catch (error) {
+        setDaemonHealth(null);
+        setDaemonHealthError(formatErrorMessage(error, "Unable to load daemon health."));
+      } finally {
+        setDaemonHealthLoading(false);
+      }
+    })();
+  }, [appSettings.backendMode, appSettings.restartSafeSessions]);
 
   const refreshRestartSafeSessionStatus = useCallback(() => {
     if (!appSettings.restartSafeSessions) {
@@ -224,6 +257,10 @@ export const useSettingsServerSection = ({
   useEffect(() => {
     refreshRestartSafeSessionStatus();
   }, [refreshRestartSafeSessionStatus]);
+
+  useEffect(() => {
+    refreshDaemonHealth();
+  }, [refreshDaemonHealth]);
 
   useEffect(() => {
     setRemoteNameDraft(activeRemoteBackend.name);
@@ -631,6 +668,7 @@ export const useSettingsServerSection = ({
       try {
         const status = await run();
         setTcpDaemonStatus(status);
+        refreshDaemonHealth();
       } catch (error) {
         const errorMessage =
           error instanceof Error
@@ -649,7 +687,7 @@ export const useSettingsServerSection = ({
         setTcpDaemonBusyAction(null);
       }
     },
-    [],
+    [refreshDaemonHealth],
   );
 
   const handleTcpDaemonStart = useCallback(async () => {
@@ -705,6 +743,9 @@ export const useSettingsServerSection = ({
     tailscaleCommandError,
     tcpDaemonStatus,
     tcpDaemonBusyAction,
+    daemonHealth,
+    daemonHealthLoading,
+    daemonHealthError,
     restartSafeSessionStatus,
     restartSafeSessionLoading,
     restartSafeSessionError,
@@ -724,6 +765,7 @@ export const useSettingsServerSection = ({
     onTcpDaemonStart: handleTcpDaemonStart,
     onTcpDaemonStop: handleTcpDaemonStop,
     onTcpDaemonStatus: handleTcpDaemonStatus,
+    onRefreshDaemonHealth: refreshDaemonHealth,
     onRefreshRestartSafeSessionStatus: refreshRestartSafeSessionStatus,
     isMobilePlatform: mobilePlatform,
     mobileConnectBusy,

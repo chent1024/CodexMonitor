@@ -386,7 +386,8 @@ pub(crate) async fn compact_thread(
         .await;
     }
 
-    codex_core::compact_thread_core(&state.sessions, workspace_id, thread_id).await
+    codex_core::compact_thread_core(&state.sessions, &state.workspaces, workspace_id, thread_id)
+        .await
 }
 
 #[tauri::command]
@@ -509,6 +510,7 @@ pub(crate) async fn turn_steer(
 
     codex_core::turn_steer_core(
         &state.sessions,
+        &state.workspaces,
         workspace_id,
         thread_id,
         turn_id,
@@ -721,6 +723,330 @@ pub(crate) async fn set_local_memory_enabled(
     }
 
     config::write_local_memory_enabled(enabled)
+}
+
+#[tauri::command]
+pub(crate) async fn set_local_memory_db_path(
+    input: config::SetLocalMemoryDbPathInput,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<config::LocalMemoryConfigStatus, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "set_local_memory_db_path",
+            json!({ "input": input }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    config::write_local_memory_db_path(input)
+}
+
+#[tauri::command]
+pub(crate) async fn set_local_memory_embedding_model(
+    input: config::SetLocalMemoryEmbeddingModelInput,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<config::LocalMemoryConfigStatus, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "set_local_memory_embedding_model",
+            json!({ "input": input }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    config::write_local_memory_embedding_model(input)
+}
+
+#[tauri::command]
+pub(crate) async fn check_local_memory_connection(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<config::LocalMemoryConnectionCheck, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "check_local_memory_connection", json!({}))
+                .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    config::check_local_memory_connection()
+}
+
+#[tauri::command]
+pub(crate) async fn add_local_memory(
+    input: crate::shared::local_memory_core::AddMemoryInput,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<crate::shared::local_memory_core::MemoryRecord, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "add_local_memory",
+            json!({ "input": input }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::add_local_memory(input)
+}
+
+#[tauri::command]
+pub(crate) async fn search_local_memories(
+    input: crate::shared::local_memory_core::SearchMemoryInput,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Vec<crate::shared::local_memory_core::MemorySearchResult>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "search_local_memories",
+            json!({ "input": input }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::search_local_memories(input)
+}
+
+#[tauri::command]
+pub(crate) async fn list_local_memories(
+    input: crate::shared::local_memory_core::ListMemoryInput,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Vec<crate::shared::local_memory_core::MemoryRecord>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "list_local_memories",
+            json!({ "input": input }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::list_local_memories(input)
+}
+
+#[tauri::command]
+pub(crate) async fn get_local_memory(
+    id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Option<crate::shared::local_memory_core::MemoryRecord>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "get_local_memory", json!({ "id": id }))
+                .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::get_local_memory(&id)
+}
+
+#[tauri::command]
+pub(crate) async fn update_local_memory(
+    id: String,
+    content: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Option<crate::shared::local_memory_core::MemoryRecord>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "update_local_memory",
+            json!({ "id": id, "content": content }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::update_local_memory(&id, &content)
+}
+
+#[tauri::command]
+pub(crate) async fn delete_local_memory(
+    id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<bool, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "delete_local_memory", json!({ "id": id }))
+                .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::delete_local_memory(&id)
+}
+
+#[tauri::command]
+pub(crate) async fn delete_all_local_memories(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<u64, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "delete_all_local_memories", json!({}))
+                .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::delete_all_local_memories()
+}
+
+#[tauri::command]
+pub(crate) async fn import_local_memories(
+    input: crate::shared::local_memory_core::ImportMemoriesInput,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<crate::shared::local_memory_core::ImportMemoriesResult, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "import_local_memories",
+            json!({ "input": input }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::import_local_memories(input)
+}
+
+#[tauri::command]
+pub(crate) async fn list_local_memory_review_queue(
+    limit: Option<u32>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Vec<crate::shared::local_memory_core::MemoryRecord>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "list_local_memory_review_queue",
+            json!({ "limit": limit }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::list_local_memory_review_queue(limit)
+}
+
+#[tauri::command]
+pub(crate) async fn approve_local_memory(
+    id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Option<crate::shared::local_memory_core::MemoryRecord>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "approve_local_memory", json!({ "id": id }))
+                .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::approve_local_memory(&id)
+}
+
+#[tauri::command]
+pub(crate) async fn reject_local_memory(
+    id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<bool, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "reject_local_memory", json!({ "id": id }))
+                .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::reject_local_memory(&id)
+}
+
+#[tauri::command]
+pub(crate) async fn list_local_memory_entities(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Vec<crate::shared::local_memory_core::MemoryEntity>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "list_local_memory_entities", json!({}))
+                .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::list_local_memory_entities()
+}
+
+#[tauri::command]
+pub(crate) async fn delete_local_memory_entities(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<u64, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "delete_local_memory_entities", json!({}))
+                .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::delete_local_memory_entities()
+}
+
+#[tauri::command]
+pub(crate) async fn rebuild_local_memory_indexes(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<crate::shared::local_memory_core::LocalMemoryDebugStatus, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response =
+            remote_backend::call_remote(&*state, app, "rebuild_local_memory_indexes", json!({}))
+                .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::rebuild_local_memory_indexes()
+}
+
+#[tauri::command]
+pub(crate) async fn list_local_memory_events(
+    input: crate::shared::local_memory_core::ListMemoryEventsInput,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Vec<crate::shared::local_memory_core::LocalMemoryAccessLogEntry>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "list_local_memory_events",
+            json!({ "input": input }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::list_local_memory_events(input)
+}
+
+#[tauri::command]
+pub(crate) async fn get_local_memory_event_status(
+    id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Option<crate::shared::local_memory_core::LocalMemoryAccessLogEntry>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "get_local_memory_event_status",
+            json!({ "id": id }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    config::get_local_memory_event_status(&id)
 }
 
 #[tauri::command]
@@ -1210,6 +1536,7 @@ pub(crate) async fn session_debug_status(
         "processingSessionCount": 0,
         "retainedSessionCount": 0,
         "journalEventCount": 0,
+        "journalEventBytes": 0,
         "pendingRequestCount": 0,
         "attachedClientCount": 0,
         "idleShutdownAllowed": true,

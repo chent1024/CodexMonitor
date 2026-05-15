@@ -16,8 +16,21 @@ import {
   resizeTerminalSession,
   writeTerminalSession,
 } from "../../../services/tauri";
+import { formatTerminalOpenErrorMessage } from "../utils/terminalErrorMessage";
 
 const MAX_BUFFER_CHARS = 200_000;
+const TERMINAL_METRICS_REPORT_INTERVAL_MS = 5_000;
+const TERMINAL_METRICS_MIN_EVENTS = 50;
+
+type TerminalRenderMetrics = {
+  bytesReceived: number;
+  eventsReceived: number;
+  bytesWritten: number;
+  writeFlushes: number;
+  maxWriteBatch: number;
+  startedAt: number;
+  lastReportAt: number;
+};
 
 type UseTerminalSessionOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -69,6 +82,18 @@ function shouldIgnoreTerminalError(error: unknown) {
     lower.includes("not connected") ||
     lower.includes("closed")
   );
+}
+
+function createTerminalMetrics(now: number): TerminalRenderMetrics {
+  return {
+    bytesReceived: 0,
+    eventsReceived: 0,
+    bytesWritten: 0,
+    writeFlushes: 0,
+    maxWriteBatch: 0,
+    startedAt: now,
+    lastReportAt: now,
+  };
 }
 
 function getTerminalAppearance(container: HTMLElement | null): TerminalAppearance {
@@ -134,6 +159,9 @@ export function useTerminalSession({
   const inputDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const openedSessionsRef = useRef<Set<string>>(new Set());
   const outputBuffersRef = useRef<Map<string, string>>(new Map());
+  const pendingWriteBuffersRef = useRef<Map<string, string>>(new Map());
+  const terminalWriteFrameRef = useRef<number | null>(null);
+  const terminalMetricsRef = useRef<Map<string, TerminalRenderMetrics>>(new Map());
   const activeKeyRef = useRef<string | null>(null);
   const renderedKeyRef = useRef<string | null>(null);
   const activeWorkspaceRef = useRef<WorkspaceInfo | null>(null);
@@ -147,12 +175,19 @@ export function useTerminalSession({
   const cleanupTerminalSession = useCallback((workspaceId: string, terminalId: string) => {
     const key = `${workspaceId}:${terminalId}`;
     outputBuffersRef.current.delete(key);
+    pendingWriteBuffersRef.current.delete(key);
+    terminalMetricsRef.current.delete(key);
     openedSessionsRef.current.delete(key);
     if (readyKey === key) {
       setReadyKey(null);
     }
     setSessionResetCounter((prev) => prev + 1);
     if (activeKeyRef.current === key) {
+      if (terminalWriteFrameRef.current !== null) {
+        window.cancelAnimationFrame(terminalWriteFrameRef.current);
+        terminalWriteFrameRef.current = null;
+      }
+      pendingWriteBuffersRef.current.clear();
       terminalRef.current?.reset();
       setHasSession(false);
       setStatus("idle");
@@ -167,15 +202,97 @@ export function useTerminalSession({
     return `${activeWorkspace.id}:${activeTerminalId}`;
   }, [activeTerminalId, activeWorkspace]);
 
+  const reportTerminalMetrics = useCallback(
+    (key: string, metrics: TerminalRenderMetrics, now: number) => {
+      if (
+        metrics.eventsReceived < TERMINAL_METRICS_MIN_EVENTS ||
+        now - metrics.lastReportAt < TERMINAL_METRICS_REPORT_INTERVAL_MS
+      ) {
+        return;
+      }
+      const elapsedMs = Math.max(1, now - metrics.startedAt);
+      onDebug?.({
+        id: `${now}-terminal-throughput-${key}`,
+        timestamp: now,
+        source: "event",
+        label: "terminal throughput",
+        payload: {
+          key,
+          bytesReceived: metrics.bytesReceived,
+          bytesWritten: metrics.bytesWritten,
+          eventsReceived: metrics.eventsReceived,
+          writeFlushes: metrics.writeFlushes,
+          maxWriteBatch: metrics.maxWriteBatch,
+          receivedBytesPerSecond: Math.round((metrics.bytesReceived * 1000) / elapsedMs),
+        },
+      });
+      metrics.lastReportAt = now;
+    },
+    [onDebug],
+  );
+
+  const recordTerminalOutput = useCallback(
+    (key: string, data: string) => {
+      const now = Date.now();
+      let metrics = terminalMetricsRef.current.get(key);
+      if (!metrics) {
+        metrics = createTerminalMetrics(now);
+        terminalMetricsRef.current.set(key, metrics);
+      }
+      metrics.bytesReceived += data.length;
+      metrics.eventsReceived += 1;
+      reportTerminalMetrics(key, metrics, now);
+    },
+    [reportTerminalMetrics],
+  );
+
+  const cancelPendingTerminalWrite = useCallback(() => {
+    if (terminalWriteFrameRef.current !== null) {
+      window.cancelAnimationFrame(terminalWriteFrameRef.current);
+      terminalWriteFrameRef.current = null;
+    }
+    pendingWriteBuffersRef.current.clear();
+  }, []);
+
+  const scheduleTerminalWrite = useCallback(
+    (key: string, data: string) => {
+      pendingWriteBuffersRef.current.set(
+        key,
+        (pendingWriteBuffersRef.current.get(key) ?? "") + data,
+      );
+      if (terminalWriteFrameRef.current !== null) {
+        return;
+      }
+      terminalWriteFrameRef.current = window.requestAnimationFrame(() => {
+        terminalWriteFrameRef.current = null;
+        const currentKey = activeKeyRef.current;
+        const pending = pendingWriteBuffersRef.current;
+        const dataToWrite = currentKey ? pending.get(currentKey) : undefined;
+        pending.clear();
+        if (!currentKey || !dataToWrite) {
+          return;
+        }
+        terminalRef.current?.write(dataToWrite);
+        const now = Date.now();
+        let metrics = terminalMetricsRef.current.get(currentKey);
+        if (!metrics) {
+          metrics = createTerminalMetrics(now);
+          terminalMetricsRef.current.set(currentKey, metrics);
+        }
+        metrics.bytesWritten += dataToWrite.length;
+        metrics.writeFlushes += 1;
+        metrics.maxWriteBatch = Math.max(metrics.maxWriteBatch, dataToWrite.length);
+        reportTerminalMetrics(currentKey, metrics, now);
+      });
+    },
+    [reportTerminalMetrics],
+  );
+
   useEffect(() => {
     activeKeyRef.current = activeKey;
     activeWorkspaceRef.current = activeWorkspace;
     activeTerminalIdRef.current = activeTerminalId;
   }, [activeKey, activeTerminalId, activeWorkspace]);
-
-  const writeToTerminal = useCallback((data: string) => {
-    terminalRef.current?.write(data);
-  }, []);
 
   const focusTerminalIfRequested = useCallback(() => {
     if (!pendingFocusRef.current) {
@@ -201,6 +318,7 @@ export function useTerminalSession({
       if (!term) {
         return;
       }
+      cancelPendingTerminalWrite();
       term.reset();
       const buffered = outputBuffersRef.current.get(key);
       if (buffered) {
@@ -208,7 +326,7 @@ export function useTerminalSession({
       }
       refreshTerminal();
     },
-    [refreshTerminal],
+    [cancelPendingTerminalWrite, refreshTerminal],
   );
 
   useEffect(() => {
@@ -218,8 +336,9 @@ export function useTerminalSession({
         const key = `${workspaceId}:${terminalId}`;
         const next = appendBuffer(outputBuffersRef.current.get(key), data);
         outputBuffersRef.current.set(key, next);
+        recordTerminalOutput(key, data);
         if (activeKeyRef.current === key) {
-          writeToTerminal(data);
+          scheduleTerminalWrite(key, data);
         }
       },
       {
@@ -231,7 +350,7 @@ export function useTerminalSession({
     return () => {
       unlisten();
     };
-  }, [onDebug, writeToTerminal]);
+  }, [onDebug, recordTerminalOutput, scheduleTerminalWrite]);
 
   useEffect(() => {
     const unlisten = subscribeTerminalExit(
@@ -252,6 +371,7 @@ export function useTerminalSession({
 
   useEffect(() => {
     if (!isVisible) {
+      cancelPendingTerminalWrite();
       inputDisposableRef.current?.dispose();
       inputDisposableRef.current = null;
       if (terminalRef.current) {
@@ -299,7 +419,7 @@ export function useTerminalSession({
         });
       });
     }
-  }, [isVisible, onDebug]);
+  }, [cancelPendingTerminalWrite, isVisible, onDebug]);
 
   useEffect(() => {
     if (!isVisible || !terminalRef.current) {
@@ -315,6 +435,7 @@ export function useTerminalSession({
 
   useEffect(() => {
     return () => {
+      cancelPendingTerminalWrite();
       inputDisposableRef.current?.dispose();
       inputDisposableRef.current = null;
       if (terminalRef.current) {
@@ -323,7 +444,7 @@ export function useTerminalSession({
       }
       fitAddonRef.current = null;
     };
-  }, []);
+  }, [cancelPendingTerminalWrite]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -372,7 +493,7 @@ export function useTerminalSession({
 
     openSession().catch((error) => {
       setStatus("error");
-      setMessage("Failed to start terminal session.");
+      setMessage(formatTerminalOpenErrorMessage(error));
       onDebug?.(buildErrorDebugEntry("terminal open error", error));
     });
   }, [

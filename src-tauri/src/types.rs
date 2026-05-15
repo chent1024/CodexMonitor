@@ -211,6 +211,35 @@ pub(crate) struct TcpDaemonStatus {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct DaemonHealthStatus {
+    pub(crate) connected: bool,
+    #[serde(default)]
+    pub(crate) name: Option<String>,
+    #[serde(default)]
+    pub(crate) version: Option<String>,
+    pub(crate) app_version: String,
+    #[serde(default)]
+    pub(crate) mode: Option<String>,
+    #[serde(default)]
+    pub(crate) pid: Option<u32>,
+    #[serde(default)]
+    pub(crate) binary_path: Option<String>,
+    #[serde(default)]
+    pub(crate) terminal_rpc_version: Option<u64>,
+    pub(crate) required_terminal_rpc_version: u64,
+    pub(crate) terminal_rpc_supported: bool,
+    #[serde(default)]
+    pub(crate) restart_safe_protocol_version: Option<u64>,
+    pub(crate) required_restart_safe_protocol_version: u64,
+    pub(crate) restart_safe_protocol_compatible: bool,
+    pub(crate) warnings: Vec<String>,
+    #[serde(default)]
+    pub(crate) last_error: Option<String>,
+    pub(crate) round_trip_ms: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct TailscaleStatus {
     pub(crate) installed: bool,
     pub(crate) running: bool,
@@ -381,6 +410,8 @@ pub(crate) struct AppSettings {
     pub(crate) codex_bin: Option<String>,
     #[serde(default, rename = "codexArgs")]
     pub(crate) codex_args: Option<String>,
+    #[serde(default, rename = "terminalShell")]
+    pub(crate) terminal_shell: Option<String>,
     #[serde(default, rename = "backendMode")]
     pub(crate) backend_mode: BackendMode,
     #[serde(default, rename = "remoteBackendProvider")]
@@ -524,6 +555,8 @@ pub(crate) struct AppSettings {
     pub(crate) code_font_family: String,
     #[serde(default = "default_code_font_size", rename = "codeFontSize")]
     pub(crate) code_font_size: u8,
+    #[serde(default, rename = "fontSmoothingEnabled")]
+    pub(crate) font_smoothing_enabled: bool,
     #[serde(
         default = "default_notification_sounds_enabled",
         rename = "notificationSoundsEnabled"
@@ -723,7 +756,7 @@ fn default_automatic_app_update_checks_enabled() -> bool {
 }
 
 fn default_ui_font_family() -> String {
-    "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", Roboto, \"Helvetica Neue\", Arial, sans-serif".to_string()
+    "微软雅黑, 'YaHei Consolas Hybird', Consolas, 'Courier New', monospace".to_string()
 }
 
 fn default_ui_font_size() -> u8 {
@@ -731,7 +764,7 @@ fn default_ui_font_size() -> u8 {
 }
 
 fn default_code_font_family() -> String {
-    "ui-monospace, \"Cascadia Mono\", \"Segoe UI Mono\", \"Sarasa Mono SC\", \"Noto Sans Mono CJK SC\", \"Source Han Mono SC\", Menlo, Monaco, Consolas, \"PingFang SC\", \"Microsoft YaHei\", \"Liberation Mono\", \"Courier New\", monospace".to_string()
+    "微软雅黑, 'YaHei Consolas Hybird', Consolas, 'Courier New', monospace".to_string()
 }
 
 fn default_code_font_size() -> u8 {
@@ -1120,6 +1153,7 @@ impl Default for AppSettings {
         Self {
             codex_bin: None,
             codex_args: None,
+            terminal_shell: None,
             backend_mode: default_backend_mode(),
             remote_backend_provider: RemoteBackendProvider::Tcp,
             remote_backend_host: default_remote_backend_host(),
@@ -1160,6 +1194,7 @@ impl Default for AppSettings {
             ui_font_size: default_ui_font_size(),
             code_font_family: default_code_font_family(),
             code_font_size: default_code_font_size(),
+            font_smoothing_enabled: false,
             notification_sounds_enabled: true,
             system_notifications_enabled: true,
             subagent_system_notifications_enabled: true,
@@ -1319,15 +1354,16 @@ mod tests {
         assert_eq!(settings.chat_history_scrollback_items, Some(200));
         assert!(!settings.thread_title_autogeneration_enabled);
         assert!(!settings.automatic_app_update_checks_enabled);
-        assert!(settings.ui_font_family.contains("system-ui"));
-        assert_eq!(settings.ui_font_size, 13);
-        assert!(settings.code_font_family.contains("ui-monospace"));
-        assert_eq!(settings.code_font_size, 11);
+        assert!(settings.ui_font_family.contains("YaHei Consolas Hybird"));
+        assert_eq!(settings.ui_font_size, 14);
+        assert!(settings.code_font_family.contains("YaHei Consolas Hybird"));
+        assert_eq!(settings.code_font_size, 14);
+        assert!(!settings.font_smoothing_enabled);
         assert!(settings.notification_sounds_enabled);
         assert!(settings.system_notifications_enabled);
         assert!(settings.subagent_system_notifications_enabled);
         assert!(!settings.split_chat_diff_view);
-        assert!(settings.preload_git_diffs);
+        assert!(!settings.preload_git_diffs);
         assert!(!settings.git_diff_ignore_whitespace_changes);
         assert!(settings.commit_message_prompt.contains("{diff}"));
         assert!(settings.collaboration_modes_enabled);

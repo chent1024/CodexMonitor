@@ -13,11 +13,6 @@
   animation: ds-modal-backdrop-in var(--ds-dur-entrance) var(--ds-ease-out) both;
 }
 
-.app.reduced-transparency .ds-modal-backdrop {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
 .ds-modal-card,
 .ds-modal-surface {
   background: var(--ds-modal-card-bg);

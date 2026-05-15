@@ -105,26 +105,26 @@ export function WorktreePrompt({
   return (
     <ModalShell
       className="worktree-modal"
-      ariaLabel="New worktree agent"
+      ariaLabel="新建工作树智能体"
       onBackdropClick={() => {
         if (!isBusy) {
           onCancel();
         }
       }}
     >
-      <div className="ds-modal-title worktree-modal-title">New worktree agent</div>
+      <div className="ds-modal-title worktree-modal-title">新建工作树智能体</div>
       <div className="ds-modal-subtitle worktree-modal-subtitle">
-        Create a worktree under "{workspaceName}".
+        在“{workspaceName}”下创建一个工作树。
       </div>
       <label className="ds-modal-label worktree-modal-label" htmlFor="worktree-name">
-        Name
+        名称
       </label>
       <input
         id="worktree-name"
         ref={inputRef}
         className="ds-modal-input worktree-modal-input"
         value={name}
-        placeholder="(Optional)"
+        placeholder="可选"
         onChange={(event) => onNameChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
@@ -140,7 +140,7 @@ export function WorktreePrompt({
         }}
       />
       <label className="ds-modal-label worktree-modal-label" htmlFor="worktree-branch">
-        Branch name
+        分支名称
       </label>
       <div
         className="worktree-modal-branch"
@@ -217,7 +217,7 @@ export function WorktreePrompt({
             selectedItemClassName="selected"
             emptyClassName="worktree-modal-branch-empty"
             emptyText={
-              branch.trim().length > 0 ? "No matching branches" : "No branches found"
+              branch.trim().length > 0 ? "没有匹配的分支" : "没有找到分支"
             }
             onMouseEnter={(index) => {
               setDidNavigateBranches(true);
@@ -237,14 +237,13 @@ export function WorktreePrompt({
           onChange={(event) => onCopyAgentsMdChange(event.target.checked)}
         />
         <label className="worktree-modal-checkbox-label" htmlFor="worktree-copy-agents">
-          Copy <code>AGENTS.md</code> into the worktree
+          将 <code>AGENTS.md</code> 复制到工作树
         </label>
       </div>
       <div className="ds-modal-divider worktree-modal-divider" />
-      <div className="worktree-modal-section-title">Environment setup script</div>
+      <div className="worktree-modal-section-title">环境初始化脚本</div>
       <div className="worktree-modal-hint">
-        Stored on the project (Settings → Environments) and runs once in a dedicated
-        terminal after each new worktree is created.
+        保存在项目设置的环境配置中。每次创建新工作树后，会在独立终端中运行一次。
       </div>
       <textarea
         id="worktree-setup-script"
@@ -264,7 +263,7 @@ export function WorktreePrompt({
           type="button"
           disabled={isBusy}
         >
-          Cancel
+          取消
         </button>
         <button
           className="primary ds-modal-button worktree-modal-button"
@@ -272,7 +271,7 @@ export function WorktreePrompt({
           type="button"
           disabled={isBusy || branch.trim().length === 0}
         >
-          Create
+          创建
         </button>
       </div>
     </ModalShell>

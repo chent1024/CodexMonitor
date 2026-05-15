@@ -22,10 +22,6 @@
   transition: grid-template-columns 220ms ease;
 }
 
-.app.reduced-transparency .main {
-  background: var(--surface-messages);
-}
-
 .main-header {
   width: 100%;
   display: flex;
@@ -453,11 +449,6 @@
     + var(--window-caption-gap, 0px)
   );
 }
-
-.app.reduced-transparency .main-topbar {
-  backdrop-filter: none;
-}
-
 
 .main-topbar-left {
   display: flex;
@@ -1098,10 +1089,6 @@
   contain: layout style paint;
 }
 
-.app.reduced-transparency .content {
-  background: var(--surface-messages);
-}
-
 .right-panel {
   --text-primary: #cccccc;
   --text-strong: #e7e7e7;
@@ -1191,10 +1178,6 @@
   padding-top: var(--right-panel-top-padding, 12px);
   border-radius: 0;
   transition: padding-top 180ms ease;
-}
-
-.app.reduced-transparency .right-panel-top .ds-panel {
-  border-radius: 0;
 }
 
 .right-panel-divider {

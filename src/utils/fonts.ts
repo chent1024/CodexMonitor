@@ -1,14 +1,31 @@
 export const LEGACY_DEFAULT_UI_FONT_FAMILY =
   'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
-export const DEFAULT_UI_FONT_FAMILY =
+export const PREVIOUS_DEFAULT_UI_FONT_FAMILY =
   'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 export const LEGACY_DEFAULT_CODE_FONT_FAMILY =
   'ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 
-export const DEFAULT_CODE_FONT_FAMILY =
+export const PREVIOUS_DEFAULT_CODE_FONT_FAMILY =
   'ui-monospace, "Cascadia Mono", "Segoe UI Mono", "Sarasa Mono SC", "Noto Sans Mono CJK SC", "Source Han Mono SC", Menlo, Monaco, Consolas, "PingFang SC", "Microsoft YaHei", "Liberation Mono", "Courier New", monospace';
+
+export const DEFAULT_FONT_FAMILY =
+  "微软雅黑, 'YaHei Consolas Hybird', Consolas, 'Courier New', monospace";
+
+export const DEFAULT_UI_FONT_FAMILY = DEFAULT_FONT_FAMILY;
+
+export const DEFAULT_CODE_FONT_FAMILY = DEFAULT_FONT_FAMILY;
+
+export const LEGACY_UI_FONT_FAMILIES = [
+  LEGACY_DEFAULT_UI_FONT_FAMILY,
+  PREVIOUS_DEFAULT_UI_FONT_FAMILY,
+] as const;
+
+export const LEGACY_CODE_FONT_FAMILIES = [
+  LEGACY_DEFAULT_CODE_FONT_FAMILY,
+  PREVIOUS_DEFAULT_CODE_FONT_FAMILY,
+] as const;
 
 export const CODE_FONT_SIZE_DEFAULT = 14;
 export const CODE_FONT_SIZE_MIN = 8;
@@ -28,10 +45,13 @@ export function normalizeFontFamily(
 
 export function migrateLegacyFontFamily(
   value: string,
-  legacyDefault: string,
+  legacyDefault: string | readonly string[],
   nextDefault: string,
 ) {
-  return value.trim() === legacyDefault ? nextDefault : value;
+  const legacyDefaults = Array.isArray(legacyDefault) ? legacyDefault : [legacyDefault];
+  return legacyDefaults.some((defaultValue) => value.trim() === defaultValue)
+    ? nextDefault
+    : value;
 }
 
 export function clampCodeFontSize(value: number) {

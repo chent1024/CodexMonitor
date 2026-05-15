@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 pub(crate) const RESTART_SAFE_SESSION_PROTOCOL_VERSION: u32 = 1;
 pub(crate) const DEFAULT_EVENT_RETENTION_COUNT: usize = 4096;
 pub(crate) const DEFAULT_EVENT_RETENTION_AGE_MS: i64 = 6 * 60 * 60 * 1000;
+pub(crate) const DEFAULT_EVENT_RETENTION_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -30,6 +31,7 @@ pub(crate) enum PendingSessionRequestKind {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RestartSafeSessionEvent {
     pub(crate) session_id: String,
+    pub(crate) session_instance_id: String,
     pub(crate) workspace_id: String,
     #[serde(default)]
     pub(crate) thread_id: Option<String>,
@@ -65,6 +67,7 @@ pub(crate) struct PendingSessionRequest {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RestartSafeSessionStatus {
     pub(crate) session_id: String,
+    pub(crate) session_instance_id: String,
     pub(crate) workspace_id: String,
     pub(crate) lifecycle: RestartSafeSessionLifecycle,
     #[serde(default)]
@@ -83,6 +86,7 @@ pub(crate) struct RestartSafeSessionStatus {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RestartSafeReplay {
     pub(crate) session_id: String,
+    pub(crate) session_instance_id: String,
     pub(crate) from_seq: u64,
     pub(crate) events: Vec<RestartSafeSessionEvent>,
     pub(crate) latest_seq: u64,
@@ -108,6 +112,7 @@ pub(crate) struct RestartSafeDebugStatus {
     pub(crate) processing_session_count: usize,
     pub(crate) retained_session_count: usize,
     pub(crate) journal_event_count: usize,
+    pub(crate) journal_event_bytes: usize,
     pub(crate) pending_request_count: usize,
     pub(crate) attached_client_count: usize,
     pub(crate) idle_shutdown_allowed: bool,
@@ -117,17 +122,21 @@ pub(crate) struct RestartSafeDebugStatus {
 struct RestartSafeSessionRecord {
     status: RestartSafeSessionStatus,
     events: VecDeque<RestartSafeSessionEvent>,
+    event_bytes: VecDeque<usize>,
+    journal_event_bytes: usize,
     pending_requests: HashMap<String, PendingSessionRequest>,
     resolved_requests: HashMap<String, PendingSessionRequest>,
     retention_count: usize,
     retention_age_ms: i64,
+    retention_bytes: usize,
 }
 
 impl RestartSafeSessionRecord {
     fn new(session_id: String, workspace_id: String, now_ms: i64) -> Self {
         Self {
             status: RestartSafeSessionStatus {
-                session_id,
+                session_id: session_id.clone(),
+                session_instance_id: session_instance_id(&workspace_id, now_ms),
                 workspace_id,
                 lifecycle: RestartSafeSessionLifecycle::Live,
                 active_thread_id: None,
@@ -140,28 +149,48 @@ impl RestartSafeSessionRecord {
                 updated_at_ms: now_ms,
             },
             events: VecDeque::new(),
+            event_bytes: VecDeque::new(),
+            journal_event_bytes: 0,
             pending_requests: HashMap::new(),
             resolved_requests: HashMap::new(),
             retention_count: DEFAULT_EVENT_RETENTION_COUNT,
             retention_age_ms: DEFAULT_EVENT_RETENTION_AGE_MS,
+            retention_bytes: DEFAULT_EVENT_RETENTION_BYTES,
         }
     }
 
     fn prune(&mut self, now_ms: i64) {
         while self.events.len() > self.retention_count {
-            self.events.pop_front();
+            self.pop_front_event();
         }
         while let Some(front) = self.events.front() {
             if now_ms.saturating_sub(front.timestamp_ms) <= self.retention_age_ms {
                 break;
             }
-            self.events.pop_front();
+            self.pop_front_event();
+        }
+        while self.journal_event_bytes > self.retention_bytes && self.events.len() > 1 {
+            self.pop_front_event();
         }
         self.resolved_requests.retain(|_, request| {
             let reference_ms = request.resolved_at_ms.unwrap_or(request.created_at_ms);
             now_ms.saturating_sub(reference_ms) <= self.retention_age_ms
         });
         self.status.journal_event_count = self.events.len();
+    }
+
+    fn push_event(&mut self, event: RestartSafeSessionEvent) {
+        let bytes = estimate_event_bytes(&event);
+        self.journal_event_bytes = self.journal_event_bytes.saturating_add(bytes);
+        self.event_bytes.push_back(bytes);
+        self.events.push_back(event);
+    }
+
+    fn pop_front_event(&mut self) {
+        if self.events.pop_front().is_some() {
+            let bytes = self.event_bytes.pop_front().unwrap_or(0);
+            self.journal_event_bytes = self.journal_event_bytes.saturating_sub(bytes);
+        }
     }
 }
 
@@ -244,6 +273,7 @@ impl RestartSafeSessionStore {
 
         let event = RestartSafeSessionEvent {
             session_id: session_id.clone(),
+            session_instance_id: record.status.session_instance_id.clone(),
             workspace_id: workspace_id.to_string(),
             thread_id,
             turn_id,
@@ -252,7 +282,7 @@ impl RestartSafeSessionStore {
             event_kind: event_kind.clone(),
             payload: payload.clone(),
         };
-        record.events.push_back(event.clone());
+        record.push_event(event.clone());
 
         if let Some(request_id) = request_id {
             let request_key = request_key(&request_id);
@@ -327,7 +357,8 @@ impl RestartSafeSessionStore {
             .records
             .lock()
             .expect("restart-safe session store poisoned");
-        let record = records.get_mut(session_id)?;
+        let key = record_key_for_session_id(&records, session_id)?;
+        let record = records.get_mut(&key)?;
         record.status.pending_request_count = record.pending_requests.len();
         record.status.journal_event_count = record.events.len();
         Some(record.status.clone())
@@ -342,7 +373,8 @@ impl RestartSafeSessionStore {
             .records
             .lock()
             .expect("restart-safe session store poisoned");
-        let record = records.get_mut(session_id)?;
+        let key = record_key_for_session_id(&records, session_id)?;
+        let record = records.get_mut(&key)?;
         record.status.attached_client_count = record.status.attached_client_count.saturating_add(1);
         let status = record.status.clone();
         let replay = replay_from_record(record, from_seq);
@@ -360,7 +392,8 @@ impl RestartSafeSessionStore {
             .records
             .lock()
             .expect("restart-safe session store poisoned");
-        let record = records.get_mut(session_id)?;
+        let key = record_key_for_session_id(&records, session_id)?;
+        let record = records.get_mut(&key)?;
         record.status.attached_client_count = record.status.attached_client_count.saturating_sub(1);
         Some(record.status.clone())
     }
@@ -370,7 +403,8 @@ impl RestartSafeSessionStore {
             .records
             .lock()
             .expect("restart-safe session store poisoned");
-        let record = records.get(session_id)?;
+        let key = record_key_for_session_id(&records, session_id)?;
+        let record = records.get(&key)?;
         Some(replay_from_record(record, from_seq))
     }
 
@@ -379,10 +413,23 @@ impl RestartSafeSessionStore {
             .records
             .lock()
             .expect("restart-safe session store poisoned");
+        let key = record_key_for_session_id(&records, session_id)
+            .unwrap_or_else(|| session_id.to_string());
         records
-            .get(session_id)
+            .get(&key)
             .map(|record| record.pending_requests.values().cloned().collect())
             .unwrap_or_default()
+    }
+
+    pub(crate) fn workspace_id_for_session(&self, session_id: &str) -> Option<String> {
+        let records = self
+            .records
+            .lock()
+            .expect("restart-safe session store poisoned");
+        let key = record_key_for_session_id(&records, session_id)?;
+        records
+            .get(&key)
+            .map(|record| record.status.workspace_id.clone())
     }
 
     #[cfg(test)]
@@ -391,9 +438,26 @@ impl RestartSafeSessionStore {
             .records
             .lock()
             .expect("restart-safe session store poisoned");
-        if let Some(record) = records.get_mut(session_id) {
+        let Some(key) = record_key_for_session_id(&records, session_id) else {
+            return;
+        };
+        if let Some(record) = records.get_mut(&key) {
             record.retention_count = count;
             record.retention_age_ms = age_ms;
+        }
+    }
+
+    #[cfg(test)]
+    fn set_retention_bytes_for_test(&self, session_id: &str, bytes: usize) {
+        let mut records = self
+            .records
+            .lock()
+            .expect("restart-safe session store poisoned");
+        let Some(key) = record_key_for_session_id(&records, session_id) else {
+            return;
+        };
+        if let Some(record) = records.get_mut(&key) {
+            record.retention_bytes = bytes;
         }
     }
 
@@ -402,7 +466,10 @@ impl RestartSafeSessionStore {
             .records
             .lock()
             .expect("restart-safe session store poisoned");
-        let Some(record) = records.get(session_id) else {
+        let Some(key) = record_key_for_session_id(&records, session_id) else {
+            return false;
+        };
+        let Some(record) = records.get(&key) else {
             return false;
         };
         record
@@ -419,7 +486,8 @@ impl RestartSafeSessionStore {
             .records
             .lock()
             .expect("restart-safe session store poisoned");
-        records.get(session_id).and_then(|record| {
+        let key = record_key_for_session_id(&records, session_id)?;
+        records.get(&key).and_then(|record| {
             record
                 .resolved_requests
                 .get(&request_key(request_id))
@@ -437,7 +505,8 @@ impl RestartSafeSessionStore {
             .records
             .lock()
             .expect("restart-safe session store poisoned");
-        let record = records.get_mut(session_id)?;
+        let key = record_key_for_session_id(&records, session_id)?;
+        let record = records.get_mut(&key)?;
         let key = request_key(request_id);
         let mut request = record.pending_requests.remove(&key)?;
         request.resolved_at_ms = Some(now_ms());
@@ -453,7 +522,10 @@ impl RestartSafeSessionStore {
             .records
             .lock()
             .expect("restart-safe session store poisoned");
-        if let Some(record) = records.get_mut(session_id) {
+        if let Some(key) = record_key_for_session_id(&records, session_id) {
+            let Some(record) = records.get_mut(&key) else {
+                return;
+            };
             record.status.lifecycle = RestartSafeSessionLifecycle::Stopped;
             record.status.updated_at_ms = now;
             record.pending_requests.clear();
@@ -472,6 +544,10 @@ impl RestartSafeSessionStore {
             record.status.pending_request_count = record.pending_requests.len();
         }
         let journal_event_count = records.values().map(|record| record.events.len()).sum();
+        let journal_event_bytes = records
+            .values()
+            .map(|record| record.journal_event_bytes)
+            .sum();
         let pending_request_count = records
             .values()
             .map(|record| record.pending_requests.len())
@@ -505,6 +581,7 @@ impl RestartSafeSessionStore {
             processing_session_count,
             retained_session_count,
             journal_event_count,
+            journal_event_bytes,
             pending_request_count,
             attached_client_count,
             idle_shutdown_allowed: active_session_count == 0
@@ -517,6 +594,40 @@ impl RestartSafeSessionStore {
 
 pub(crate) fn session_id_for_workspace(workspace_id: &str) -> String {
     format!("workspace:{workspace_id}")
+}
+
+pub(crate) fn session_instance_id_for_workspace(workspace_id: &str, started_at_ms: i64) -> String {
+    format!("session:{workspace_id}:{started_at_ms:x}")
+}
+
+fn session_instance_id(workspace_id: &str, started_at_ms: i64) -> String {
+    session_instance_id_for_workspace(workspace_id, started_at_ms)
+}
+
+fn record_key_for_session_id(
+    records: &HashMap<String, RestartSafeSessionRecord>,
+    session_id: &str,
+) -> Option<String> {
+    if records.contains_key(session_id) {
+        return Some(session_id.to_string());
+    }
+    records
+        .iter()
+        .find(|(_, record)| record.status.session_instance_id == session_id)
+        .map(|(key, _)| key.clone())
+}
+
+fn estimate_event_bytes(event: &RestartSafeSessionEvent) -> usize {
+    serde_json::to_vec(&event.payload)
+        .map(|bytes| bytes.len())
+        .unwrap_or(0)
+        .saturating_add(event.session_id.len())
+        .saturating_add(event.session_instance_id.len())
+        .saturating_add(event.workspace_id.len())
+        .saturating_add(event.thread_id.as_ref().map_or(0, String::len))
+        .saturating_add(event.turn_id.as_ref().map_or(0, String::len))
+        .saturating_add(event.event_kind.len())
+        .saturating_add(128)
 }
 
 fn replay_from_record(record: &RestartSafeSessionRecord, from_seq: u64) -> RestartSafeReplay {
@@ -532,6 +643,7 @@ fn replay_from_record(record: &RestartSafeSessionRecord, from_seq: u64) -> Resta
         .collect();
     RestartSafeReplay {
         session_id: record.status.session_id.clone(),
+        session_instance_id: record.status.session_instance_id.clone(),
         from_seq,
         events,
         latest_seq,
@@ -655,6 +767,45 @@ mod tests {
         assert_eq!(replay.events.len(), 1);
         assert_eq!(replay.events[0].event_seq, 2);
         assert!(!replay.retention_gap);
+    }
+
+    #[test]
+    fn session_instance_id_can_address_same_record() {
+        let store = RestartSafeSessionStore::new();
+        let event = store.record_app_server_event("ws-1", json!({ "method": "turn/started" }));
+
+        assert_eq!(event.session_id, "workspace:ws-1");
+        assert!(event.session_instance_id.starts_with("session:ws-1:"));
+        assert_eq!(
+            store.workspace_id_for_session(&event.session_instance_id),
+            Some("ws-1".to_string())
+        );
+
+        let replay = store
+            .replay(&event.session_instance_id, 0)
+            .expect("instance id replays");
+        assert_eq!(replay.session_id, "workspace:ws-1");
+        assert_eq!(replay.session_instance_id, event.session_instance_id);
+        assert_eq!(replay.events.len(), 1);
+    }
+
+    #[test]
+    fn journal_prunes_by_retained_bytes() {
+        let store = RestartSafeSessionStore::new();
+        store.record_app_server_event(
+            "ws-1",
+            json!({ "method": "first", "payload": "x".repeat(128) }),
+        );
+        store.set_retention_bytes_for_test("workspace:ws-1", 1);
+        store.record_app_server_event(
+            "ws-1",
+            json!({ "method": "second", "payload": "x".repeat(128) }),
+        );
+
+        let replay = store.replay("workspace:ws-1", 0).expect("replay");
+        assert!(replay.events.len() <= 1);
+        let debug = store.debug_status();
+        assert_eq!(debug.journal_event_count, replay.events.len());
     }
 
     #[test]

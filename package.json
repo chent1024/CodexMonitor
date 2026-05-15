@@ -14,6 +14,8 @@
     "doctor": "PATH=\"$HOME/.cargo/bin:$HOME/.local/bin:$PATH\" sh scripts/doctor.sh",
     "doctor:strict": "PATH=\"$HOME/.cargo/bin:$HOME/.local/bin:$PATH\" sh scripts/doctor.sh --strict",
     "doctor:win": "node scripts/doctor.mjs --strict",
+    "bench:events": "node scripts/app-server-event-bench.mjs",
+    "bench:terminal": "node scripts/terminal-bench.mjs",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:ds": "eslint . --ext .ts,.tsx",
     "codemod:modal-shell": "node scripts/codemods/modal-shell-codemod.mjs",
@@ -53,7 +55,6 @@
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "tauri-plugin-liquid-glass-api": "^0.1.6",
     "vscode-material-icons": "^0.1.1"
   },
   "devDependencies": {

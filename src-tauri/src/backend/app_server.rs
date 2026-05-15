@@ -14,6 +14,7 @@ use tokio::time::timeout;
 
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
+use crate::shared::local_memory_integration_core;
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
 use crate::types::WorkspaceEntry;
 
@@ -412,6 +413,46 @@ fn should_broadcast_global_workspace_notification(
         && request_workspace.is_none()
 }
 
+fn extract_agent_message_delta(value: &Value) -> Option<String> {
+    value
+        .get("params")
+        .and_then(|params| params.get("delta"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .filter(|delta| !delta.trim().is_empty())
+}
+
+fn extract_turn_id(value: &Value) -> Option<String> {
+    let params = value.get("params")?;
+    params
+        .get("turn")
+        .and_then(|turn| turn.get("id"))
+        .or_else(|| params.get("turnId"))
+        .or_else(|| params.get("turn_id"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .filter(|turn_id| !turn_id.trim().is_empty())
+}
+
+fn append_assistant_memory_delta(
+    buffers: &mut HashMap<String, String>,
+    thread_id: &str,
+    delta: &str,
+) {
+    let buffer = buffers.entry(thread_id.to_string()).or_default();
+    buffer.push_str(delta);
+    if buffer.chars().count() > MAX_ASSISTANT_MEMORY_BUFFER_CHARS {
+        *buffer = buffer
+            .chars()
+            .rev()
+            .take(MAX_ASSISTANT_MEMORY_BUFFER_CHARS)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct RequestContext {
     workspace_id: String,
@@ -436,6 +477,7 @@ const MAX_THREAD_WORKSPACE_MAPPINGS: usize = 8_192;
 const THREAD_WORKSPACE_MAPPINGS_PRUNE_TO: usize = 6_144;
 const MAX_HIDDEN_THREAD_IDS: usize = 2_048;
 const HIDDEN_THREAD_IDS_PRUNE_TO: usize = 1_536;
+const MAX_ASSISTANT_MEMORY_BUFFER_CHARS: usize = 16_000;
 
 fn prune_hash_map_to_limit<K, V>(map: &mut HashMap<K, V>, max_len: usize, prune_to: usize)
 where
@@ -479,6 +521,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) owner_workspace_id: String,
     pub(crate) workspace_ids: Mutex<HashSet<String>>,
     pub(crate) workspace_roots: Mutex<HashMap<String, String>>,
+    pub(crate) assistant_memory_buffers: Mutex<HashMap<String, String>>,
 }
 
 impl WorkspaceSession {
@@ -828,6 +871,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
             entry.id.clone(),
             normalize_root_path(&entry.path),
         )])),
+        assistant_memory_buffers: Mutex::new(HashMap::new()),
     });
 
     let session_clone = Arc::clone(&session);
@@ -1002,6 +1046,38 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                 }
             }
 
+            if let Some(ref tid) = thread_id {
+                if method_name == Some("item/agentMessage/delta") {
+                    if let Some(delta) = extract_agent_message_delta(&value) {
+                        let mut buffers = session_clone.assistant_memory_buffers.lock().await;
+                        append_assistant_memory_delta(&mut buffers, tid, &delta);
+                    }
+                } else if method_name == Some("turn/completed") {
+                    let assistant_text = session_clone
+                        .assistant_memory_buffers
+                        .lock()
+                        .await
+                        .remove(tid);
+                    if let Some(assistant_text) = assistant_text {
+                        let workspace_path = session_clone
+                            .workspace_roots
+                            .lock()
+                            .await
+                            .get(&routed_workspace_id)
+                            .cloned()
+                            .unwrap_or_default();
+                        let turn_id = extract_turn_id(&value).unwrap_or_default();
+                        local_memory_integration_core::capture_assistant_turn(
+                            &assistant_text,
+                            &routed_workspace_id,
+                            &workspace_path,
+                            tid,
+                            &turn_id,
+                        );
+                    }
+                }
+            }
+
             if matches!(method_name, Some("item/started") | Some("item/completed")) {
                 let related_thread_ids = extract_related_thread_ids(&value);
                 if !related_thread_ids.is_empty() {
@@ -1023,6 +1099,11 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                 if let Some(ref tid) = thread_id {
                     session_clone.thread_workspace.lock().await.remove(tid);
                     session_clone.hidden_thread_ids.lock().await.remove(tid);
+                    session_clone
+                        .assistant_memory_buffers
+                        .lock()
+                        .await
+                        .remove(tid);
                 }
             }
 
@@ -1178,10 +1259,11 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_initialize_params, extract_related_thread_ids,
-        extract_thread_entries_from_thread_list_result, extract_thread_id, normalize_root_path,
-        resolve_workspace_for_cwd, should_suppress_hidden_thread_event, source_subagent_kind,
-        thread_started_is_memory_consolidation,
+        append_assistant_memory_delta, build_initialize_params, extract_agent_message_delta,
+        extract_related_thread_ids, extract_thread_entries_from_thread_list_result,
+        extract_thread_id, extract_turn_id, normalize_root_path, resolve_workspace_for_cwd,
+        should_suppress_hidden_thread_event, source_subagent_kind,
+        thread_started_is_memory_consolidation, MAX_ASSISTANT_MEMORY_BUFFER_CHARS,
     };
     use serde_json::json;
     use std::collections::HashMap;
@@ -1214,6 +1296,46 @@ mod tests {
     fn extract_thread_id_returns_none_when_missing() {
         let value = json!({ "params": {} });
         assert_eq!(extract_thread_id(&value), None);
+    }
+
+    #[test]
+    fn extract_agent_message_delta_reads_delta_text() {
+        let value = json!({
+            "method": "item/agentMessage/delta",
+            "params": {
+                "threadId": "thread-1",
+                "delta": "implemented"
+            }
+        });
+
+        assert_eq!(
+            extract_agent_message_delta(&value),
+            Some("implemented".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_turn_id_reads_nested_turn_id() {
+        let value = json!({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "thread-1",
+                "turn": { "id": "turn-1" }
+            }
+        });
+
+        assert_eq!(extract_turn_id(&value), Some("turn-1".to_string()));
+    }
+
+    #[test]
+    fn append_assistant_memory_delta_caps_buffer() {
+        let mut buffers = HashMap::new();
+        let over_limit = "x".repeat(MAX_ASSISTANT_MEMORY_BUFFER_CHARS + 8);
+
+        append_assistant_memory_delta(&mut buffers, "thread-1", &over_limit);
+
+        let buffer = buffers.get("thread-1").expect("buffer");
+        assert_eq!(buffer.chars().count(), MAX_ASSISTANT_MEMORY_BUFFER_CHARS);
     }
 
     #[test]
