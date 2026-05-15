@@ -391,7 +391,6 @@ export type AppSettings = {
   showMessageFilePath: boolean;
   chatHistoryScrollbackItems: number | null;
   threadTitleAutogenerationEnabled: boolean;
-  automaticAppUpdateChecksEnabled: boolean;
   uiFontFamily: string;
   uiFontSize: number;
   codeFontFamily: string;

@@ -24,6 +24,7 @@ type RestoreBounds = {
 
 type EnsureWindowBoundsOptions = {
   repairLegacyUnscaledDefault?: boolean;
+  repairOutOfBounds?: boolean;
 };
 
 let restoreBounds: RestoreBounds | null = null;
@@ -90,10 +91,12 @@ function frameDelta(bounds: WindowBounds) {
 
 function targetInnerSize(
   workArea: NonNullable<Monitor["workArea"]>,
+  bounds: WindowBounds,
 ) {
+  const frame = frameDelta(bounds);
   return new PhysicalSize(
-    Math.max(360, workArea.size.width),
-    Math.max(600, workArea.size.height),
+    Math.max(360, workArea.size.width - frame.width),
+    Math.max(600, workArea.size.height - frame.height),
   );
 }
 
@@ -156,7 +159,9 @@ export async function ensureWindowWithinCurrentDisplay(
   const scaleFactor = scaleFactorFor(monitor);
   const shouldRepairLegacySize = options.repairLegacyUnscaledDefault !== false &&
     isLegacyUnscaledDefaultSize(bounds, scaleFactor);
-  if (!exceedsWorkArea(bounds, workArea) && !shouldRepairLegacySize) {
+  const shouldRepairOutOfBounds = options.repairOutOfBounds !== false &&
+    exceedsWorkArea(bounds, workArea);
+  if (!shouldRepairOutOfBounds && !shouldRepairLegacySize) {
     return;
   }
   const safeBounds = centeredRestoreBounds(bounds, workArea, scaleFactor);
@@ -209,5 +214,5 @@ export async function toggleWindowZoomWithinCurrentDisplay(
   await windowHandle.setPosition(
     new PhysicalPosition(workArea.position.x, workArea.position.y),
   );
-  await windowHandle.setSize(targetInnerSize(workArea));
+  await windowHandle.setSize(targetInnerSize(workArea, bounds));
 }

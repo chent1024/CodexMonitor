@@ -196,7 +196,6 @@ const baseSettings: AppSettings = {
   showMessageFilePath: true,
   chatHistoryScrollbackItems: 200,
   threadTitleAutogenerationEnabled: false,
-  automaticAppUpdateChecksEnabled: false,
   uiFontFamily: DEFAULT_UI_FONT_FAMILY,
   uiFontSize: 14,
   codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
@@ -337,50 +336,6 @@ const renderComposerSection = (
 
   render(<SettingsView {...props} />);
   return { onUpdateAppSettings };
-};
-
-const renderAboutSection = (
-  options: {
-    appSettings?: Partial<AppSettings>;
-    onUpdateAppSettings?: ComponentProps<typeof SettingsView>["onUpdateAppSettings"];
-    onToggleAutomaticAppUpdateChecks?: ComponentProps<
-      typeof SettingsView
-    >["onToggleAutomaticAppUpdateChecks"];
-  } = {},
-) => {
-  cleanup();
-  const onUpdateAppSettings =
-    options.onUpdateAppSettings ?? vi.fn().mockResolvedValue(undefined);
-  const onToggleAutomaticAppUpdateChecks =
-    options.onToggleAutomaticAppUpdateChecks ?? vi.fn();
-  const props: ComponentProps<typeof SettingsView> = {
-    appSettings: { ...baseSettings, ...options.appSettings },
-    openAppIconById: {},
-    onUpdateAppSettings,
-    onToggleAutomaticAppUpdateChecks,
-    workspaceGroups: [],
-    groupedWorkspaces: [],
-    ungroupedLabel: "未分组",
-    onClose: vi.fn(),
-    onMoveWorkspace: vi.fn(),
-    onDeleteWorkspace: vi.fn(),
-    onCreateWorkspaceGroup: vi.fn().mockResolvedValue(null),
-    onRenameWorkspaceGroup: vi.fn().mockResolvedValue(null),
-    onMoveWorkspaceGroup: vi.fn().mockResolvedValue(null),
-    onDeleteWorkspaceGroup: vi.fn().mockResolvedValue(null),
-    onAssignWorkspaceGroup: vi.fn().mockResolvedValue(null),
-    onRunDoctor: vi.fn().mockResolvedValue(createDoctorResult()),
-    onUpdateWorkspaceSettings: vi.fn().mockResolvedValue(undefined),
-    scaleShortcutTitle: "Scale shortcut",
-    scaleShortcutText: "Use Command +/-",
-    onTestNotificationSound: vi.fn(),
-    onTestSystemNotification: vi.fn(),
-  };
-
-  render(<SettingsView {...props} />);
-  fireEvent.click(screen.getByRole("button", { name: "关于" }));
-
-  return { onUpdateAppSettings, onToggleAutomaticAppUpdateChecks };
 };
 
 const renderFeaturesSection = (
@@ -827,28 +782,6 @@ describe("SettingsView Display", () => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({ subagentSystemNotificationsEnabled: true }),
       );
-    });
-  });
-});
-
-describe("SettingsView About", () => {
-  it("toggles automatic app update checks", async () => {
-    const onToggleAutomaticAppUpdateChecks = vi.fn();
-    renderAboutSection({
-      onToggleAutomaticAppUpdateChecks,
-      appSettings: { automaticAppUpdateChecksEnabled: false },
-    });
-
-    const row = screen
-      .getByText("自动检查应用更新")
-      .closest(".settings-toggle-row") as HTMLElement | null;
-    if (!row) {
-      throw new Error("Expected automatic app update checks row");
-    }
-    fireEvent.click(within(row).getByRole("button"));
-
-    await waitFor(() => {
-      expect(onToggleAutomaticAppUpdateChecks).toHaveBeenCalledTimes(1);
     });
   });
 });

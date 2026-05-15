@@ -4,7 +4,6 @@ import { Home } from "../../../home/components/Home";
 import { MainHeader } from "../../../app/components/MainHeader";
 import { Messages } from "../../../messages/components/Messages";
 import { ApprovalToasts } from "../../../app/components/ApprovalToasts";
-import { UpdateToast } from "../../../update/components/UpdateToast";
 import { ErrorToasts } from "../../../notifications/components/ErrorToasts";
 import { Composer } from "../../../composer/components/Composer";
 import { TabBar } from "../../../app/components/TabBar";
@@ -22,7 +21,6 @@ type PrimaryLayoutNodes = Pick<
   | "messagesNode"
   | "composerNode"
   | "approvalToastsNode"
-  | "updateToastNode"
   | "errorToastsNode"
   | "homeNode"
   | "mainHeaderNode"
@@ -39,8 +37,6 @@ export function buildPrimaryNodes(options: PrimaryLayoutNodesOptions): PrimaryLa
   const composerNode = options.composerProps ? <Composer {...options.composerProps} /> : null;
 
   const approvalToastsNode = <ApprovalToasts {...options.approvalToastsProps} />;
-
-  const updateToastNode = <UpdateToast {...options.updateToastProps} />;
 
   const errorToastsNode = <ErrorToasts {...options.errorToastsProps} />;
 
@@ -76,7 +72,6 @@ export function buildPrimaryNodes(options: PrimaryLayoutNodesOptions): PrimaryLa
     messagesNode,
     composerNode,
     approvalToastsNode,
-    updateToastNode,
     errorToastsNode,
     homeNode,
     mainHeaderNode,

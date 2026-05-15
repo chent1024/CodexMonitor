@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Check from "lucide-react/dist/esm/icons/check";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
-import { isTauri } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { BranchInfo, OpenAppTarget, WorkspaceInfo } from "../../../types";
-import type { MouseEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { revealInFileManagerLabel } from "../../../utils/platformPaths";
 import { BranchList } from "../../git/components/BranchList";
 import { filterBranches, findExactBranch } from "../../git/utils/branchSearch";
@@ -18,23 +17,6 @@ import { OpenAppMenu } from "./OpenAppMenu";
 import { LaunchScriptEntryButton } from "./LaunchScriptEntryButton";
 import type { WorkspaceLaunchScriptsState } from "../hooks/useWorkspaceLaunchScripts";
 import { useMenuController } from "../hooks/useMenuController";
-import { toggleWindowZoomWithinCurrentDisplay } from "../../layout/utils/windowZoom";
-
-const HEADER_DOUBLE_CLICK_BLOCK_SELECTOR = [
-  "button",
-  "a",
-  '[role="button"]',
-  '[role="link"]',
-  '[role="menuitem"]',
-  '[role="option"]',
-  '[role="tab"]',
-  '[data-tauri-drag-region="false"]',
-  "input",
-  "textarea",
-  "select",
-  "option",
-  '[contenteditable="true"]',
-].join(",");
 
 type MainHeaderProps = {
   workspace: WorkspaceInfo;
@@ -195,27 +177,9 @@ export function MainHeader({
     }
   };
 
-  const handleHeaderDoubleClick = (event: MouseEvent<HTMLElement>) => {
-    if (!isTauri()) {
-      return;
-    }
-    const target = event.target;
-    if (
-      target instanceof Element &&
-      target.closest(HEADER_DOUBLE_CLICK_BLOCK_SELECTOR)
-    ) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    void toggleWindowZoomWithinCurrentDisplay().catch(() => {
-      // Ignore platform-specific window manager failures.
-    });
-  };
-
   return (
     <header className="main-header">
-      <div className="workspace-header" onDoubleClick={handleHeaderDoubleClick}>
+      <div className="workspace-header">
         <div className="workspace-title-line">
           <span className="workspace-title">
             {threadTitle ?? (parentName ?? workspace.name)}

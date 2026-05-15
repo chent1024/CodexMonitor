@@ -222,12 +222,6 @@ type UseMainAppLayoutSurfacesArgs = {
   setActiveTab: (tab: "home" | "projects" | "codex" | "git" | "log") => void;
   tabletTab: LayoutNodesOptions["primary"]["tabletNavProps"]["activeTab"];
   showMobilePollingFetchStatus: boolean;
-  appModalsAboutOpen: boolean;
-  updaterState: LayoutNodesOptions["primary"]["updateToastProps"]["state"];
-  startUpdate: LayoutNodesOptions["primary"]["updateToastProps"]["onUpdate"];
-  dismissUpdate: LayoutNodesOptions["primary"]["updateToastProps"]["onDismiss"];
-  postUpdateNotice: LayoutNodesOptions["primary"]["updateToastProps"]["postUpdateNotice"];
-  dismissPostUpdateNotice: LayoutNodesOptions["primary"]["updateToastProps"]["onDismissPostUpdateNotice"];
   errorToasts: LayoutNodesOptions["primary"]["errorToastsProps"]["toasts"];
   dismissErrorToast: LayoutNodesOptions["primary"]["errorToastsProps"]["onDismiss"];
   showDebugButton: boolean;
@@ -366,12 +360,6 @@ function buildPrimarySurface({
   setActiveTab,
   tabletTab,
   showMobilePollingFetchStatus,
-  appModalsAboutOpen,
-  updaterState,
-  startUpdate,
-  dismissUpdate,
-  postUpdateNotice,
-  dismissPostUpdateNotice,
   errorToasts,
   dismissErrorToast,
   showDebugButton,
@@ -568,13 +556,6 @@ function buildPrimarySurface({
       workspaces,
       onDecision,
       onRemember,
-    },
-    updateToastProps: {
-      state: appModalsAboutOpen ? { stage: "idle" as const } : updaterState,
-      onUpdate: startUpdate,
-      onDismiss: dismissUpdate,
-      postUpdateNotice,
-      onDismissPostUpdateNotice: dismissPostUpdateNotice,
     },
     errorToastsProps: {
       toasts: errorToasts,
@@ -1104,12 +1085,6 @@ export function useMainAppLayoutSurfaces({
   setActiveTab,
   tabletTab,
   showMobilePollingFetchStatus,
-  appModalsAboutOpen,
-  updaterState,
-  startUpdate,
-  dismissUpdate,
-  postUpdateNotice,
-  dismissPostUpdateNotice,
   errorToasts,
   dismissErrorToast,
   showDebugButton,
@@ -1266,12 +1241,6 @@ export function useMainAppLayoutSurfaces({
     setActiveTab,
     tabletTab,
     showMobilePollingFetchStatus,
-    appModalsAboutOpen,
-    updaterState,
-    startUpdate,
-    dismissUpdate,
-    postUpdateNotice,
-    dismissPostUpdateNotice,
     errorToasts,
     dismissErrorToast,
     showDebugButton,

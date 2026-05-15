@@ -2,17 +2,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const isTauriMock = vi.hoisted(() => vi.fn());
-const toggleWindowZoomWithinCurrentDisplayMock = vi.hoisted(() => vi.fn());
-
-vi.mock("@tauri-apps/api/core", () => ({
-  isTauri: isTauriMock,
-}));
-
-vi.mock("../../layout/utils/windowZoom", () => ({
-  toggleWindowZoomWithinCurrentDisplay: toggleWindowZoomWithinCurrentDisplayMock,
-}));
-
 vi.mock("@tauri-apps/plugin-opener", () => ({
   revealItemInDir: vi.fn(),
 }));
@@ -47,31 +36,13 @@ function buildProps() {
 describe("MainHeader", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    isTauriMock.mockReturnValue(true);
-    toggleWindowZoomWithinCurrentDisplayMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     cleanup();
   });
 
-  it("double-clicks the blank header region to toggle window maximize", () => {
-    render(<MainHeader {...buildProps()} />);
-
-    fireEvent.doubleClick(screen.getByTestId("main-header-blank-region"));
-
-    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("double-clicks the header title region to toggle window maximize", () => {
-    render(<MainHeader {...buildProps()} />);
-
-    fireEvent.doubleClick(screen.getByText("coChat"));
-
-    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not toggle window maximize from interactive header controls", () => {
+  it("leaves header double-click zoom to the global window drag hook", () => {
     render(
       <MainHeader
         {...buildProps()}
@@ -80,19 +51,11 @@ describe("MainHeader", () => {
       />,
     );
 
+    fireEvent.doubleClick(screen.getByTestId("main-header-blank-region"));
+    fireEvent.doubleClick(screen.getByText("coChat"));
     fireEvent.doubleClick(screen.getByRole("button", { name: "main" }));
 
-    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
-  });
-
-  it("does nothing when not running in Tauri", () => {
-    isTauriMock.mockReturnValue(false);
-
-    render(<MainHeader {...buildProps()} />);
-
-    fireEvent.doubleClick(screen.getByTestId("main-header-blank-region"));
-
-    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
+    expect(screen.getByText("coChat")).toBeTruthy();
   });
 
   it("keeps the title line focused on the thread title by default", () => {

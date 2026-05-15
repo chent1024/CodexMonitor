@@ -29,7 +29,10 @@ export function useWindowBoundsGuard() {
     const ensureBounds = (repairLegacyUnscaledDefault = true) => {
       void ensureWindowWithinCurrentDisplay(
         windowHandle,
-        { repairLegacyUnscaledDefault },
+        {
+          repairLegacyUnscaledDefault,
+          repairOutOfBounds: repairLegacyUnscaledDefault,
+        },
       ).catch(() => {
         // Window bounds are best-effort; startup should not fail on platform quirks.
       });

@@ -33,17 +33,6 @@ export function useMainAppSettingsActions({
     [queueSaveSettings, setAppSettings],
   );
 
-  const handleToggleAutomaticAppUpdateChecks = useCallback(() => {
-    setAppSettings((current) => {
-      const nextSettings = {
-        ...current,
-        automaticAppUpdateChecksEnabled: !current.automaticAppUpdateChecksEnabled,
-      };
-      void queueSaveSettings(nextSettings);
-      return nextSettings;
-    });
-  }, [queueSaveSettings, setAppSettings]);
-
   const persistProjectCopiesFolder = useCallback(
     async (groupId: string, copiesFolder: string) => {
       await queueSaveSettings({
@@ -58,7 +47,6 @@ export function useMainAppSettingsActions({
 
   return {
     handleSelectOpenAppId,
-    handleToggleAutomaticAppUpdateChecks,
     persistProjectCopiesFolder,
   };
 }

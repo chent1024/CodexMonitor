@@ -157,7 +157,7 @@ pub(crate) fn read_settings(path: &PathBuf) -> Result<AppSettings, String> {
     }
     let data = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let mut value: Value = serde_json::from_str(&data).map_err(|e| e.to_string())?;
-    let mut changed = migrate_automatic_app_update_checks_setting(&mut value);
+    let mut changed = remove_automatic_app_update_checks_setting(&mut value);
     migrate_follow_up_message_behavior(&mut value);
     match serde_json::from_value(value.clone()) {
         Ok(settings) => {
@@ -226,37 +226,11 @@ fn sanitize_remote_settings_for_tcp_only(value: &mut Value) {
     root.retain(|key, _| !key.to_ascii_lowercase().starts_with("orb"));
 }
 
-fn migrate_automatic_app_update_checks_setting(value: &mut Value) -> bool {
+fn remove_automatic_app_update_checks_setting(value: &mut Value) -> bool {
     let Value::Object(root) = value else {
         return false;
     };
-    match root.get_mut("automaticAppUpdateChecksEnabled") {
-        Some(Value::Bool(current)) => {
-            if *current {
-                root.insert(
-                    "automaticAppUpdateChecksEnabled".to_string(),
-                    Value::Bool(false),
-                );
-                true
-            } else {
-                false
-            }
-        }
-        Some(_) => {
-            root.insert(
-                "automaticAppUpdateChecksEnabled".to_string(),
-                Value::Bool(false),
-            );
-            true
-        }
-        None => {
-            root.insert(
-                "automaticAppUpdateChecksEnabled".to_string(),
-                Value::Bool(false),
-            );
-            true
-        }
-    }
+    root.remove("automaticAppUpdateChecksEnabled").is_some()
 }
 
 fn migrate_follow_up_message_behavior(value: &mut Value) {
@@ -533,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn read_settings_migrates_missing_automatic_app_update_checks_to_false() {
+    fn read_settings_leaves_missing_automatic_app_update_checks_untouched() {
         let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");
         let path = temp_dir.join("settings.json");
@@ -541,16 +515,14 @@ mod tests {
         std::fs::write(&path, r#"{"theme":"dark"}"#).expect("write settings");
 
         let settings = read_settings(&path).expect("read settings");
-        assert!(!settings.automatic_app_update_checks_enabled);
+        assert_eq!(settings.theme, "dark");
 
         let rewritten = std::fs::read_to_string(&path).expect("read rewritten settings");
-        let rewritten_settings: AppSettings =
-            serde_json::from_str(&rewritten).expect("deserialize rewritten settings");
-        assert!(!rewritten_settings.automatic_app_update_checks_enabled);
+        assert_eq!(rewritten, r#"{"theme":"dark"}"#);
     }
 
     #[test]
-    fn read_settings_migrates_explicit_automatic_app_update_checks_setting_to_false() {
+    fn read_settings_removes_explicit_automatic_app_update_checks_setting() {
         let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");
         let path = temp_dir.join("settings.json");
@@ -562,6 +534,9 @@ mod tests {
         .expect("write settings");
 
         let settings = read_settings(&path).expect("read settings");
-        assert!(!settings.automatic_app_update_checks_enabled);
+        assert_eq!(settings.theme, "dark");
+
+        let rewritten = std::fs::read_to_string(&path).expect("read rewritten settings");
+        assert!(!rewritten.contains("automaticAppUpdateChecksEnabled"));
     }
 }

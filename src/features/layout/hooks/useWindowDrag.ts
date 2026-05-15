@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { performNativeWindowZoom } from "@services/tauri";
+import { isMacPlatform } from "@utils/platformPaths";
 import { toggleWindowZoomWithinCurrentDisplay } from "../utils/windowZoom";
 
 const DRAG_START_THRESHOLD_PX = 4;
@@ -157,9 +159,22 @@ export function useWindowDrag(targetId: string) {
     ] as const;
 
     const toggleWindowZoomSafe = () => {
-      void toggleWindowZoomWithinCurrentDisplay().catch(() => {
-        // Ignore platform-specific window manager failures.
-      });
+      const toggleWithinDisplay = () =>
+        toggleWindowZoomWithinCurrentDisplay().catch(() => {
+          // Ignore platform-specific window manager failures.
+        });
+      if (!isMacPlatform()) {
+        void toggleWithinDisplay();
+        return;
+      }
+      void performNativeWindowZoom()
+        .then((handled) => {
+          if (!handled) {
+            return toggleWithinDisplay();
+          }
+          return undefined;
+        })
+        .catch(() => toggleWithinDisplay());
     };
 
     const handleMouseDown = (event: MouseEvent) => {
@@ -177,9 +192,13 @@ export function useWindowDrag(targetId: string) {
       if (event.detail >= 2 || (lastClick && isNearPreviousClick(lastClick, event))) {
         dragCandidate = null;
         lastClick = null;
-        suppressNextDoubleClick = true;
         event.preventDefault();
         event.stopPropagation();
+        if (isMacPlatform()) {
+          suppressNextDoubleClick = false;
+          return;
+        }
+        suppressNextDoubleClick = true;
         toggleWindowZoomSafe();
         return;
       }

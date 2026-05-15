@@ -16,7 +16,6 @@ import { PlanPanel } from "../../../plan/components/PlanPanel";
 import { PromptPanel } from "../../../prompts/components/PromptPanel";
 import { TerminalDock } from "../../../terminal/components/TerminalDock";
 import type { TerminalSessionState } from "../../../terminal/hooks/useTerminalSession";
-import { UpdateToast } from "../../../update/components/UpdateToast";
 
 export type WorktreeRenameState = {
   name: string;
@@ -42,7 +41,6 @@ export type LayoutPrimarySurface = {
   messagesProps: ComponentProps<typeof Messages>;
   composerProps: ComponentProps<typeof Composer> | null;
   approvalToastsProps: ComponentProps<typeof ApprovalToasts>;
-  updateToastProps: ComponentProps<typeof UpdateToast>;
   errorToastsProps: ComponentProps<typeof ErrorToasts>;
   homeProps: ComponentProps<typeof Home>;
   mainHeaderProps: ComponentProps<typeof MainHeader> | null;
@@ -94,7 +92,6 @@ export type LayoutNodesResult = {
   messagesNode: ReactNode;
   composerNode: ReactNode;
   approvalToastsNode: ReactNode;
-  updateToastNode: ReactNode;
   errorToastsNode: ReactNode;
   homeNode: ReactNode;
   mainHeaderNode: ReactNode;

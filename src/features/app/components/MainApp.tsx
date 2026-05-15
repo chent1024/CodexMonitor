@@ -15,7 +15,7 @@ import { useCustomPrompts } from "@/features/prompts/hooks/useCustomPrompts";
 import { useBranchSwitcherShortcut } from "@/features/git/hooks/useBranchSwitcherShortcut";
 import { useRenameWorktreePrompt } from "@/features/workspaces/hooks/useRenameWorktreePrompt";
 import { useLayoutController } from "@app/hooks/useLayoutController";
-import { useUpdaterController } from "@app/hooks/useUpdaterController";
+import { useNotificationController } from "@app/hooks/useNotificationController";
 import { useResponseRequiredNotificationsController } from "@app/hooks/useResponseRequiredNotificationsController";
 import { useErrorToasts } from "@/features/notifications/hooks/useErrorToasts";
 import { useComposerShortcuts } from "@/features/composer/hooks/useComposerShortcuts";
@@ -219,7 +219,6 @@ export default function MainApp() {
     queueSaveSettings,
   });
   const {
-    isMobileRuntime,
     showMobileSetupWizard,
     mobileSetupWizardProps,
     handleMobileConnectSuccess,
@@ -229,8 +228,6 @@ export default function MainApp() {
     queueSaveSettings,
     refreshWorkspaces,
   });
-  const updaterEnabled = !isMobileRuntime;
-
   const workspacesById = useMemo(
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace])),
     [workspaces],
@@ -603,17 +600,9 @@ export default function MainApp() {
       reconnectLive,
     });
   const {
-    updaterState,
-    startUpdate,
-    dismissUpdate,
-    postUpdateNotice,
-    dismissPostUpdateNotice,
     handleTestNotificationSound,
     handleTestSystemNotification,
-  } = useUpdaterController({
-    enabled: updaterEnabled,
-    autoCheckOnMount:
-      !appSettingsLoading && appSettings.automaticAppUpdateChecksEnabled,
+  } = useNotificationController({
     notificationSoundsEnabled: appSettings.notificationSoundsEnabled,
     systemNotificationsEnabled: appSettings.systemNotificationsEnabled,
     subagentSystemNotificationsEnabled:
@@ -978,7 +967,6 @@ export default function MainApp() {
 
   const {
     handleSelectOpenAppId,
-    handleToggleAutomaticAppUpdateChecks,
     persistProjectCopiesFolder,
   } = useMainAppSettingsActions({
     appSettings,
@@ -1076,7 +1064,6 @@ export default function MainApp() {
       appSettings,
       openAppIconById,
       queueSaveSettings,
-      handleToggleAutomaticAppUpdateChecks,
       doctor,
       codexUpdate,
       updateWorkspaceSettings,
@@ -1816,13 +1803,6 @@ export default function MainApp() {
     setActiveTab,
     tabletTab,
     showMobilePollingFetchStatus,
-    appModalsAboutOpen:
-      appModalsProps.settingsOpen && appModalsProps.settingsSection === 'about',
-    updaterState,
-    startUpdate,
-    dismissUpdate,
-    postUpdateNotice,
-    dismissPostUpdateNotice,
     errorToasts,
     dismissErrorToast,
     showDebugButton,
@@ -1834,7 +1814,6 @@ export default function MainApp() {
     messagesNode,
     composerNode,
     approvalToastsNode,
-    updateToastNode,
     errorToastsNode,
     homeNode,
     mainHeaderNode,
@@ -1896,7 +1875,6 @@ export default function MainApp() {
       messagesNode: mainMessagesNode,
       composerNode,
       approvalToastsNode,
-      updateToastNode,
       errorToastsNode,
       homeNode,
       mainHeaderNode,

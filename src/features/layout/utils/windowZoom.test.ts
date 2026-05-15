@@ -87,7 +87,7 @@ describe("windowZoom", () => {
     expect(handle.setSize).toHaveBeenCalledWith(new PhysicalSize(1440, 875));
   });
 
-  it("does not subtract the current frame delta when zooming to the work area", async () => {
+  it("subtracts the current frame delta when zooming to the work area", async () => {
     const handle = windowHandle({
       outerSize: new PhysicalSize(900, 650),
       innerSize: new PhysicalSize(872, 611),
@@ -96,7 +96,30 @@ describe("windowZoom", () => {
     await toggleWindowZoomWithinCurrentDisplay(handle as never);
 
     expect(handle.setPosition).toHaveBeenCalledWith(new PhysicalPosition(0, 25));
-    expect(handle.setSize).toHaveBeenCalledWith(new PhysicalSize(1440, 875));
+    expect(handle.setSize).toHaveBeenCalledWith(new PhysicalSize(1412, 836));
+  });
+
+  it("does not get repaired by the bounds guard after custom zoom with a frame delta", async () => {
+    const zoomedOuterSize = new PhysicalSize(1440, 875);
+    const zoomedInnerSize = new PhysicalSize(1412, 836);
+    const handle = windowHandle({
+      outerSize: new PhysicalSize(900, 650),
+      innerSize: new PhysicalSize(872, 611),
+    });
+
+    await toggleWindowZoomWithinCurrentDisplay(handle as never);
+
+    handle.outerPosition.mockResolvedValue(new PhysicalPosition(0, 25));
+    handle.outerSize.mockResolvedValue(zoomedOuterSize);
+    handle.innerSize.mockResolvedValue(zoomedInnerSize);
+    vi.clearAllMocks();
+
+    await ensureWindowWithinCurrentDisplay(handle as never, {
+      repairLegacyUnscaledDefault: false,
+    });
+
+    expect(handle.setPosition).not.toHaveBeenCalled();
+    expect(handle.setSize).not.toHaveBeenCalled();
   });
 
   it("restores the previous bounds after a custom zoom", async () => {
@@ -120,6 +143,22 @@ describe("windowZoom", () => {
 
     expect(handle.setPosition).toHaveBeenCalledWith(new PhysicalPosition(120, 113));
     expect(handle.setSize).toHaveBeenCalledWith(new LogicalSize(1200, 700));
+  });
+
+  it("does not resize user-driven oversized windows after runtime resize events", async () => {
+    const handle = windowHandle({
+      position: new PhysicalPosition(0, 25),
+      outerSize: new PhysicalSize(1480, 900),
+      innerSize: new PhysicalSize(1480, 900),
+    });
+
+    await ensureWindowWithinCurrentDisplay(handle as never, {
+      repairLegacyUnscaledDefault: false,
+      repairOutOfBounds: false,
+    });
+
+    expect(handle.setPosition).not.toHaveBeenCalled();
+    expect(handle.setSize).not.toHaveBeenCalled();
   });
 
   it("keeps in-bounds default restore size unchanged on scale 1 displays", async () => {

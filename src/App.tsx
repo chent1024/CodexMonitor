@@ -16,7 +16,6 @@ import "./styles/messages.css";
 import "./styles/approval-toasts.css";
 import "./styles/error-toasts.css";
 import "./styles/request-user-input.css";
-import "./styles/update-toasts.css";
 import "./styles/composer.css";
 import "./styles/review-inline.css";
 import "./styles/diff.css";

@@ -105,7 +105,6 @@ type UseMainAppModalsArgs = {
     appSettings: AppSettings;
     openAppIconById: Record<string, string>;
     queueSaveSettings: (next: AppSettings) => Promise<unknown>;
-    handleToggleAutomaticAppUpdateChecks: () => void;
     doctor: (
       codexBin: string | null,
       codexArgs: string | null,
@@ -172,8 +171,6 @@ function buildSettingsViewProps({
     onUpdateAppSettings: async (next) => {
       await Promise.resolve(settings.queueSaveSettings(next));
     },
-    onToggleAutomaticAppUpdateChecks:
-      settings.handleToggleAutomaticAppUpdateChecks,
     onRunDoctor: settings.doctor,
     onRunCodexUpdate: settings.codexUpdate,
     onUpdateWorkspaceSettings: async (id, nextSettings) => {

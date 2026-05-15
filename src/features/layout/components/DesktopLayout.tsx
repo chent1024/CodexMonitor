@@ -55,7 +55,6 @@ function setLayerInert(
 
 type DesktopLayoutProps = {
   sidebarNode: ReactNode;
-  updateToastNode: ReactNode;
   approvalToastsNode: ReactNode;
   errorToastsNode: ReactNode;
   homeNode: ReactNode;
@@ -82,7 +81,6 @@ type DesktopLayoutProps = {
 
 export function DesktopLayout({
   sidebarNode,
-  updateToastNode,
   approvalToastsNode,
   errorToastsNode,
   homeNode,
@@ -150,7 +148,6 @@ export function DesktopLayout({
       />
 
       <section className="main">
-        {updateToastNode}
         {errorToastsNode}
         {showHome && homeNode}
 

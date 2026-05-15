@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const isTauriMock = vi.hoisted(() => vi.fn());
 const getCurrentWindowMock = vi.hoisted(() => vi.fn());
+const performNativeWindowZoomMock = vi.hoisted(() => vi.fn());
+const isMacPlatformMock = vi.hoisted(() => vi.fn());
 const toggleWindowZoomWithinCurrentDisplayMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -12,6 +14,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: getCurrentWindowMock,
+}));
+
+vi.mock("@services/tauri", () => ({
+  performNativeWindowZoom: performNativeWindowZoomMock,
+}));
+
+vi.mock("@utils/platformPaths", () => ({
+  isMacPlatform: isMacPlatformMock,
 }));
 
 vi.mock("../utils/windowZoom", () => ({
@@ -57,7 +67,9 @@ describe("useWindowDrag", () => {
     vi.clearAllMocks();
     document.body.innerHTML = "";
     isTauriMock.mockReturnValue(true);
+    isMacPlatformMock.mockReturnValue(false);
     getCurrentWindowMock.mockReturnValue({ startDragging });
+    performNativeWindowZoomMock.mockResolvedValue(true);
     toggleWindowZoomWithinCurrentDisplayMock.mockResolvedValue(undefined);
     setViewportWidth(1200);
   });
@@ -400,6 +412,126 @@ describe("useWindowDrag", () => {
     );
 
     expect(startDragging).not.toHaveBeenCalled();
+    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles safe zoom once from a double-click on the workspace title area", () => {
+    const workspaceHeader = document.createElement("div");
+    workspaceHeader.className = "workspace-header";
+    document.body.appendChild(workspaceHeader);
+    setRect(workspaceHeader, { left: 40, top: 0, right: 720, bottom: 44 });
+
+    const title = document.createElement("span");
+    title.textContent = "检查svip10盘内可清";
+    workspaceHeader.appendChild(title);
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    title.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 120,
+        clientY: 20,
+      }),
+    );
+    title.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    title.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 120,
+        clientY: 20,
+        detail: 2,
+      }),
+    );
+    title.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    title.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 120,
+        clientY: 20,
+      }),
+    );
+
+    expect(startDragging).not.toHaveBeenCalled();
+    expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses native macOS zoom once from a double-click on the workspace title area", async () => {
+    isMacPlatformMock.mockReturnValue(true);
+    const workspaceHeader = document.createElement("div");
+    workspaceHeader.className = "workspace-header";
+    document.body.appendChild(workspaceHeader);
+    setRect(workspaceHeader, { left: 40, top: 0, right: 720, bottom: 44 });
+
+    const title = document.createElement("span");
+    title.textContent = "检查svip10盘内可清";
+    workspaceHeader.appendChild(title);
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    title.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 120,
+        clientY: 20,
+      }),
+    );
+    title.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    title.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: 120,
+        clientY: 20,
+        detail: 2,
+      }),
+    );
+    title.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+
+    expect(performNativeWindowZoomMock).not.toHaveBeenCalled();
+    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
+
+    title.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 120,
+        clientY: 20,
+      }),
+    );
+    await Promise.resolve();
+
+    expect(startDragging).not.toHaveBeenCalled();
+    expect(performNativeWindowZoomMock).toHaveBeenCalledTimes(1);
+    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to bounded zoom when native macOS zoom is unavailable", async () => {
+    isMacPlatformMock.mockReturnValue(true);
+    performNativeWindowZoomMock.mockResolvedValue(false);
+    const topbarLeft = document.createElement("div");
+    topbarLeft.className = "main-topbar-left";
+    document.body.appendChild(topbarLeft);
+    setRect(topbarLeft, { left: 0, top: 0, right: 680, bottom: 44 });
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    topbarLeft.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 200,
+        clientY: 20,
+      }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(performNativeWindowZoomMock).toHaveBeenCalledTimes(1);
     expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
   });
 

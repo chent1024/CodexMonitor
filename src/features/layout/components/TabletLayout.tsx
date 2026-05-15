@@ -5,7 +5,6 @@ import { ChatPane } from "./ChatPane";
 type TabletLayoutProps = {
   tabletNavNode: ReactNode;
   approvalToastsNode: ReactNode;
-  updateToastNode: ReactNode;
   errorToastsNode: ReactNode;
   homeNode: ReactNode;
   showHome: boolean;
@@ -25,7 +24,6 @@ type TabletLayoutProps = {
 export function TabletLayout({
   tabletNavNode,
   approvalToastsNode,
-  updateToastNode,
   errorToastsNode,
   homeNode,
   showHome,
@@ -54,7 +52,6 @@ export function TabletLayout({
       />
       <section className="tablet-main">
         {approvalToastsNode}
-        {updateToastNode}
         {errorToastsNode}
         {showHome && homeNode}
         {showWorkspace && (
