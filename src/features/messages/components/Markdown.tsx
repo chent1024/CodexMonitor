@@ -66,10 +66,18 @@ type LinkBlockProps = {
 };
 
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkFileLinks];
+const HOST_CONTROL_DIRECTIVE_PREFIX_SOURCE =
+  String.raw`::(?:git-stage|git-commit|git-push|git-create-branch|git-create-pr|archive|code-comment)`;
 const HOST_CONTROL_DIRECTIVE_SOURCE =
-  String.raw`::(?:git-stage|git-commit|git-push|git-create-branch|git-create-pr|archive|code-comment)\{[^\r\n{}]*\}`;
+  String.raw`${HOST_CONTROL_DIRECTIVE_PREFIX_SOURCE}\{[^\r\n{}]*\}`;
 const TRAILING_HOST_CONTROL_DIRECTIVE_BLOCK_PATTERN = new RegExp(
   String.raw`(?:^|\n)[ \t]*(?:${HOST_CONTROL_DIRECTIVE_SOURCE}[ \t]*)+$`,
+);
+const HOST_CONTROL_DIRECTIVE_LINE_PATTERN = new RegExp(
+  String.raw`^[ \t]*(?:${HOST_CONTROL_DIRECTIVE_SOURCE}[ \t]*)+$`,
+);
+const HOST_CONTROL_DIRECTIVE_STREAMING_LINE_PATTERN = new RegExp(
+  String.raw`^[ \t]*${HOST_CONTROL_DIRECTIVE_PREFIX_SOURCE}(?:\{|$|[^\r\n]*$)`,
 );
 
 function extractLanguageTag(className?: string) {
@@ -214,11 +222,34 @@ function stripTrailingMemoryCitation(value: string) {
 }
 
 function stripHostControlDirectives(value: string) {
-  return value.trimEnd()
+  const stripped = value.trimEnd()
     .replace(TRAILING_HOST_CONTROL_DIRECTIVE_BLOCK_PATTERN, "")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
+  const lines = stripped.split(/\r?\n/);
+  let trailingControlStart = lines.length;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (!line.trim()) {
+      if (trailingControlStart < lines.length) {
+        trailingControlStart = index;
+      }
+      continue;
+    }
+    if (
+      HOST_CONTROL_DIRECTIVE_LINE_PATTERN.test(line) ||
+      HOST_CONTROL_DIRECTIVE_STREAMING_LINE_PATTERN.test(line)
+    ) {
+      trailingControlStart = index;
+      continue;
+    }
+    break;
+  }
+  if (trailingControlStart >= lines.length) {
+    return stripped;
+  }
+  return lines.slice(0, trailingControlStart).join("\n").trimEnd();
 }
 
 function decodeCodeText(value: string) {

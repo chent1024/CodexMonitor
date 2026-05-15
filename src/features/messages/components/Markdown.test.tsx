@@ -499,6 +499,20 @@ describe("Markdown file-like href behavior", () => {
     expect(container.querySelector(".oai-message-file-link")).toBeNull();
   });
 
+  it("hides streaming host control directive tails before they are complete", () => {
+    const { container } = render(
+      <Markdown
+        value={
+          'Done.\n\n::git-stage{cwd=\\"overseas\\"}::git-commit{cwd=\\"overseas\\"}::git-push{cwd=\\"overseas\\" branch=\\"master\\"}::git-'
+        }
+        className="markdown"
+      />,
+    );
+
+    expect(container.textContent).toBe("Done.");
+    expect(container.querySelector(".oai-message-file-link")).toBeNull();
+  });
+
   it("hides host code-comment directives from rendered markdown", () => {
     const { container } = render(
       <Markdown
