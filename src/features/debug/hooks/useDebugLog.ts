@@ -4,6 +4,7 @@ import type { DebugEntry } from "../../../types";
 
 const MAX_DEBUG_ENTRIES = 200;
 const MAX_MERGED_STDERR_LINES = 80;
+const BENIGN_MISSING_PLUGIN_WARNINGS = new Set(["browser-use@openai-bundled"]);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -96,6 +97,46 @@ function mergeConsecutiveCodexStderr(
   };
 }
 
+function isBenignMissingPluginWarningLine(line: string) {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return true;
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    const root = asRecord(parsed);
+    const fields = asRecord(root?.fields);
+    const plugin = typeof fields?.plugin === "string" ? fields.plugin : "";
+    const message = typeof fields?.message === "string" ? fields.message : "";
+    const target = typeof root?.target === "string" ? root.target : "";
+    const level = typeof root?.level === "string" ? root.level.toUpperCase() : "";
+    return (
+      level === "WARN" &&
+      target === "codex_core_plugins::loader" &&
+      message === "failed to load plugin: plugin is not installed" &&
+      BENIGN_MISSING_PLUGIN_WARNINGS.has(plugin)
+    );
+  } catch {
+    return (
+      trimmed.includes("failed to load plugin: plugin is not installed") &&
+      trimmed.includes("browser-use@openai-bundled") &&
+      trimmed.includes("codex_core_plugins::loader")
+    );
+  }
+}
+
+function isBenignCodexStderr(entry: DebugEntry) {
+  if (entry.source !== "stderr" || entry.label !== "codex/stderr") {
+    return false;
+  }
+  const info = getCodexStderrPayloadInfo(entry.payload);
+  if (!info) {
+    return false;
+  }
+  const lines = info.message.split(/\r?\n/).filter((line) => line.trim());
+  return lines.length > 0 && lines.every(isBenignMissingPluginWarningLine);
+}
+
 function summarizePayload(payload: unknown): unknown {
   if (Array.isArray(payload)) {
     return { _type: "array", count: payload.length, sample: payload.slice(0, 5) };
@@ -142,6 +183,9 @@ export function useDebugLog({ enabled = false }: UseDebugLogOptions = {}) {
   }, [enabled]);
 
   const isAlertEntry = useCallback((entry: DebugEntry) => {
+    if (isBenignCodexStderr(entry)) {
+      return false;
+    }
     if (entry.source === "error" || entry.source === "stderr") {
       return true;
     }

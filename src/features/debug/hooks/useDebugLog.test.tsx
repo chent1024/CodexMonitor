@@ -14,6 +14,19 @@ function stderrEvent(message: string, workspaceId = "workspace-1") {
   };
 }
 
+function missingBrowserUsePluginWarning() {
+  return JSON.stringify({
+    timestamp: "2026-05-15T11:30:26.435004Z",
+    level: "WARN",
+    fields: {
+      message: "failed to load plugin: plugin is not installed",
+      plugin: "browser-use@openai-bundled",
+      path: "/Users/xihe0000/.codex/plugins/cache/openai-bundled/browser-use",
+    },
+    target: "codex_core_plugins::loader",
+  });
+}
+
 describe("useDebugLog", () => {
   it("hides the debug button before alerts when debug logging is disabled", () => {
     const { result } = renderHook(() => useDebugLog());
@@ -57,6 +70,48 @@ describe("useDebugLog", () => {
     });
 
     expect(result.current.showDebugButton).toBe(true);
+    expect(result.current.debugEntries).toHaveLength(1);
+  });
+
+  it("does not surface known missing browser-use plugin warnings while disabled", () => {
+    const { result } = renderHook(() => useDebugLog());
+
+    act(() => {
+      result.current.addDebugEntry({
+        id: "stderr-benign-plugin",
+        timestamp: 1000,
+        source: "stderr",
+        label: "codex/stderr",
+        payload: stderrEvent(
+          `${missingBrowserUsePluginWarning()}\n${missingBrowserUsePluginWarning()}`,
+        ),
+      });
+    });
+
+    expect(result.current.showDebugButton).toBe(false);
+    expect(result.current.hasDebugAlerts).toBe(false);
+    expect(result.current.debugEntries).toHaveLength(0);
+  });
+
+  it("still records known missing browser-use plugin warnings when debug is open", () => {
+    const { result } = renderHook(() => useDebugLog({ enabled: true }));
+
+    act(() => {
+      result.current.setDebugOpen(true);
+    });
+
+    act(() => {
+      result.current.addDebugEntry({
+        id: "stderr-benign-plugin",
+        timestamp: 1000,
+        source: "stderr",
+        label: "codex/stderr",
+        payload: stderrEvent(missingBrowserUsePluginWarning()),
+      });
+    });
+
+    expect(result.current.showDebugButton).toBe(true);
+    expect(result.current.hasDebugAlerts).toBe(false);
     expect(result.current.debugEntries).toHaveLength(1);
   });
 

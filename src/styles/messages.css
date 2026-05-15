@@ -287,6 +287,7 @@
 .oai-assistant-markdown-content {
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -3166,6 +3167,9 @@
 }
 
 .messages .markdown :not(pre) > code {
+  display: inline;
+  min-width: 0;
+  max-width: 100%;
   color: var(--codex-foreground);
   background: var(--codex-inline-code-surface);
   border: none;
@@ -3174,14 +3178,18 @@
   line-height: inherit;
   overflow-wrap: anywhere;
   word-break: break-word;
+  line-break: anywhere;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
 
 .messages .markdown,
 .messages .markdown :where(p, li, blockquote, h1, h2, h3, h4, h5, h6, td, th) {
+  min-width: 0;
+  max-width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
+  line-break: anywhere;
 }
 
 .messages .markdown .oai-message-file-link {

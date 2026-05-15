@@ -228,6 +228,31 @@ describe("Messages", () => {
     );
   });
 
+  it("virtualizes conversation turns before long transcripts mount all history", () => {
+    const items: ConversationItem[] = Array.from({ length: 13 }, (_, index) => ({
+      id: `user-${index}`,
+      kind: "message",
+      role: "user",
+      text: `Prompt ${index}`,
+    }));
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector("[data-turn-virtualizer]")).toBeTruthy();
+    expect(container.querySelectorAll("[data-turn-key]").length).toBeLessThan(
+      items.length,
+    );
+  });
+
   it("renders empty user messages with the OpenAI no-content fallback", () => {
     const items: ConversationItem[] = [
       {

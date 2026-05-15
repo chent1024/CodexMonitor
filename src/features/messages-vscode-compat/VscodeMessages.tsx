@@ -186,9 +186,10 @@ function useWorkingElapsedMs(isWorking: boolean, startedAtMs?: number | null) {
   return Math.max(nowMs - startedAtMs, 0);
 }
 
-const TURN_VIRTUALIZATION_THRESHOLD = 40;
+const TURN_VIRTUALIZATION_THRESHOLD = 12;
 const TURN_VIRTUALIZATION_ESTIMATED_SIZE = 240;
 const TURN_VIRTUALIZATION_GAP = 8;
+const TURN_VIRTUALIZATION_OVERSCAN = 2;
 
 type VscodeConversationTurn = ReturnType<
   typeof buildVscodeViewModelFromEntries
@@ -212,7 +213,7 @@ const VirtualizedConversationTurns = memo(function VirtualizedConversationTurns(
     getItemKey: (index) => turns[index]?.id ?? index,
     gap: TURN_VIRTUALIZATION_GAP,
     initialRect: { width: 1, height: 800 },
-    overscan: 4,
+    overscan: TURN_VIRTUALIZATION_OVERSCAN,
   });
   const virtualTurnRows = turnVirtualizer.getVirtualItems();
 

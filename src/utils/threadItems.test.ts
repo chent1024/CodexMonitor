@@ -432,6 +432,38 @@ describe("threadItems", () => {
     }
   });
 
+  it("keeps command execution output tighter than file change output", () => {
+    const output = "x".repeat(50000);
+    const commandItem: ConversationItem = {
+      id: "tool-command",
+      kind: "tool",
+      toolType: "commandExecution",
+      title: "Command",
+      detail: "",
+      output,
+    };
+    const fileChangeItem: ConversationItem = {
+      id: "tool-file",
+      kind: "tool",
+      toolType: "fileChange",
+      title: "File changes",
+      detail: "",
+      output,
+    };
+
+    const normalizedCommand = normalizeItem(commandItem);
+    const normalizedFileChange = normalizeItem(fileChangeItem);
+
+    expect(normalizedCommand.kind).toBe("tool");
+    expect(normalizedFileChange.kind).toBe("tool");
+    if (normalizedCommand.kind === "tool" && normalizedFileChange.kind === "tool") {
+      expect(normalizedCommand.output).not.toBe(output);
+      expect(normalizedCommand.output?.endsWith("...")).toBe(true);
+      expect(normalizedCommand.output?.length).toBe(40000);
+      expect(normalizedFileChange.output).toBe(output);
+    }
+  });
+
   it("truncates older tool output in prepareThreadItems", () => {
     const output = "y".repeat(21000);
     const items: ConversationItem[] = Array.from(

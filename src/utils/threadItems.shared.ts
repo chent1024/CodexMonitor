@@ -10,8 +10,8 @@ export type ExploreEntry =
 export type ExploreItem = Extract<ConversationItem, { kind: "explore" }>;
 
 const MAX_ITEM_TEXT = 12000;
-const MAX_LARGE_TOOL_TEXT = 80000;
-const LARGE_TOOL_TYPES = new Set(["fileChange", "commandExecution"]);
+const MAX_FILE_CHANGE_TEXT = 80000;
+const MAX_COMMAND_EXECUTION_TEXT = 40000;
 
 export const DEFAULT_MAX_ITEMS_PER_THREAD = CHAT_SCROLLBACK_DEFAULT;
 export const TOOL_OUTPUT_RECENT_ITEMS = 12;
@@ -40,9 +40,12 @@ export function truncateText(text: string, maxLength = MAX_ITEM_TEXT) {
 }
 
 export function truncateToolText(toolType: string, text: string) {
-  const maxLength = LARGE_TOOL_TYPES.has(toolType)
-    ? MAX_LARGE_TOOL_TEXT
-    : MAX_ITEM_TEXT;
+  const maxLength =
+    toolType === "fileChange"
+      ? MAX_FILE_CHANGE_TEXT
+      : toolType === "commandExecution"
+        ? MAX_COMMAND_EXECUTION_TEXT
+        : MAX_ITEM_TEXT;
   return truncateText(text, maxLength);
 }
 
