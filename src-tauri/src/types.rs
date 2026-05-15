@@ -431,6 +431,8 @@ pub(crate) struct AppSettings {
         rename = "restartSafeSessions"
     )]
     pub(crate) restart_safe_sessions: bool,
+    #[serde(default, rename = "debugLoggingEnabled")]
+    pub(crate) debug_logging_enabled: bool,
     #[serde(default = "default_access_mode", rename = "defaultAccessMode")]
     pub(crate) default_access_mode: String,
     #[serde(
@@ -1153,6 +1155,7 @@ impl Default for AppSettings {
             active_remote_backend_id: None,
             keep_daemon_running_after_app_close: false,
             restart_safe_sessions: true,
+            debug_logging_enabled: false,
             default_access_mode: "current".to_string(),
             review_delivery_mode: default_review_delivery_mode(),
             composer_model_shortcut: default_composer_model_shortcut(),
@@ -1250,6 +1253,7 @@ mod tests {
         assert!(settings.remote_backends.is_empty());
         assert!(settings.active_remote_backend_id.is_none());
         assert!(!settings.keep_daemon_running_after_app_close);
+        assert!(!settings.debug_logging_enabled);
         assert_eq!(settings.default_access_mode, "current");
         assert_eq!(settings.review_delivery_mode, "inline");
         let expected_primary = if cfg!(target_os = "macos") {

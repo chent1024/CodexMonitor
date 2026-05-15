@@ -6,7 +6,9 @@ export function useAppBootstrap() {
   const appSettingsState = useAppSettingsController();
   useCodeCssVars(appSettingsState.appSettings);
 
-  const debugState = useDebugLog();
+  const debugState = useDebugLog({
+    enabled: appSettingsState.appSettings.debugLoggingEnabled,
+  });
 
   return {
     ...appSettingsState,

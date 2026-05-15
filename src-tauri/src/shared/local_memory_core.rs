@@ -161,6 +161,8 @@ pub(crate) struct SearchMemoryInput {
     pub(crate) limit: Option<u32>,
     #[serde(default)]
     pub(crate) filters: MemoryFilters,
+    #[serde(default, alias = "skip_access_log")]
+    pub(crate) skip_access_log: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -594,7 +596,9 @@ impl LocalMemoryStore {
                     reason: "recent".to_string(),
                 })
                 .collect::<Vec<_>>();
-            self.log_search_accesses("", &input.filters, &results);
+            if !input.skip_access_log {
+                self.log_search_accesses("", &input.filters, &results);
+            }
             return Ok(results);
         }
 
@@ -687,9 +691,36 @@ impl LocalMemoryStore {
                 params![now, item.memory.id],
             );
         }
-        self.log_search_accesses(query, &input.filters, &results);
+        if !input.skip_access_log {
+            self.log_search_accesses(query, &input.filters, &results);
+        }
 
         Ok(results)
+    }
+
+    pub(crate) fn active_memory_count(&self) -> Result<u64, String> {
+        count_active_memories(&self.conn)
+    }
+
+    pub(crate) fn log_search_context_access(
+        &self,
+        query: &str,
+        result_count: u64,
+        thread_id: Option<&str>,
+    ) {
+        let filters = MemoryFilters {
+            thread_id: thread_id.map(str::to_string),
+            ..MemoryFilters::default()
+        };
+        self.log_access(
+            "search_context",
+            None,
+            Some(query),
+            Some(result_count),
+            None,
+            Some(&filters),
+            None,
+        );
     }
 
     pub(crate) fn update_memory(
@@ -2139,6 +2170,7 @@ mod tests {
                     workspace_id: Some("ws-1".to_string()),
                     ..MemoryFilters::default()
                 },
+                skip_access_log: false,
             })
             .expect("search");
         assert_eq!(results.len(), 1);
@@ -2225,6 +2257,7 @@ mod tests {
                     workspace_id: Some("ws-1".to_string()),
                     ..MemoryFilters::default()
                 },
+                skip_access_log: false,
             })
             .expect("search");
 
@@ -2256,6 +2289,7 @@ mod tests {
                 query: "默认用中文回答".to_string(),
                 limit: Some(5),
                 filters: MemoryFilters::default(),
+                skip_access_log: false,
             })
             .expect("search chinese memory");
         assert_eq!(matches.len(), 1);
@@ -2266,6 +2300,7 @@ mod tests {
                 query: "unrelated database schema migration".to_string(),
                 limit: Some(5),
                 filters: MemoryFilters::default(),
+                skip_access_log: false,
             })
             .expect("search unrelated memory");
         assert!(unrelated.is_empty());
@@ -2294,6 +2329,7 @@ mod tests {
                 query: "kubernetes ingress certificate rotation".to_string(),
                 limit: Some(5),
                 filters: MemoryFilters::default(),
+                skip_access_log: false,
             })
             .expect("search unrelated memory");
         assert!(unrelated.is_empty());
@@ -2359,6 +2395,7 @@ mod tests {
                 ..AddMemoryInput::default()
             })
             .expect("add pending memory");
+        assert_eq!(store.active_memory_count().expect("active count"), 0);
 
         assert!(store
             .list_memories(ListMemoryInput {
@@ -2372,6 +2409,7 @@ mod tests {
                 query: "captured fact".to_string(),
                 limit: Some(10),
                 filters: MemoryFilters::default(),
+                skip_access_log: false,
             })
             .expect("search")
             .is_empty());
@@ -2399,12 +2437,14 @@ mod tests {
         assert!(approved
             .categories
             .contains(&APPROVED_REVIEW_CATEGORY.to_string()));
+        assert_eq!(store.active_memory_count().expect("active count"), 1);
 
         let results = store
             .search_memories(SearchMemoryInput {
                 query: "captured fact".to_string(),
                 limit: Some(10),
                 filters: MemoryFilters::default(),
+                skip_access_log: false,
             })
             .expect("search approved");
         assert_eq!(results.len(), 1);
@@ -2516,6 +2556,7 @@ mod tests {
                 query: "terminal setup".to_string(),
                 limit: Some(10),
                 filters: MemoryFilters::default(),
+                skip_access_log: false,
             })
             .expect("search")
             .is_empty());

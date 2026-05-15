@@ -52,6 +52,20 @@ type DaemonIndicatorState = {
   details: string[];
 };
 
+const DAEMON_INDICATOR_REFRESH_INTERVAL_MS = 60_000;
+
+function daemonIndicatorStateEqual(
+  a: DaemonIndicatorState,
+  b: DaemonIndicatorState,
+) {
+  return (
+    a.tone === b.tone &&
+    a.title === b.title &&
+    a.details.length === b.details.length &&
+    a.details.every((detail, index) => detail === b.details[index])
+  );
+}
+
 function restartSafeCount(
   status: RestartSafeDebugStatus,
   field: keyof RestartSafeDebugStatus,
@@ -247,7 +261,7 @@ function useDaemonIndicatorState(): [DaemonIndicatorState, () => void] {
           (!healthStatus.connected ||
             healthStatus.warnings.length > 0 ||
             !healthStatus.terminalRpcSupported);
-        setState({
+        const nextState: DaemonIndicatorState = {
           tone:
             daemonStatus.state === "running"
               ? restartSafeError || hasHealthWarning
@@ -263,17 +277,23 @@ function useDaemonIndicatorState(): [DaemonIndicatorState, () => void] {
             restartSafeError,
             healthStatus,
           ),
-        });
+        };
+        setState((previous) =>
+          daemonIndicatorStateEqual(previous, nextState) ? previous : nextState,
+        );
       } catch (error) {
         if (cancelled) {
           return;
         }
         const message = error instanceof Error ? error.message : String(error);
-        setState({
+        const nextState: DaemonIndicatorState = {
           tone: "error",
           title: "Daemon 状态读取失败",
           details: [message],
-        });
+        };
+        setState((previous) =>
+          daemonIndicatorStateEqual(previous, nextState) ? previous : nextState,
+        );
       }
     })();
     return () => {
@@ -289,7 +309,7 @@ function useDaemonIndicatorState(): [DaemonIndicatorState, () => void] {
     const interval = window.setInterval(() => {
       cancelRefresh();
       cancelRefresh = refresh();
-    }, 15000);
+    }, DAEMON_INDICATOR_REFRESH_INTERVAL_MS);
     const handleFocus = () => {
       cancelRefresh();
       cancelRefresh = refresh();

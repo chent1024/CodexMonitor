@@ -15,14 +15,53 @@ function stderrEvent(message: string, workspaceId = "workspace-1") {
 }
 
 describe("useDebugLog", () => {
-  it("keeps the debug button available before alerts are recorded", () => {
+  it("hides the debug button before alerts when debug logging is disabled", () => {
     const { result } = renderHook(() => useDebugLog());
+
+    expect(result.current.showDebugButton).toBe(false);
+  });
+
+  it("keeps the debug button available when debug logging is enabled", () => {
+    const { result } = renderHook(() => useDebugLog({ enabled: true }));
 
     expect(result.current.showDebugButton).toBe(true);
   });
 
-  it("merges consecutive Codex stderr events from the same workspace", () => {
+  it("drops non-alert entries while disabled", () => {
     const { result } = renderHook(() => useDebugLog());
+
+    act(() => {
+      result.current.addDebugEntry({
+        id: "event-1",
+        timestamp: 1000,
+        source: "event",
+        label: "normal event",
+        payload: { ok: true },
+      });
+    });
+
+    expect(result.current.debugEntries).toHaveLength(0);
+  });
+
+  it("still records alert entries while disabled", () => {
+    const { result } = renderHook(() => useDebugLog());
+
+    act(() => {
+      result.current.addDebugEntry({
+        id: "error-1",
+        timestamp: 1000,
+        source: "error",
+        label: "client warning",
+        payload: "boom",
+      });
+    });
+
+    expect(result.current.showDebugButton).toBe(true);
+    expect(result.current.debugEntries).toHaveLength(1);
+  });
+
+  it("merges consecutive Codex stderr events from the same workspace", () => {
+    const { result } = renderHook(() => useDebugLog({ enabled: true }));
 
     act(() => {
       result.current.addDebugEntry({
@@ -50,7 +89,7 @@ describe("useDebugLog", () => {
   });
 
   it("keeps stderr events separate across workspaces", () => {
-    const { result } = renderHook(() => useDebugLog());
+    const { result } = renderHook(() => useDebugLog({ enabled: true }));
 
     act(() => {
       result.current.addDebugEntry({
@@ -73,7 +112,7 @@ describe("useDebugLog", () => {
   });
 
   it("bumps reset version when debug entries are cleared", () => {
-    const { result } = renderHook(() => useDebugLog());
+    const { result } = renderHook(() => useDebugLog({ enabled: true }));
 
     act(() => {
       result.current.addDebugEntry({

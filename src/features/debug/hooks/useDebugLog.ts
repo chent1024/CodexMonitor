@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DebugFilter } from "../components/DebugPanel";
 import type { DebugEntry } from "../../../types";
 
@@ -115,14 +115,31 @@ function summarizePayload(payload: unknown): unknown {
   return payload;
 }
 
-export function useDebugLog() {
+type UseDebugLogOptions = {
+  enabled?: boolean;
+};
+
+export function useDebugLog({ enabled = false }: UseDebugLogOptions = {}) {
   const [debugOpen, setDebugOpenState] = useState(false);
   const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([]);
   const [hasDebugAlerts, setHasDebugAlerts] = useState(false);
   const [debugResetVersion, setDebugResetVersion] = useState(0);
   const [debugFilter, setDebugFilter] = useState<DebugFilter>("all");
   const debugOpenRef = useRef(debugOpen);
+  const enabledRef = useRef(enabled);
   debugOpenRef.current = debugOpen;
+  enabledRef.current = enabled;
+
+  useEffect(() => {
+    if (enabled) {
+      return;
+    }
+    setDebugOpenState(false);
+    setDebugEntries([]);
+    setHasDebugAlerts(false);
+    setDebugFilter("all");
+    setDebugResetVersion((version) => version + 1);
+  }, [enabled]);
 
   const isAlertEntry = useCallback((entry: DebugEntry) => {
     if (entry.source === "error" || entry.source === "stderr") {
@@ -142,6 +159,9 @@ export function useDebugLog() {
   const addDebugEntry = useCallback(
     (entry: DebugEntry) => {
       const isAlert = isAlertEntry(entry);
+      if (!enabledRef.current && !isAlert) {
+        return;
+      }
       if (!debugOpenRef.current && !isAlert) {
         return;
       }
@@ -190,15 +210,20 @@ export function useDebugLog() {
   const setDebugOpen = useCallback(
     (next: boolean | ((prev: boolean) => boolean)) => {
       setDebugOpenState((prev) => {
-        return typeof next === "function" ? next(prev) : next;
+        const resolved = typeof next === "function" ? next(prev) : next;
+        if (resolved && !enabledRef.current && !hasDebugAlerts) {
+          return false;
+        }
+        return resolved;
       });
     },
-    [],
+    [hasDebugAlerts],
   );
 
-  const showDebugButton = true;
+  const showDebugButton = enabled || hasDebugAlerts;
 
   return {
+    debugLoggingEnabled: enabled,
     debugOpen,
     setDebugOpen,
     debugEntries,

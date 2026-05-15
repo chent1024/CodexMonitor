@@ -559,7 +559,8 @@ impl RestartSafeSessionStore {
         let active_session_count = records
             .values()
             .filter(|record| {
-                matches!(record.status.lifecycle, RestartSafeSessionLifecycle::Live)
+                (matches!(record.status.lifecycle, RestartSafeSessionLifecycle::Live)
+                    && record.status.active_turn_id.is_some())
                     || !record.pending_requests.is_empty()
             })
             .count();
@@ -585,7 +586,6 @@ impl RestartSafeSessionStore {
             pending_request_count,
             attached_client_count,
             idle_shutdown_allowed: active_session_count == 0
-                && retained_session_count == 0
                 && pending_request_count == 0
                 && attached_client_count == 0,
         }
@@ -883,10 +883,10 @@ mod tests {
 
         store.record_lifecycle_event("ws-1", "session/start", json!({}));
         let active = store.debug_status();
-        assert_eq!(active.active_session_count, 1);
+        assert_eq!(active.active_session_count, 0);
         assert_eq!(active.processing_session_count, 0);
         assert_eq!(active.retained_session_count, 1);
-        assert!(!active.idle_shutdown_allowed);
+        assert!(active.idle_shutdown_allowed);
     }
 
     #[test]
@@ -903,7 +903,7 @@ mod tests {
 
         let debug = store.debug_status();
 
-        assert_eq!(debug.active_session_count, 2);
+        assert_eq!(debug.active_session_count, 1);
         assert_eq!(debug.processing_session_count, 1);
 
         store.record_app_server_event(
@@ -916,7 +916,7 @@ mod tests {
 
         let completed = store.debug_status();
 
-        assert_eq!(completed.active_session_count, 1);
+        assert_eq!(completed.active_session_count, 0);
         assert_eq!(completed.processing_session_count, 0);
     }
 

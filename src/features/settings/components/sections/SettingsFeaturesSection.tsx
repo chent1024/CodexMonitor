@@ -201,6 +201,20 @@ export function SettingsFeaturesSection({
       </SettingsToggleRow>
       {openConfigError && <div className="settings-help">{openConfigError}</div>}
       <SettingsToggleRow
+        title="Debug 日志"
+        subtitle="打开后收集调试面板事件和诊断快照；关闭时只保留错误和警告。"
+      >
+        <SettingsToggleSwitch
+          pressed={appSettings.debugLoggingEnabled}
+          onClick={() =>
+            void onUpdateAppSettings({
+              ...appSettings,
+              debugLoggingEnabled: !appSettings.debugLoggingEnabled,
+            })
+          }
+        />
+      </SettingsToggleRow>
+      <SettingsToggleRow
         title="本地记忆"
         subtitle={
           <>

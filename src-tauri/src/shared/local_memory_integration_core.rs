@@ -65,6 +65,12 @@ pub(crate) fn prepare_user_turn(
             retrieved_count: 0,
         };
     };
+    if store.active_memory_count().unwrap_or(0) == 0 {
+        return LocalMemoryTurnContext {
+            text,
+            retrieved_count: 0,
+        };
+    }
 
     let memories =
         retrieve_relevant_memories(&store, &text, workspace_id, workspace_path, thread_id);
@@ -320,6 +326,7 @@ fn retrieve_relevant_memories(
             query: query.to_string(),
             limit: Some(4),
             filters,
+            skip_access_log: true,
         }) else {
             continue;
         };
@@ -337,6 +344,7 @@ fn retrieve_relevant_memories(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     results.truncate(MAX_MEMORY_RESULTS);
+    store.log_search_context_access(query, results.len() as u64, Some(thread_id));
     results
 }
 
@@ -766,6 +774,53 @@ mod tests {
 
         assert!(block.contains("Local memory context"));
         assert!(block.contains("npm.ps1"));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn scoped_retrieval_logs_one_summary_access() {
+        let path = std::env::temp_dir().join(format!(
+            "codex-monitor-memory-integration-access-test-{}.sqlite",
+            Uuid::new_v4()
+        ));
+        let store = LocalMemoryStore::open(&path).expect("open store");
+        store
+            .add_memory(AddMemoryInput {
+                content: "Use npm.cmd rather than npm.ps1 in this PowerShell environment."
+                    .to_string(),
+                scope: Some("workspace".to_string()),
+                kind: Some("tooling_setup".to_string()),
+                metadata: json!({}),
+                categories: vec!["startup".to_string()],
+                filters: MemoryFilters {
+                    workspace_id: Some("ws".to_string()),
+                    workspace_path: Some("G:\\code\\codex-app".to_string()),
+                    ..MemoryFilters::default()
+                },
+                ..AddMemoryInput::default()
+            })
+            .expect("add memory");
+
+        let results = retrieve_relevant_memories(
+            &store,
+            "why does npm fail in powershell",
+            "ws",
+            "G:\\code\\codex-app",
+            "thread-1",
+        );
+        assert_eq!(results.len(), 1);
+
+        let debug = store.debug_status().expect("debug");
+        let query_accesses = debug
+            .recent_accesses
+            .iter()
+            .filter(|entry| entry.query.as_deref() == Some("why does npm fail in powershell"))
+            .collect::<Vec<_>>();
+        assert_eq!(query_accesses.len(), 1);
+        assert_eq!(query_accesses[0].event, "search_context");
+        assert_eq!(query_accesses[0].result_count, Some(1));
+        assert_eq!(query_accesses[0].thread_id.as_deref(), Some("thread-1"));
 
         let _ = std::fs::remove_file(path);
     }

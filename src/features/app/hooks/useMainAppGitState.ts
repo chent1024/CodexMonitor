@@ -25,6 +25,7 @@ type UseMainAppGitStateOptions = {
   tabletTab: "codex" | "git" | "log";
   isCompact: boolean;
   isTablet: boolean;
+  rightPanelCollapsed: boolean;
   setActiveTab: (tab: "home" | "projects" | "codex" | "git" | "log") => void;
   appSettings: {
     preloadGitDiffs: boolean;
@@ -195,6 +196,7 @@ export function useMainAppGitState({
   tabletTab,
   isCompact,
   isTablet,
+  rightPanelCollapsed,
   setActiveTab,
   appSettings,
   addDebugEntry,
@@ -299,6 +301,7 @@ export function useMainAppGitState({
     splitChatDiffView: appSettings.splitChatDiffView,
     isCompact,
     isTablet,
+    rightPanelCollapsed,
     activeTab,
     tabletTab,
     setActiveTab,

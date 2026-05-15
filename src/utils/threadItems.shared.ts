@@ -9,12 +9,12 @@ export type ExploreEntry =
   Extract<ConversationItem, { kind: "explore" }>["entries"][number];
 export type ExploreItem = Extract<ConversationItem, { kind: "explore" }>;
 
-const MAX_ITEM_TEXT = 20000;
-const MAX_LARGE_TOOL_TEXT = 200000;
+const MAX_ITEM_TEXT = 12000;
+const MAX_LARGE_TOOL_TEXT = 80000;
 const LARGE_TOOL_TYPES = new Set(["fileChange", "commandExecution"]);
 
 export const DEFAULT_MAX_ITEMS_PER_THREAD = CHAT_SCROLLBACK_DEFAULT;
-export const TOOL_OUTPUT_RECENT_ITEMS = 40;
+export const TOOL_OUTPUT_RECENT_ITEMS = 12;
 
 export function asString(value: unknown) {
   return typeof value === "string" ? value : value ? String(value) : "";

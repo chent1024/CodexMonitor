@@ -42,6 +42,7 @@ function makeProps(overrides?: Partial<Parameters<typeof useGitPanelController>[
     splitChatDiffView: false,
     isCompact: false,
     isTablet: false,
+    rightPanelCollapsed: false,
     activeTab: "codex" as const,
     tabletTab: "codex" as const,
     setActiveTab: vi.fn(),
@@ -103,6 +104,56 @@ describe("useGitPanelController preload behavior", () => {
     const { result } = renderHook(() => useGitPanelController(makeProps()));
 
     expect(result.current.filePanelMode).toBe("files");
+  });
+
+  it("polls git status while the desktop file or git panel is visible", () => {
+    renderHook(() => useGitPanelController(makeProps()));
+
+    expect(useGitStatusMock).toHaveBeenLastCalledWith(workspace, true);
+  });
+
+  it("pauses git status polling when the desktop right panel is collapsed", () => {
+    renderHook(() =>
+      useGitPanelController(makeProps({ rightPanelCollapsed: true })),
+    );
+
+    expect(useGitStatusMock).toHaveBeenLastCalledWith(workspace, false);
+  });
+
+  it("pauses git status polling on compact layout outside the git tab", () => {
+    renderHook(() =>
+      useGitPanelController(
+        makeProps({
+          isCompact: true,
+          activeTab: "codex",
+        }),
+      ),
+    );
+
+    expect(useGitStatusMock).toHaveBeenLastCalledWith(workspace, false);
+  });
+
+  it("resumes git status polling on compact layout when the git tab is visible", () => {
+    renderHook(() =>
+      useGitPanelController(
+        makeProps({
+          isCompact: true,
+          activeTab: "git",
+        }),
+      ),
+    );
+
+    expect(useGitStatusMock).toHaveBeenLastCalledWith(workspace, true);
+  });
+
+  it("pauses git status polling while the prompts panel is visible", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.setFilePanelMode("prompts");
+    });
+
+    expect(useGitStatusMock).toHaveBeenLastCalledWith(workspace, false);
   });
 
   it("does not preload diffs when disabled and panel is hidden", () => {

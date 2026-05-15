@@ -22,6 +22,7 @@ export function useGitPanelController({
   splitChatDiffView,
   isCompact,
   isTablet,
+  rightPanelCollapsed,
   activeTab,
   tabletTab,
   setActiveTab,
@@ -36,6 +37,7 @@ export function useGitPanelController({
   splitChatDiffView: boolean;
   isCompact: boolean;
   isTablet: boolean;
+  rightPanelCollapsed: boolean;
   activeTab: "home" | "projects" | "codex" | "git" | "log";
   tabletTab: "codex" | "git" | "log";
   setActiveTab: (tab: "home" | "projects" | "codex" | "git" | "log") => void;
@@ -60,9 +62,16 @@ export function useGitPanelController({
     null,
   );
   const [diffSource, setDiffSource] = useState<GitDiffSource>("local");
+  const compactTab = isTablet ? tabletTab : activeTab;
+  const gitSurfaceVisible = isCompact
+    ? compactTab === "git"
+    : !rightPanelCollapsed;
+  const shouldPollGitStatus =
+    Boolean(activeWorkspace) && gitSurfaceVisible && filePanelMode !== "prompts";
 
   const { status: gitStatus, refresh: refreshGitStatus } = useGitStatus(
     activeWorkspace,
+    shouldPollGitStatus,
   );
   const gitStatusRefreshTimeoutRef = useRef<number | null>(null);
   const activeWorkspaceIdRef = useRef<string | null>(activeWorkspace?.id ?? null);
@@ -102,7 +111,6 @@ export function useGitPanelController({
   }, [refreshGitStatus]);
 
   const preloadedWorkspaceIdsRef = useRef<Set<string>>(new Set());
-  const compactTab = isTablet ? tabletTab : activeTab;
   const diffUiVisible =
     centerMode === "diff" ||
     (isCompact ? compactTab === "git" : gitPanelMode === "diff");

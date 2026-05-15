@@ -107,6 +107,7 @@ export default function MainApp() {
     debugResetVersion,
     debugFilter,
     setDebugFilter,
+    debugLoggingEnabled,
     showDebugButton,
     addDebugEntry,
     handleCopyDebug,
@@ -172,12 +173,17 @@ export default function MainApp() {
     }
   }, [addDebugEntry, appSettings.restartSafeSessions]);
   useEffect(() => {
-    if (debugOpen && !previousDebugOpenRef.current) {
+    if (debugLoggingEnabled && debugOpen && !previousDebugOpenRef.current) {
       void refreshLocalMemoryDebug();
       void refreshRestartSafeSessionDebug();
     }
     previousDebugOpenRef.current = debugOpen;
-  }, [debugOpen, refreshLocalMemoryDebug, refreshRestartSafeSessionDebug]);
+  }, [
+    debugLoggingEnabled,
+    debugOpen,
+    refreshLocalMemoryDebug,
+    refreshRestartSafeSessionDebug,
+  ]);
   const {
     workspaces,
     workspaceGroups,
@@ -624,6 +630,7 @@ export default function MainApp() {
     tabletTab,
     isCompact,
     isTablet,
+    rightPanelCollapsed,
     setActiveTab,
     appSettings: {
       preloadGitDiffs: appSettings.preloadGitDiffs,

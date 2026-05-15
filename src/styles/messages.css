@@ -130,6 +130,7 @@
   gap: 8px;
   width: 100%;
   min-width: 0;
+  contain: layout style;
 }
 
 .messages [data-turn-orphan="true"] {
@@ -152,6 +153,12 @@
   gap: 8px;
   width: 100%;
   min-width: 0;
+}
+
+.oai-assistant-turn {
+  content-visibility: auto;
+  contain: layout style;
+  contain-intrinsic-size: auto 420px;
 }
 
 .oai-user-message-group {
@@ -917,32 +924,28 @@
 .oai-message-copy-icon svg {
   position: absolute;
   inset: 0;
-  transition: opacity 160ms ease, transform 160ms ease, filter 160ms ease;
+  transition: opacity 160ms ease, transform 160ms ease;
 }
 
 .oai-message-copy-icon-copy {
   opacity: 1;
   transform: scale(1);
-  filter: blur(0);
 }
 
 .oai-message-copy-icon-check {
   opacity: 0;
   transform: scale(0.82);
-  filter: blur(2px);
   transition-delay: 60ms;
 }
 
 .oai-message-copy-button.is-copied .oai-message-copy-icon-copy {
   opacity: 0;
   transform: scale(0.82);
-  filter: blur(2px);
 }
 
 .oai-message-copy-button.is-copied .oai-message-copy-icon-check {
   opacity: 1;
   transform: scale(1);
-  filter: blur(0);
 }
 
 .oai-message-image-grid {
@@ -2702,12 +2705,8 @@
   min-height: 32px;
 }
 
-.oai-tool-activity-stack:has([data-mcp-app-expanded="true"]),
-.oai-tool-activity-stack:has([data-mcp-app-frame="true"]),
-.oai-tool-activity-body:has([data-mcp-app-expanded="true"]),
-.oai-tool-activity-body:has([data-mcp-app-frame="true"]),
-.oai-activity-detail:has([data-mcp-app-expanded="true"]),
-.oai-activity-detail:has([data-mcp-app-frame="true"]) {
+.oai-mcp-app[data-mcp-app-expanded="true"],
+.oai-mcp-app-frame {
   content-visibility: visible;
 }
 

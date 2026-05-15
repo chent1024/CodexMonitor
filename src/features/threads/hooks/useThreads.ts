@@ -727,9 +727,7 @@ export function useThreads({
             continue;
           }
           const shouldAttach =
-            session.workspaceId === activeWorkspaceId ||
-            session.lifecycle === "live" ||
-            session.pendingRequestCount > 0;
+            Boolean(session.activeTurnId) || session.pendingRequestCount > 0;
           if (!shouldAttach) {
             continue;
           }

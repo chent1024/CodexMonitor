@@ -11,6 +11,7 @@ import {
   prepareThreadItems,
   upsertItem,
 } from "./threadItems";
+import { TOOL_OUTPUT_RECENT_ITEMS } from "./threadItems.shared";
 
 describe("threadItems", () => {
   it("hydrates raw response function calls into command activity items", () => {
@@ -265,20 +266,25 @@ describe("threadItems", () => {
 
   it("truncates older tool output in prepareThreadItems", () => {
     const output = "y".repeat(21000);
-    const items: ConversationItem[] = Array.from({ length: 41 }, (_, index) => ({
-      id: `tool-${index}`,
-      kind: "tool",
-      toolType: "commandExecution",
-      title: "Tool",
-      detail: "",
-      output,
-    }));
+    const items: ConversationItem[] = Array.from(
+      { length: TOOL_OUTPUT_RECENT_ITEMS + 1 },
+      (_, index) => ({
+        id: `tool-${index}`,
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Tool",
+        detail: "",
+        output,
+      }),
+    );
     const prepared = prepareThreadItems(items);
     const firstOutput = prepared[0].kind === "tool" ? prepared[0].output : undefined;
-    const secondOutput = prepared[1].kind === "tool" ? prepared[1].output : undefined;
+    const recentItem = prepared[prepared.length - 1];
+    const recentOutput =
+      recentItem.kind === "tool" ? recentItem.output : undefined;
     expect(firstOutput).not.toBe(output);
     expect(firstOutput?.endsWith("...")).toBe(true);
-    expect(secondOutput).toBe(output);
+    expect(recentOutput).toBe(output);
   });
 
   it("respects custom max items per thread in prepareThreadItems", () => {

@@ -363,6 +363,7 @@ export type AppSettings = {
   activeRemoteBackendId: string | null;
   keepDaemonRunningAfterAppClose: boolean;
   restartSafeSessions: boolean;
+  debugLoggingEnabled: boolean;
   defaultAccessMode: AccessMode;
   reviewDeliveryMode: "inline" | "detached";
   composerModelShortcut: string | null;

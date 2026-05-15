@@ -26,7 +26,37 @@ const emptyState: GitLogState = {
   error: null,
 };
 
-const REFRESH_INTERVAL_MS = 10000;
+export const GIT_LOG_REFRESH_INTERVAL_MS = 30_000;
+
+function commitEntriesEqual(a: GitLogEntry[], b: GitLogEntry[]) {
+  if (a.length !== b.length) {
+    return false;
+  }
+  return a.every((entry, index) => {
+    const other = b[index];
+    return (
+      other &&
+      entry.sha === other.sha &&
+      entry.summary === other.summary &&
+      entry.author === other.author &&
+      entry.timestamp === other.timestamp
+    );
+  });
+}
+
+function gitLogStateEqual(a: GitLogState, b: GitLogState) {
+  return (
+    a.total === b.total &&
+    a.ahead === b.ahead &&
+    a.behind === b.behind &&
+    a.upstream === b.upstream &&
+    a.isLoading === b.isLoading &&
+    a.error === b.error &&
+    commitEntriesEqual(a.entries, b.entries) &&
+    commitEntriesEqual(a.aheadEntries, b.aheadEntries) &&
+    commitEntriesEqual(a.behindEntries, b.behindEntries)
+  );
+}
 
 export function useGitLog(
   activeWorkspace: WorkspaceInfo | null,
@@ -53,7 +83,7 @@ export function useGitLog(
       ) {
         return;
       }
-      setState({
+      const nextState = {
         entries: response.entries,
         total: response.total,
         ahead: response.ahead,
@@ -63,7 +93,10 @@ export function useGitLog(
         upstream: response.upstream,
         isLoading: false,
         error: null,
-      });
+      };
+      setState((previous) =>
+        gitLogStateEqual(previous, nextState) ? previous : nextState,
+      );
     } catch (error) {
       console.error("Failed to load git log", error);
       if (
@@ -72,7 +105,7 @@ export function useGitLog(
       ) {
         return;
       }
-      setState({
+      const nextState = {
         entries: [],
         total: 0,
         ahead: 0,
@@ -82,7 +115,10 @@ export function useGitLog(
         upstream: null,
         isLoading: false,
         error: error instanceof Error ? error.message : String(error),
-      });
+      };
+      setState((previous) =>
+        gitLogStateEqual(previous, nextState) ? previous : nextState,
+      );
     }
   }, [activeWorkspace]);
 
@@ -102,7 +138,7 @@ export function useGitLog(
     void refresh();
     const interval = window.setInterval(() => {
       refresh().catch(() => {});
-    }, REFRESH_INTERVAL_MS);
+    }, GIT_LOG_REFRESH_INTERVAL_MS);
     return () => {
       window.clearInterval(interval);
     };

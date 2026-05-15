@@ -3,7 +3,10 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import { getGitStatus } from "../../../services/tauri";
-import { useGitStatus } from "./useGitStatus";
+import {
+  GIT_STATUS_REFRESH_INTERVAL_MS,
+  useGitStatus,
+} from "./useGitStatus";
 
 vi.mock("../../../services/tauri", () => ({
   getGitStatus: vi.fn(),
@@ -63,7 +66,7 @@ describe("useGitStatus", () => {
     expect(result.current.status.totalAdditions).toBe(2);
 
     await act(async () => {
-      vi.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(GIT_STATUS_REFRESH_INTERVAL_MS);
     });
     await act(async () => {
       await Promise.resolve();
@@ -72,6 +75,74 @@ describe("useGitStatus", () => {
     expect(getGitStatusMock).toHaveBeenCalledTimes(2);
     expect(result.current.status.branchName).toBe("next");
     expect(result.current.status.totalDeletions).toBe(4);
+
+    unmount();
+  });
+
+  it("does not poll while disabled but keeps manual refresh available", async () => {
+    const getGitStatusMock = vi.mocked(getGitStatus);
+    getGitStatusMock.mockResolvedValue(makeStatus("manual", 5, 6));
+
+    const { result, unmount } = renderHook(
+      ({
+        active,
+        enabled,
+      }: {
+        active: WorkspaceInfo | null;
+        enabled: boolean;
+      }) => useGitStatus(active, enabled),
+      { initialProps: { active: workspace, enabled: false } },
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getGitStatusMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(GIT_STATUS_REFRESH_INTERVAL_MS * 2);
+      await Promise.resolve();
+    });
+
+    expect(getGitStatusMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(getGitStatusMock).toHaveBeenCalledTimes(1);
+    expect(result.current.status.branchName).toBe("manual");
+
+    unmount();
+  });
+
+  it("starts polling when enabled becomes true", async () => {
+    const getGitStatusMock = vi.mocked(getGitStatus);
+    getGitStatusMock.mockResolvedValue(makeStatus("main", 2, 1));
+
+    const { rerender, unmount } = renderHook(
+      ({
+        active,
+        enabled,
+      }: {
+        active: WorkspaceInfo | null;
+        enabled: boolean;
+      }) => useGitStatus(active, enabled),
+      { initialProps: { active: workspace, enabled: false } },
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getGitStatusMock).not.toHaveBeenCalled();
+
+    rerender({ active: workspace, enabled: true });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getGitStatusMock).toHaveBeenCalledTimes(1);
 
     unmount();
   });

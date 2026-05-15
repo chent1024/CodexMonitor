@@ -168,6 +168,7 @@ const baseSettings: AppSettings = {
   activeRemoteBackendId: "remote-default",
   keepDaemonRunningAfterAppClose: false,
   restartSafeSessions: true,
+  debugLoggingEnabled: false,
   defaultAccessMode: "current",
   reviewDeliveryMode: "inline",
   composerModelShortcut: null,
@@ -1799,6 +1800,27 @@ describe("SettingsView Features", () => {
       expect(setLocalMemoryEnabledMock).toHaveBeenCalledWith(true);
     });
     expect(screen.getByText(/memory\.sqlite/)).toBeTruthy();
+  });
+
+  it("toggles debug logging from settings", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderFeaturesSection({
+      onUpdateAppSettings,
+      appSettings: { debugLoggingEnabled: false },
+      experimentalFeaturesResponse: { data: [], nextCursor: null },
+    });
+
+    const debugTitle = await screen.findByText("Debug 日志");
+    const debugRow = debugTitle.closest(".settings-toggle-row");
+    expect(debugRow).not.toBeNull();
+
+    fireEvent.click(within(debugRow as HTMLElement).getByRole("button"));
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ debugLoggingEnabled: true }),
+      );
+    });
   });
 
   it("filters and batch approves pending local memories", async () => {

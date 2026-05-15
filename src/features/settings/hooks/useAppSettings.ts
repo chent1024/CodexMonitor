@@ -150,6 +150,7 @@ function buildDefaultSettings(): AppSettings {
     activeRemoteBackendId: defaultRemote.id,
     keepDaemonRunningAfterAppClose: false,
     restartSafeSessions: true,
+    debugLoggingEnabled: false,
     defaultAccessMode: "current",
     reviewDeliveryMode: "inline",
     composerModelShortcut: isMac ? "cmd+shift+m" : "ctrl+shift+m",
@@ -267,6 +268,7 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     codeFontFamily: normalizedCodeFontFamily,
     codeFontSize: clampCodeFontSize(settings.codeFontSize),
     fontSmoothingEnabled: settings.fontSmoothingEnabled === true,
+    debugLoggingEnabled: settings.debugLoggingEnabled === true,
     personality: allowedPersonality.has(settings.personality)
       ? settings.personality
       : "friendly",

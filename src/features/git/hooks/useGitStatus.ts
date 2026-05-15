@@ -22,8 +22,40 @@ const emptyStatus: GitStatusState = {
   error: null,
 };
 
-const REFRESH_INTERVAL_MS = 3000;
-export function useGitStatus(activeWorkspace: WorkspaceInfo | null) {
+export const GIT_STATUS_REFRESH_INTERVAL_MS = 15_000;
+
+function fileStatusEntriesEqual(a: GitFileStatus[], b: GitFileStatus[]) {
+  if (a.length !== b.length) {
+    return false;
+  }
+  return a.every((entry, index) => {
+    const other = b[index];
+    return (
+      other &&
+      entry.path === other.path &&
+      entry.status === other.status &&
+      entry.additions === other.additions &&
+      entry.deletions === other.deletions
+    );
+  });
+}
+
+function gitStatusEqual(a: GitStatusState, b: GitStatusState) {
+  return (
+    a.branchName === b.branchName &&
+    a.totalAdditions === b.totalAdditions &&
+    a.totalDeletions === b.totalDeletions &&
+    a.error === b.error &&
+    fileStatusEntriesEqual(a.files, b.files) &&
+    fileStatusEntriesEqual(a.stagedFiles, b.stagedFiles) &&
+    fileStatusEntriesEqual(a.unstagedFiles, b.unstagedFiles)
+  );
+}
+
+export function useGitStatus(
+  activeWorkspace: WorkspaceInfo | null,
+  enabled = true,
+) {
   const [status, setStatus] = useState<GitStatusState>(emptyStatus);
   const requestIdRef = useRef(0);
   const workspaceIdRef = useRef<string | null>(activeWorkspace?.id ?? null);
@@ -66,8 +98,16 @@ export function useGitStatus(activeWorkspace: WorkspaceInfo | null) {
           branchName: resolvedBranchName,
           error: null,
         };
-        setStatus(nextStatus);
-        cachedStatusRef.current.set(workspaceId, nextStatus);
+        setStatus((previous) => {
+          if (gitStatusEqual(previous, nextStatus)) {
+            return previous;
+          }
+          return nextStatus;
+        });
+        const cachedNext = cachedStatusRef.current.get(workspaceId);
+        if (!cachedNext || !gitStatusEqual(cachedNext, nextStatus)) {
+          cachedStatusRef.current.set(workspaceId, nextStatus);
+        }
       })
       .catch((err) => {
         console.error("Failed to load git status", err);
@@ -82,7 +122,9 @@ export function useGitStatus(activeWorkspace: WorkspaceInfo | null) {
         const nextStatus = cached
           ? { ...cached, error: message }
           : { ...emptyStatus, branchName: "unknown", error: message };
-        setStatus(nextStatus);
+        setStatus((previous) =>
+          gitStatusEqual(previous, nextStatus) ? previous : nextStatus,
+        );
       });
   }, [resolveBranchName, workspaceId]);
 
@@ -104,18 +146,24 @@ export function useGitStatus(activeWorkspace: WorkspaceInfo | null) {
       setStatus(emptyStatus);
       return;
     }
+    if (!enabled) {
+      return;
+    }
 
     const fetchStatus = () => {
       refresh()?.catch(() => {});
     };
 
     fetchStatus();
-    const interval = window.setInterval(fetchStatus, REFRESH_INTERVAL_MS);
+    const interval = window.setInterval(
+      fetchStatus,
+      GIT_STATUS_REFRESH_INTERVAL_MS,
+    );
 
     return () => {
       window.clearInterval(interval);
     };
-  }, [refresh, workspaceId]);
+  }, [enabled, refresh, workspaceId]);
 
   return { status, refresh };
 }
