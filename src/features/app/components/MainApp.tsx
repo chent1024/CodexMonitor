@@ -596,6 +596,16 @@ export default function MainApp() {
         });
       },
     });
+  const getThreadTitle = useCallback(
+    (workspaceId: string, threadId: string) => {
+      const title = threadsByWorkspace[workspaceId]?.find(
+        (thread) => thread.id === threadId,
+      )?.name;
+      const trimmed = title?.trim();
+      return trimmed ? trimmed : undefined;
+    },
+    [threadsByWorkspace],
+  );
 
   const { mobileThreadRefreshLoading, handleMobileThreadRefresh } =
     useMainAppMobileThreadRefresh({
@@ -615,6 +625,7 @@ export default function MainApp() {
       appSettings.subagentSystemNotificationsEnabled,
     isSubagentThread,
     getWorkspaceName,
+    getThreadTitle,
     onThreadNotificationSent: (workspaceId, threadId) =>
       recordPendingThreadLinkRef.current(workspaceId, threadId),
     onDebug: addDebugEntry,
@@ -764,12 +775,15 @@ export default function MainApp() {
 
   useResponseRequiredNotificationsController({
     systemNotificationsEnabled: appSettings.systemNotificationsEnabled,
+    notificationSoundsEnabled: appSettings.notificationSoundsEnabled,
+    notificationSoundUrl: errorSoundUrl,
     subagentSystemNotificationsEnabled:
       appSettings.subagentSystemNotificationsEnabled,
     isSubagentThread,
     approvals,
     userInputRequests,
     getWorkspaceName,
+    getThreadTitle,
     onDebug: addDebugEntry,
   });
 

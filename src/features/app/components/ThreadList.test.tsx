@@ -92,7 +92,7 @@ describe("ThreadList", () => {
       />,
     );
 
-    const moreButton = screen.getByRole("button", { name: "更多..." });
+    const moreButton = screen.getByRole("button", { name: "展开" });
     fireEvent.click(moreButton);
     expect(onToggleExpanded).toHaveBeenCalledWith("ws-1");
   });

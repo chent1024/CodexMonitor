@@ -1007,6 +1007,28 @@
   pointer-events: none;
 }
 
+.chat-pane-composer-status {
+  --message-ui-font-size: var(--ui-font-size, 13px);
+  --message-ui-font-size-sm: calc(var(--message-ui-font-size) * 0.85);
+  --codex-foreground-secondary: var(--text-muted);
+  display: flex;
+  width: 100%;
+  padding: 0 var(--chat-content-side-padding, 36px) 2px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--surface-messages) 94%, transparent) 38%,
+    var(--surface-messages)
+  );
+}
+
+.chat-pane-composer-status > .oai-thinking-shimmer {
+  width: 100%;
+  max-width: var(--chat-column-max-width, 924px);
+  margin: 0 auto;
+  padding: 4px 0 6px;
+}
+
 .chat-pane-composer > .composer {
   pointer-events: auto;
 }

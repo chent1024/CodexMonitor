@@ -732,10 +732,13 @@ describe("Sidebar", () => {
 
     render(<Sidebar {...props} />);
 
-    const draftRow = screen.getByRole("button", { name: /new agent/i });
+    const draftRow = screen.getByRole("button", { name: /新建会话/ });
     expect(draftRow).toBeTruthy();
     expect(draftRow.className).toContain("thread-row-draft");
     expect(draftRow.className).toContain("active");
+    expect(draftRow.querySelector(".thread-leading-draft .thread-status")).toBeTruthy();
+    expect(draftRow.textContent).toContain("准备发送第一条消息");
+    expect(screen.getByText("草稿")).toBeTruthy();
 
     fireEvent.click(draftRow);
     expect(onSelectWorkspace).toHaveBeenCalledWith("ws-1");

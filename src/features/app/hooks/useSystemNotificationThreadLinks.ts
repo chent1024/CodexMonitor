@@ -7,6 +7,10 @@ type ThreadDeepLink = {
   notifiedAt: number;
 };
 
+type NotificationActionPayload = {
+  extra?: Record<string, unknown>;
+};
+
 type Params = {
   hasLoadedWorkspaces: boolean;
   workspacesById: Map<string, WorkspaceInfo>;
@@ -20,6 +24,27 @@ type Result = {
   recordPendingThreadLink: (workspaceId: string, threadId: string) => void;
   openThreadLinkOrQueue: (workspaceId: string, threadId: string) => void;
 };
+
+function asNonEmptyString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getThreadLinkFromNotificationAction(notification: NotificationActionPayload) {
+  const extra = notification.extra;
+  if (!extra) {
+    return null;
+  }
+  const workspaceId = asNonEmptyString(extra.workspaceId ?? extra.workspace_id);
+  const threadId = asNonEmptyString(extra.threadId ?? extra.thread_id);
+  if (!workspaceId || !threadId) {
+    return null;
+  }
+  const kind = asNonEmptyString(extra.kind);
+  if (kind !== "thread" && kind !== "response_required") {
+    return null;
+  }
+  return { workspaceId, threadId };
+}
 
 export function useSystemNotificationThreadLinks({
   hasLoadedWorkspaces,
@@ -91,6 +116,41 @@ export function useSystemNotificationThreadLinks({
     },
     [hasLoadedWorkspaces, queuePendingThreadLink, tryNavigateToLink],
   );
+
+  useEffect(() => {
+    let disposed = false;
+    let listener: { unregister: () => Promise<void> } | null = null;
+
+    void import("@tauri-apps/plugin-notification")
+      .then(({ onAction }) =>
+        onAction((notification: NotificationActionPayload) => {
+          const link = getThreadLinkFromNotificationAction(notification);
+          if (!link) {
+            return;
+          }
+          openThreadLinkOrQueue(link.workspaceId, link.threadId);
+        }),
+      )
+      .then((registeredListener) => {
+        if (disposed) {
+          void registeredListener.unregister().catch(() => {});
+          return;
+        }
+        listener = registeredListener;
+      })
+      .catch(() => {
+        // Notification action events are unavailable in browser tests and in
+        // some development fallback paths. The focus-based pending link below
+        // still handles the local debug fallback.
+      });
+
+    return () => {
+      disposed = true;
+      if (listener) {
+        void listener.unregister().catch(() => {});
+      }
+    };
+  }, [openThreadLinkOrQueue]);
 
   const focusHandler = useMemo(() => () => void tryNavigateToLink(), [tryNavigateToLink]);
 

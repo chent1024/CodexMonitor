@@ -93,6 +93,7 @@ describe("useAgentSystemNotifications", () => {
         isWindowFocused: false,
         minDurationMs: 0,
         getWorkspaceName: () => "Workspace One",
+        getThreadTitle: () => "Thread Title",
       }),
     );
 
@@ -133,7 +134,7 @@ describe("useAgentSystemNotifications", () => {
 
     expect(sendNotification).toHaveBeenCalledTimes(1);
     expect(sendNotification).toHaveBeenCalledWith(
-      "Workspace One",
+      "Thread Title",
       "Final assistant text",
       expect.objectContaining({
         extra: expect.objectContaining({
@@ -151,6 +152,8 @@ describe("useAgentSystemNotifications", () => {
         isWindowFocused: false,
         minDurationMs: 0,
         getWorkspaceName: () =>
+          "Workspace One",
+        getThreadTitle: () =>
           "分析字幕一键校验可行性以及很长很长的任务标题需要被截断并且继续描述很多很多细节和附加背景",
       }),
     );

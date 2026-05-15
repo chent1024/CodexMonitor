@@ -42,6 +42,10 @@ import {
   type StatusTone,
   type ToolSummary,
 } from "../utils/messageRenderUtils";
+import {
+  extractMemoryCitationInfo,
+  type MemoryCitationInfo,
+} from "../utils/memoryCitations";
 import { Markdown } from "./Markdown";
 import { isStandaloneMarkdownTable } from "./Markdown";
 
@@ -71,6 +75,7 @@ type MessageRowProps = MarkdownFileLinkProps & {
   onEditMessage?: (item: Extract<ConversationItem, { kind: "message" }>, text: string) => void;
   codeBlockCopyUseModifier?: boolean;
   showActions?: boolean;
+  renderMemoryCitation?: boolean;
 };
 
 type ReasoningRowProps = MarkdownFileLinkProps & {
@@ -133,44 +138,17 @@ type FileChangeSummaryEntry = FileChangeEntry & {
   displayPath: string;
 };
 
-type MemoryCitationInfo = {
-  citationEntries: string[];
-  rolloutIds: string[];
-};
-
 type CommandOutputProps = {
   output: string;
 };
 
-function extractMemoryCitationSection(value: string, tag: string) {
-  const match = value.match(new RegExp(`<${tag}>\\s*([\\s\\S]*?)\\s*</${tag}>`, "i"));
-  if (!match) {
-    return [];
-  }
-  return match[1]
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function extractMemoryCitationInfo(value: string): MemoryCitationInfo | null {
-  const match = value.match(/<oai-mem-citation>[\s\S]*?<\/oai-mem-citation>\s*$/i);
-  if (!match) {
-    return null;
-  }
-  return {
-    citationEntries: extractMemoryCitationSection(match[0], "citation_entries"),
-    rolloutIds: extractMemoryCitationSection(match[0], "rollout_ids"),
-  };
-}
-
-function MemoryCitationPanel({ citation }: { citation: MemoryCitationInfo }) {
+export function MemoryCitationPanel({ citation }: { citation: MemoryCitationInfo }) {
   const count = citation.citationEntries.length || citation.rolloutIds.length;
   return (
     <details className="oai-memory-citation" data-memory-citation>
       <summary className="oai-memory-citation-summary">
         <Search size={13} aria-hidden />
-        <span>记忆引用 {count}</span>
+        <span>{count} 条记忆引用</span>
       </summary>
       <div className="oai-memory-citation-body">
         {citation.citationEntries.length > 0 ? (
@@ -1191,6 +1169,7 @@ export const MessageRow = memo(function MessageRow({
   onOpenFileLink,
   onOpenFileLinkMenu,
   onOpenThreadLink,
+  renderMemoryCitation = true,
 }: MessageRowProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isEditingUserMessage, setIsEditingUserMessage] = useState(false);
@@ -1231,8 +1210,8 @@ export const MessageRow = memo(function MessageRow({
     isStandaloneMarkdownTable(item.text);
   const isUserMessage = item.role === "user";
   const memoryCitation = useMemo(
-    () => (isUserMessage ? null : extractMemoryCitationInfo(displayItem.text)),
-    [displayItem.text, isUserMessage],
+    () => (isUserMessage || !renderMemoryCitation ? null : extractMemoryCitationInfo(displayItem.text)),
+    [displayItem.text, isUserMessage, renderMemoryCitation],
   );
   const attachmentItems = item.attachments ?? [];
   const userMetadata = useMemo(() => buildUserMessageMetadata(displayItem), [displayItem]);

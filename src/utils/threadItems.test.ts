@@ -108,6 +108,174 @@ describe("threadItems", () => {
     });
   });
 
+  it("orders paged turns chronologically when the server returns the latest turn first", () => {
+    const items = buildItemsFromThread({
+      turns: [
+        {
+          id: "019e2ae7-9395-7ad1-a72e-6d5b55d2f824",
+          started_at: "2026-05-15T09:15:01.844Z",
+          items: [
+            {
+              type: "assistantMessage",
+              id: "assistant-latest",
+              text: "最新回答",
+            },
+          ],
+        },
+        {
+          id: "019e2acd-11fa-7582-a0a9-79f0b94a8037",
+          started_at: "2026-05-15T08:42:38.058Z",
+          items: [
+            {
+              type: "userMessage",
+              id: "user-oldest",
+              content: [{ type: "text", text: "最早问题" }],
+            },
+            {
+              type: "assistantMessage",
+              id: "assistant-oldest",
+              text: "最早回答",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      items
+        .filter((item) => item.kind === "message")
+        .map((item) => (item.kind === "message" ? item.text : "")),
+    ).toEqual(["最早问题", "最早回答", "最新回答"]);
+  });
+
+  it("hydrates alternate app-server turn item collections", () => {
+    const items = buildItemsFromThread({
+      turns: [
+        {
+          response_items: [
+            {
+              type: "response_item",
+              payload: {
+                type: "message",
+                role: "assistant",
+                item_id: "assistant-item-1",
+                content: [{ type: "output_text", text: "先继续检查。" }],
+              },
+            },
+          ],
+        },
+        {
+          responseItems: [
+            {
+              type: "function_call",
+              item_id: "call-item-1",
+              name: "exec_command",
+              arguments: JSON.stringify({
+                cmd: "npm run typecheck",
+                workdir: "/Users/xihe0000/workspace/coChat",
+              }),
+            },
+            {
+              type: "function_call_output",
+              item_id: "call-item-1",
+              output: "Wall time: 0.250 seconds\nProcess exited with code 0\nOutput:\nok\n",
+            },
+          ],
+        },
+        {
+          messages: [
+            {
+              type: "message",
+              role: "user",
+              process_id: "user-message-1",
+              content: [{ type: "input_text", text: "刚刚输出的消息消失了" }],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(items).toHaveLength(3);
+    expect(items[0]).toMatchObject({
+      id: "assistant-item-1",
+      kind: "message",
+      role: "assistant",
+      text: "先继续检查。",
+    });
+    expect(items[1]).toMatchObject({
+      id: "call-item-1",
+      kind: "tool",
+      toolType: "commandExecution",
+      output: "ok\n",
+      durationMs: 250,
+    });
+    expect(items[2]).toMatchObject({
+      id: "user-message-1",
+      kind: "message",
+      role: "user",
+      text: "刚刚输出的消息消失了",
+    });
+  });
+
+  it("deduplicates mirrored app-server item collections by protocol id", () => {
+    const mirroredMessage = {
+      type: "message",
+      role: "assistant",
+      id: "assistant-shared-1",
+      content: [{ type: "output_text", text: "同一条历史消息" }],
+    };
+
+    const items = buildItemsFromThread({
+      turns: [
+        {
+          items: [mirroredMessage],
+          response_items: [
+            {
+              type: "response_item",
+              payload: mirroredMessage,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "assistant-shared-1",
+      kind: "message",
+      text: "同一条历史消息",
+    });
+  });
+
+  it("preserves repeated ids inside the same turn item collection", () => {
+    const items = buildItemsFromThread({
+      turns: [
+        {
+          items: [
+            {
+              type: "message",
+              role: "assistant",
+              id: "assistant-repeat",
+              content: [{ type: "output_text", text: "第一次输出" }],
+            },
+            {
+              type: "message",
+              role: "assistant",
+              id: "assistant-repeat",
+              content: [{ type: "output_text", text: "第二次输出" }],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(items).toHaveLength(2);
+    expect(items.map((item) => (item.kind === "message" ? item.text : ""))).toEqual([
+      "第一次输出",
+      "第二次输出",
+    ]);
+  });
+
   it("hydrates raw response custom tools and web search calls", () => {
     const items = buildItemsFromThread({
       turns: [

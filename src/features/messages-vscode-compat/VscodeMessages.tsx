@@ -31,10 +31,15 @@ import {
 } from "../messages/utils/messageRenderUtils";
 import {
   FileChangeSummaryCard,
+  MemoryCitationPanel,
   type FileChangeEntry,
   MessageRow,
   WorkingIndicator,
 } from "../messages/components/MessageRows";
+import {
+  extractMemoryCitationInfo,
+  type MemoryCitationInfo,
+} from "../messages/utils/memoryCitations";
 import { useMessagesViewState } from "../messages/components/useMessagesViewState";
 import { ActivityItemRow } from "./ActivityRows";
 import {
@@ -86,6 +91,7 @@ type MessagesProps = {
   onOpenThreadLink?: (threadId: string, workspaceId?: string | null) => void;
   onQuoteMessage?: (text: string) => void;
   onLoadOlderTurns?: () => void | Promise<void>;
+  renderActiveWorkingIndicator?: boolean;
 };
 
 function activityBlocksFromTurn(turn: AssistantTurn) {
@@ -108,6 +114,26 @@ function collectTurnFileChanges(turn: AssistantTurn): FileChangeEntry[] {
   });
 }
 
+function collectTurnMemoryCitation(turn: AssistantTurn): MemoryCitationInfo | null {
+  const citationEntries = new Set<string>();
+  const rolloutIds = new Set<string>();
+  turn.blocks.forEach((block) => {
+    if (block.kind !== "message" || block.message.role !== "assistant") {
+      return;
+    }
+    const citation = extractMemoryCitationInfo(block.message.text);
+    citation?.citationEntries.forEach((entry) => citationEntries.add(entry));
+    citation?.rolloutIds.forEach((id) => rolloutIds.add(id));
+  });
+  if (citationEntries.size === 0 && rolloutIds.size === 0) {
+    return null;
+  }
+  return {
+    citationEntries: Array.from(citationEntries),
+    rolloutIds: Array.from(rolloutIds),
+  };
+}
+
 function isFileContentItem(item: ConversationItem) {
   return item.kind === "tool" && item.toolType === "fileChange";
 }
@@ -117,6 +143,10 @@ function getDefaultExpandedState(isMarked: boolean, defaultExpanded: boolean) {
 }
 
 function isLiveActivityItem(item: ConversationItem) {
+  if (item.kind === "explore") {
+    const status = (item.status ?? "").toLowerCase();
+    return /pending|running|processing|started|exploring|in[_\s-]*progress/.test(status);
+  }
   if (item.kind !== "tool") {
     return false;
   }
@@ -129,7 +159,7 @@ function isLiveActivityItem(item: ConversationItem) {
     return false;
   }
   const status = (item.status ?? "").toLowerCase();
-  return /pending|running|processing|started|in[_\s-]*progress/.test(status);
+  return /pending|running|processing|started|exploring|in[_\s-]*progress/.test(status);
 }
 
 function hasLiveActivityItems(items: ToolGroupItem[]) {
@@ -238,6 +268,7 @@ export const Messages = memo(function Messages({
   onOpenThreadLink,
   onQuoteMessage,
   onLoadOlderTurns,
+  renderActiveWorkingIndicator = true,
 }: MessagesProps) {
   const activeUserInputRequestId =
     threadId && userInputRequests.length
@@ -247,10 +278,14 @@ export const Messages = memo(function Messages({
             (!workspaceId || request.workspace_id === workspaceId),
         )?.request_id ?? null)
       : null;
-  const { openFileLink, showFileLinkMenu, fileLinkMenu } = useFileLinkOpener(
+  const { openFileLink, showFileLinkMenu, fileLinkMenu, fileLinkPreview } = useFileLinkOpener(
     workspacePath,
     openTargets,
     selectedOpenAppId,
+    {
+      workspaceId,
+      previewOnOpen: true,
+    },
   );
   const workingElapsedMs = useWorkingElapsedMs(isThinking, processingStartedAt);
   const olderLoadInFlightRef = useRef(false);
@@ -684,6 +719,7 @@ export const Messages = memo(function Messages({
                 onOpenFileLinkMenu={showFileLinkMenu}
                 onOpenThreadLink={handleOpenThreadLink}
                 showActions={false}
+                renderMemoryCitation={false}
               />
             );
           })}
@@ -703,6 +739,7 @@ export const Messages = memo(function Messages({
     const messageBlocks = visibleTurn.blocks
       .filter((block) => block.kind === "message")
       .map((block) => block.message);
+    const memoryCitation = collectTurnMemoryCitation(visibleTurn);
     const persistentMessageCount = messageBlocks.filter(
       (message) =>
         message.role === "user" &&
@@ -799,6 +836,7 @@ export const Messages = memo(function Messages({
           {fileChanges.length > 0 && (
             <FileChangeSummaryCard changes={fileChanges} workspacePath={workspacePath} />
           )}
+          {memoryCitation ? <MemoryCitationPanel citation={memoryCitation} /> : null}
         </div>
       </div>
     );
@@ -1103,7 +1141,7 @@ export const Messages = memo(function Messages({
           {userInputNode}
         </div>
         <WorkingIndicator
-          isThinking={isThinking}
+          isThinking={renderActiveWorkingIndicator ? isThinking : false}
           processingStartedAt={processingStartedAt}
           lastDurationMs={lastDurationMs}
           hasItems={transcriptItems.length > 0}
@@ -1127,6 +1165,7 @@ export const Messages = memo(function Messages({
         <div ref={bottomRef} />
       </div>
       {fileLinkMenu}
+      {fileLinkPreview}
     </div>
   );
 });

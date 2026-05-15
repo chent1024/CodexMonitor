@@ -223,6 +223,7 @@ export function FileTreePanel({
     left: number;
     arrowTop: number;
     height: number;
+    width: number;
   } | null>(null);
   const [previewContent, setPreviewContent] = useState<string>("");
   const [previewTruncated, setPreviewTruncated] = useState(false);
@@ -407,9 +408,13 @@ export function FileTreePanel({
 
   const openPreview = useCallback((path: string, target: HTMLElement) => {
     const rect = target.getBoundingClientRect();
-    const estimatedWidth = 640;
-    const estimatedHeight = 520;
     const padding = 16;
+    const preferredWidth = 980;
+    const estimatedWidth = Math.min(
+      preferredWidth,
+      Math.max(360, window.innerWidth - padding * 2),
+    );
+    const estimatedHeight = 520;
     const maxHeight = Math.min(estimatedHeight, window.innerHeight - padding * 2);
     const left = Math.min(
       Math.max(padding, rect.left - estimatedWidth - padding),
@@ -424,7 +429,7 @@ export function FileTreePanel({
       Math.max(16, maxHeight - 16),
     );
     setPreviewPath(path);
-    setPreviewAnchor({ top, left, arrowTop, height: maxHeight });
+    setPreviewAnchor({ top, left, arrowTop, height: maxHeight, width: estimatedWidth });
     setPreviewSelection(null);
     setIsDragSelecting(false);
     dragAnchorLineRef.current = null;
@@ -813,7 +818,7 @@ export function FileTreePanel({
                 position: "fixed",
                 top: previewAnchor.top,
                 left: previewAnchor.left,
-                width: 640,
+                width: previewAnchor.width,
                 maxHeight: previewAnchor.height,
                 ["--file-preview-arrow-top" as string]: `${previewAnchor.arrowTop}px`,
               }}

@@ -6,7 +6,10 @@ type SoundLabel = "success" | "error" | "test";
 
 type AudioContextConstructor = new () => AudioContext;
 
+const NOTIFICATION_GAIN = 0.7;
+
 let audioContext: AudioContext | null = null;
+const activeSources = new Set<AudioBufferSourceNode>();
 
 function resolveAudioContextConstructor(): AudioContextConstructor | null {
   if (typeof window === "undefined") {
@@ -44,19 +47,35 @@ export function playNotificationSound(
   try {
     const ctx = getAudioContext();
 
-    if (ctx.state === "suspended") {
-      void ctx.resume();
-    }
+    void (async () => {
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
 
-    void fetch(url)
-      .then((response) => response.arrayBuffer())
-      .then((audioFileBuffer) => ctx.decodeAudioData(audioFileBuffer))
+      const response = await fetch(url);
+      const audioFileBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(audioFileBuffer);
+
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+
+      if (ctx.state !== "running") {
+        throw new Error(`AudioContext is ${ctx.state}`);
+      }
+
+      return audioBuffer;
+    })()
       .then((audioBuffer) => {
         const source = ctx.createBufferSource();
         const gainNode = ctx.createGain();
 
-        gainNode.gain.value = 0.05;
+        gainNode.gain.value = NOTIFICATION_GAIN;
         source.buffer = audioBuffer;
+        activeSources.add(source);
+        source.onended = () => {
+          activeSources.delete(source);
+        };
         source.connect(gainNode);
         gainNode.connect(ctx.destination);
         source.start();

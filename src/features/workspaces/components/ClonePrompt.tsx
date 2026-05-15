@@ -44,14 +44,14 @@ export function ClonePrompt({
   return (
     <ModalShell
       className="clone-modal"
-      ariaLabel="新建克隆智能体"
+      ariaLabel="新建副本会话"
       onBackdropClick={() => {
         if (!isBusy) {
           onCancel();
         }
       }}
     >
-      <div className="ds-modal-title clone-modal-title">新建克隆智能体</div>
+      <div className="ds-modal-title clone-modal-title">新建副本会话</div>
       <div className="ds-modal-subtitle clone-modal-subtitle">
         为“{workspaceName}”创建一个新的工作副本。
       </div>

@@ -427,7 +427,7 @@ function buildPrimarySurface({
       onWorkspaceDrop: workspaceDrop.onWorkspaceDrop,
     },
     messagesProps: {
-      items: activeItems,
+      items: activeThreadId ? activeItems : [],
       threadId: activeThreadId ?? null,
       workspaceId: activeWorkspace?.id ?? null,
       workspacePath: activeWorkspace?.path ?? null,

@@ -247,6 +247,122 @@ function unwrapResponseItem(item: Record<string, unknown>) {
     : item;
 }
 
+const TURN_ITEM_COLLECTION_KEYS = [
+  "items",
+  "response_items",
+  "responseItems",
+  "output_items",
+  "outputItems",
+  "messages",
+  "events",
+] as const;
+
+function getItemProtocolId(item: Record<string, unknown>) {
+  const normalizedItem = unwrapResponseItem(item);
+  return asString(
+    normalizedItem.id ??
+      normalizedItem.item_id ??
+      normalizedItem.itemId ??
+      normalizedItem.call_id ??
+      normalizedItem.callId ??
+      normalizedItem.process_id ??
+      normalizedItem.processId ??
+      item.id ??
+      item.item_id ??
+      item.itemId ??
+      item.call_id ??
+      item.callId ??
+      item.process_id ??
+      item.processId,
+  );
+}
+
+function collectTurnItems(turnRecord: Record<string, unknown>) {
+  const collected: Record<string, unknown>[] = [];
+  const seenIdCollection = new Map<string, string>();
+  TURN_ITEM_COLLECTION_KEYS.forEach((key) => {
+    const value = turnRecord[key];
+    if (!Array.isArray(value)) {
+      return;
+    }
+    value.forEach((entry) => {
+      const item = asRecord(entry);
+      if (!item) {
+        return;
+      }
+      const id = getItemProtocolId(item);
+      const type = asString(unwrapResponseItem(item).type);
+      if (id) {
+        const dedupeId = `${type}:${id}`;
+        const existingCollection = seenIdCollection.get(dedupeId);
+        if (existingCollection && existingCollection !== key) {
+          return;
+        }
+        if (!existingCollection) {
+          seenIdCollection.set(dedupeId, key);
+        }
+      }
+      collected.push(item);
+    });
+  });
+  return collected;
+}
+
+function normalizeTurnTimestamp(raw: unknown) {
+  const value = asNumber(raw);
+  if (value !== null && value > 0) {
+    return value < 1_000_000_000_000 ? value * 1000 : value;
+  }
+  if (typeof raw === "string") {
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+  return 0;
+}
+
+function getTurnTimestamp(turnRecord: Record<string, unknown>) {
+  return normalizeTurnTimestamp(
+    turnRecord.startedAt ??
+      turnRecord.started_at ??
+      turnRecord.createdAt ??
+      turnRecord.created_at ??
+      turnRecord.updatedAt ??
+      turnRecord.updated_at,
+  );
+}
+
+function getChronologicalTurnId(turnRecord: Record<string, unknown>) {
+  const id = asString(turnRecord.id ?? turnRecord.turnId ?? turnRecord.turn_id);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-/i.test(id) ? id : "";
+}
+
+function normalizeTurnsForDisplay(turns: unknown[]) {
+  return turns
+    .map((turn, index) => {
+      const record = asRecord(turn) ?? {};
+      return {
+        index,
+        record,
+        timestamp: getTurnTimestamp(record),
+        chronologicalId: getChronologicalTurnId(record),
+      };
+    })
+    .sort((left, right) => {
+      if (left.timestamp > 0 && right.timestamp > 0 && left.timestamp !== right.timestamp) {
+        return left.timestamp - right.timestamp;
+      }
+      if (
+        left.chronologicalId &&
+        right.chronologicalId &&
+        left.chronologicalId !== right.chronologicalId
+      ) {
+        return left.chronologicalId.localeCompare(right.chronologicalId);
+      }
+      return left.index - right.index;
+    })
+    .map((entry) => entry.record);
+}
+
 function extractMessageContentText(content: unknown) {
   if (!Array.isArray(content)) {
     return asString(content);
@@ -268,7 +384,15 @@ function parseFunctionCallArguments(item: Record<string, unknown>) {
 }
 
 function getFunctionCallId(item: Record<string, unknown>) {
-  return asString(item.call_id ?? item.callId ?? item.id);
+  return asString(
+    item.call_id ??
+      item.callId ??
+      item.id ??
+      item.item_id ??
+      item.itemId ??
+      item.process_id ??
+      item.processId,
+  );
 }
 
 function getFunctionCallSessionId(args: Record<string, unknown>) {
@@ -472,7 +596,7 @@ function buildFunctionCallOutputItem(
 function buildWebSearchCallItem(
   item: Record<string, unknown>,
 ): ConversationItem | null {
-  const id = asString(item.id ?? item.call_id ?? item.callId);
+  const id = getItemProtocolId(item);
   if (!id) {
     return null;
   }
@@ -508,7 +632,7 @@ function buildWebSearchCallItem(
 function buildImageGenerationCallItem(
   item: Record<string, unknown>,
 ): ConversationItem | null {
-  const id = asString(item.id ?? item.call_id ?? item.callId);
+  const id = getItemProtocolId(item);
   if (!id) {
     return null;
   }
@@ -697,7 +821,7 @@ export function buildConversationItem(
 ): ConversationItem | null {
   const normalizedItem = unwrapResponseItem(item);
   const type = asString(normalizedItem.type);
-  const id = asString(normalizedItem.id ?? normalizedItem.call_id ?? normalizedItem.callId);
+  const id = getItemProtocolId(item);
   if (!id || !type) {
     return null;
   }
@@ -949,7 +1073,7 @@ export function buildConversationItemFromThreadItem(
 ): ConversationItem | null {
   const normalizedItem = unwrapResponseItem(item);
   const type = asString(normalizedItem.type);
-  const id = asString(normalizedItem.id ?? normalizedItem.call_id ?? normalizedItem.callId);
+  const id = getItemProtocolId(item);
   if (!id || !type) {
     return null;
   }
@@ -1008,22 +1132,22 @@ export function buildConversationItemFromThreadItem(
 }
 
 export function buildItemsFromThread(thread: Record<string, unknown>) {
-  const turns = Array.isArray(thread.turns) ? thread.turns : [];
+  const turns = Array.isArray(thread.turns)
+    ? normalizeTurnsForDisplay(thread.turns)
+    : [];
   const items: ConversationItem[] = [];
   const callsById = new Map<string, FunctionCallRecord>();
   const commandIndexBySessionId = new Map<string, number>();
   turns.forEach((turn, turnIndex) => {
     const turnRecord = turn as Record<string, unknown>;
-    const turnItems = Array.isArray(turnRecord.items)
-      ? (turnRecord.items as Record<string, unknown>[])
-      : [];
+    const turnItems = collectTurnItems(turnRecord);
     turnItems.forEach((item, itemIndex) => {
       const rawItem = unwrapResponseItem(item);
       const type = asString(rawItem.type);
       const syntheticId = `thread-item-${turnIndex}-${itemIndex}`;
       const itemWithId: Record<string, unknown> = {
         ...rawItem,
-        id: asString(rawItem.id ?? rawItem.call_id ?? rawItem.callId) || syntheticId,
+        id: getItemProtocolId(item) || syntheticId,
       };
       if (type === "function_call" || type === "custom_tool_call") {
         const callId = getFunctionCallId(itemWithId);
@@ -1094,11 +1218,10 @@ export function isReviewingFromThread(thread: Record<string, unknown>) {
   let reviewing = false;
   turns.forEach((turn) => {
     const turnRecord = turn as Record<string, unknown>;
-    const turnItems = Array.isArray(turnRecord.items)
-      ? (turnRecord.items as Record<string, unknown>[])
-      : [];
+    const turnItems = collectTurnItems(turnRecord);
     turnItems.forEach((item) => {
-      const type = asString(item?.type ?? "");
+      const normalizedItem = unwrapResponseItem(item);
+      const type = asString(normalizedItem.type ?? "");
       if (type === "enteredReviewMode") {
         reviewing = true;
       } else if (type === "exitedReviewMode") {

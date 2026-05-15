@@ -231,7 +231,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<Plus aria-hidden />}
             >
-              新建智能体
+              新建会话
             </PopoverMenuItem>
             <PopoverMenuItem
               className="workspace-add-option"
@@ -242,7 +242,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<GitBranch aria-hidden />}
             >
-              新建工作树智能体
+              新建worktree会话
             </PopoverMenuItem>
             <PopoverMenuItem
               className="workspace-add-option"
@@ -253,14 +253,14 @@ function SidebarWorkspaceEntry({
               }}
               icon={<Copy aria-hidden />}
             >
-              新建克隆智能体
+              新建副本会话
             </PopoverMenuItem>
           </PopoverSurface>,
           document.body,
         )}
       {isDraftNewAgent && (
         <div
-          className={`thread-row thread-row-draft${isDraftRowActive ? " active" : ""}`}
+          className={`thread-row thread-row-draft has-details has-secondary-line${isDraftRowActive ? " active" : ""}`}
           onClick={() => onSelectWorkspace(workspace.id)}
           role="button"
           tabIndex={0}
@@ -271,11 +271,26 @@ function SidebarWorkspaceEntry({
             }
           }}
         >
-          <span className={`thread-status ${draftStatusClass}`} aria-hidden />
+          <div className="thread-leading thread-leading-draft" aria-hidden>
+            <span className="thread-draft-icon">
+              <Plus />
+            </span>
+            <span className={`thread-status ${draftStatusClass}`} />
+          </div>
           <div className="thread-content">
             <div className="thread-headline">
-              <span className="thread-name">New Agent</span>
+              <span className="thread-name">新建会话</span>
             </div>
+            <div className="thread-details">
+              <span className="thread-draft-hint">
+                {draftStatusClass === "processing" ? "正在创建会话" : "准备发送第一条消息"}
+              </span>
+            </div>
+          </div>
+          <div className="thread-meta">
+            <span className="thread-draft-label">
+              {draftStatusClass === "processing" ? "创建中" : "草稿"}
+            </span>
           </div>
         </div>
       )}

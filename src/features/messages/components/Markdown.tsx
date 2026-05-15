@@ -1,10 +1,13 @@
 import {
+  Children,
+  isValidElement,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ReactElement,
   type ReactNode,
   type MouseEvent,
 } from "react";
@@ -23,6 +26,7 @@ import {
   resolveMessageFileHref,
   toFileLink,
 } from "../utils/messageFileLinks";
+import { stripStandaloneMemoryCitationBlocks } from "../utils/memoryCitations";
 import type { ParsedFileLocation } from "../../../utils/fileLinks";
 
 type MarkdownProps = {
@@ -63,7 +67,7 @@ type LinkBlockProps = {
 
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkFileLinks];
 const HOST_CONTROL_DIRECTIVE_SOURCE =
-  String.raw`::(?:git-stage|git-commit|git-push|git-create-branch|git-create-pr|archive)\{(?:[^{}"'\\]+|"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')*\}`;
+  String.raw`::(?:git-stage|git-commit|git-push|git-create-branch|git-create-pr|archive|code-comment)\{[^\r\n{}]*\}`;
 const TRAILING_HOST_CONTROL_DIRECTIVE_BLOCK_PATTERN = new RegExp(
   String.raw`(?:^|\n)[ \t]*(?:${HOST_CONTROL_DIRECTIVE_SOURCE}[ \t]*)+$`,
 );
@@ -204,7 +208,9 @@ function normalizeStructuredReviewTables(value: string) {
 }
 
 function stripTrailingMemoryCitation(value: string) {
-  return value.replace(/\n*<oai-mem-citation>[\s\S]*?<\/oai-mem-citation>\s*$/i, "").trim();
+  return stripStandaloneMemoryCitationBlocks(value)
+    .replace(/[ \t]+([。.,，])/g, "$1")
+    .trim();
 }
 
 function stripHostControlDirectives(value: string) {
@@ -213,6 +219,83 @@ function stripHostControlDirectives(value: string) {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
+}
+
+function decodeCodeText(value: string) {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function decodeInlineCodeChildren(children: ReactNode): ReactNode {
+  if (typeof children === "string") {
+    return decodeCodeText(children);
+  }
+  if (Array.isArray(children)) {
+    return children.map((child) => decodeInlineCodeChildren(child));
+  }
+  return children;
+}
+
+function nodeText(value: ReactNode): string {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((child) => nodeText(child)).join("");
+  }
+  return "";
+}
+
+function elementTagName(value: ReactNode): string {
+  return isValidElement(value) && typeof value.type === "string" ? value.type : "";
+}
+
+function elementChildren(value: ReactNode): ReactNode {
+  return (value as ReactElement<{ children?: ReactNode }>).props?.children;
+}
+
+function findFirstTableRow(value: ReactNode): ReactNode {
+  const nodes = Children.toArray(value);
+  for (const node of nodes) {
+    if (!isValidElement(node)) {
+      continue;
+    }
+    if (elementTagName(node) === "tr") {
+      return node;
+    }
+    const nested = findFirstTableRow(elementChildren(node));
+    if (nested) {
+      return nested;
+    }
+  }
+  return null;
+}
+
+function countTableColumns(children: ReactNode): number {
+  const row = findFirstTableRow(children);
+  if (!isValidElement(row)) {
+    return 0;
+  }
+  return Children.toArray(elementChildren(row)).filter((cell) => {
+    const tagName = elementTagName(cell);
+    return tagName === "th" || tagName === "td";
+  }).length;
+}
+
+function markdownTableClassName(children: ReactNode) {
+  const columnCount = countTableColumns(children);
+  const classes = ["markdown-table"];
+  if (columnCount === 2) {
+    classes.push("markdown-table-two-col");
+  }
+  if (columnCount >= 5) {
+    classes.push("markdown-table-wide-review");
+  }
+  return classes.join(" ");
 }
 
 export function isStandaloneMarkdownTable(value: string) {
@@ -471,7 +554,7 @@ export const Markdown = memo(function Markdown({
       codeBlock
         ? value
         : normalizeStructuredReviewTables(
-            normalizeListIndentation(stripHostControlDirectives(value)),
+            normalizeListIndentation(stripHostControlDirectives(stripTrailingMemoryCitation(value))),
           ),
     [codeBlock, value],
   );
@@ -520,7 +603,7 @@ export const Markdown = memo(function Markdown({
     const nextComponents: Components = {
       table: ({ children }) => (
         <div className="markdown-table-wrap">
-          <table className="markdown-table">{children}</table>
+          <table className={markdownTableClassName(children)}>{children}</table>
         </div>
       ),
       a: ({ href, children }) => {
@@ -619,13 +702,14 @@ export const Markdown = memo(function Markdown({
         );
       },
       code: ({ className: codeClassName, children }) => {
+        const decodedChildren = decodeInlineCodeChildren(children);
         if (codeClassName) {
-          return <code className={codeClassName}>{children}</code>;
+          return <code className={codeClassName}>{decodedChildren}</code>;
         }
-        const text = String(children ?? "").trim();
+        const text = nodeText(decodedChildren).trim();
         const fileTarget = parseInlineFileTarget(text);
         if (!fileTarget) {
-          return <code>{children}</code>;
+          return <code>{decodedChildren}</code>;
         }
         const href = toFileLink(fileTarget);
         return (

@@ -288,6 +288,23 @@ export function parseReasoning(
   return parsed;
 }
 
+export function getLatestReasoningWorkingLabel(items: ConversationItem[]) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.kind === "message") {
+      break;
+    }
+    if (item.kind !== "reasoning") {
+      continue;
+    }
+    const parsed = parseReasoning(item);
+    if (parsed.workingLabel) {
+      return parsed.workingLabel;
+    }
+  }
+  return null;
+}
+
 export function normalizeMessageImageSrc(path: string) {
   if (!path) {
     return "";
@@ -409,12 +426,16 @@ export function formatActivitySummary(items: ToolGroupItem[]) {
   let searchCount = 0;
   let commandCount = 0;
   let runningCommandCount = 0;
+  let isExploring = false;
   let createdFiles = 0;
   let editedFiles = 0;
   let deletedFiles = 0;
 
   items.forEach((item) => {
     if (item.kind === "explore") {
+      if (statusToneFromText(item.status) === "processing") {
+        isExploring = true;
+      }
       item.entries.forEach((entry) => {
         if (entry.kind === "read") {
           readCount += 1;
@@ -478,7 +499,7 @@ export function formatActivitySummary(items: ToolGroupItem[]) {
     searchCount > 0 ? `${searchCount} 次搜索` : "",
   ].filter(Boolean);
   if (exploreParts.length > 0) {
-    parts.push(`已探索 ${exploreParts.join(",")}`);
+    parts.push(`${isExploring ? "正在探索" : "已探索"} ${exploreParts.join(",")}`);
   }
   if (runningCommandCount > 0) {
     const runningLabel = `正在运行 ${formatChineseCount(runningCommandCount, "条命令")}`;
@@ -828,7 +849,7 @@ export function statusToneFromText(status?: string): StatusTone {
   if (/(fail|error)/.test(normalized)) {
     return "failed";
   }
-  if (/(pending|running|processing|started|in[_\s-]?progress)/.test(normalized)) {
+  if (/(pending|running|processing|started|exploring|in[_\s-]?progress)/.test(normalized)) {
     return "processing";
   }
   if (/(complete|completed|success|done)/.test(normalized)) {

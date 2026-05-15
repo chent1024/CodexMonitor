@@ -12,6 +12,7 @@ import {
   SCROLL_THRESHOLD_PX,
   buildMessageEntries,
   computePlanFollowupState,
+  getLatestReasoningWorkingLabel,
   parseReasoning,
   scrollKeyForItems,
 } from "../utils/messageRenderUtils";
@@ -205,22 +206,10 @@ export function useMessagesViewState({
     return meta;
   }, [items]);
 
-  const latestReasoningLabel = useMemo(() => {
-    for (let index = items.length - 1; index >= 0; index -= 1) {
-      const item = items[index];
-      if (item.kind === "message") {
-        break;
-      }
-      if (item.kind !== "reasoning") {
-        continue;
-      }
-      const parsed = reasoningMetaById.get(item.id);
-      if (parsed?.workingLabel) {
-        return parsed.workingLabel;
-      }
-    }
-    return null;
-  }, [items, reasoningMetaById]);
+  const latestReasoningLabel = useMemo(
+    () => getLatestReasoningWorkingLabel(items),
+    [items],
+  );
 
   const visibleItems = useMemo(
     () =>

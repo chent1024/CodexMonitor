@@ -485,6 +485,34 @@ describe("Markdown file-like href behavior", () => {
     expect(container.querySelector(".oai-message-file-link")).toBeNull();
   });
 
+  it("hides escaped host control directives before file link detection", () => {
+    const { container } = render(
+      <Markdown
+        value={
+          'Done.\n\n::git-stage{cwd=\\"overseas\\"}::git-commit{cwd=\\"overseas\\"}'
+        }
+        className="markdown"
+      />,
+    );
+
+    expect(container.textContent).toBe("Done.");
+    expect(container.querySelector(".oai-message-file-link")).toBeNull();
+  });
+
+  it("hides host code-comment directives from rendered markdown", () => {
+    const { container } = render(
+      <Markdown
+        value={
+          'Done.\n\n::code-comment{title="P1" body="Fix this" file="/tmp/app.ts" start=1 priority=1}'
+        }
+        className="markdown"
+      />,
+    );
+
+    expect(container.textContent).toBe("Done.");
+    expect(container.querySelector(".oai-message-file-link")).toBeNull();
+  });
+
   it("keeps explanatory host control directives inside assistant text", () => {
     const { container } = render(
       <Markdown
@@ -496,6 +524,32 @@ describe("Markdown file-like href behavior", () => {
     expect(container.textContent).toContain('::git-stage{cwd="youtube"}');
     expect(container.querySelector("code")?.textContent).toBe('::git-stage{cwd="youtube"}');
     expect(container.querySelector(".oai-message-file-link")).toBeNull();
+  });
+
+  it("keeps explanatory memory citation tags as literal inline code", () => {
+    const { container } = render(
+      <Markdown
+        value="正文 Markdown 自己没有剥离 `<oai-mem-citation>`。"
+        className="markdown"
+      />,
+    );
+
+    expect(container.querySelector("code")?.textContent).toBe("<oai-mem-citation>");
+    expect(container.textContent).not.toContain("剥离 `。");
+  });
+
+  it("keeps complete explanatory memory citation tags as literal inline code", () => {
+    const { container } = render(
+      <Markdown
+        value="示例是 `<oai-mem-citation>...</oai-mem-citation>`，不应该截断正文。"
+        className="markdown"
+      />,
+    );
+
+    expect(container.querySelector("code")?.textContent).toBe(
+      "<oai-mem-citation>...</oai-mem-citation>",
+    );
+    expect(container.textContent).toContain("不应该截断正文。");
   });
 
   it("still opens mounted file links when the workspace basename is settings", () => {
@@ -580,6 +634,48 @@ describe("Markdown file-like href behavior", () => {
     expect(container.querySelector(".markdown-table")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Name" })).toBeTruthy();
     expect(screen.getByText("Ready")).toBeTruthy();
+  });
+
+  it("strips memory citation control blocks without leaving wrapper backticks", () => {
+    const { container } = render(
+      <Markdown
+        value={[
+          "正文 Markdown 自己没有剥离 `<oai-mem-citation>` 示例。",
+          "",
+          "`<oai-mem-citation>",
+          "<citation_entries>",
+          "MEMORY.md:1-2|note=[test]",
+          "</citation_entries>",
+          "<rollout_ids>",
+          "019e1fcc-9fd1-7e60-89a1-7b5dc6669e4b",
+          "</rollout_ids>",
+          "</oai-mem-citation>`",
+        ].join("\n")}
+        className="markdown"
+      />,
+    );
+
+    expect(container.textContent).toBe("正文 Markdown 自己没有剥离 <oai-mem-citation> 示例。");
+    expect(container.textContent).not.toContain("`");
+    expect(container.textContent).not.toContain("MEMORY.md");
+  });
+
+  it("hides unfinished streaming memory citation control blocks", () => {
+    const { container } = render(
+      <Markdown
+        value={[
+          "正文已经完成。",
+          "",
+          "`<oai-mem-citation>",
+          "<citation_entries>",
+          "MEMORY.md:1-2|note=[test]",
+        ].join("\n")}
+        className="markdown"
+      />,
+    );
+
+    expect(container.textContent).toBe("正文已经完成。");
+    expect(container.textContent).not.toContain("MEMORY.md");
   });
 
 });

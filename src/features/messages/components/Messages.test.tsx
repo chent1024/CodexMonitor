@@ -1238,6 +1238,32 @@ describe("Messages", () => {
     expect(container.querySelector(".working-text")).toBeNull();
   });
 
+  it("can suppress the in-thread active working indicator for composer placement", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "reasoning-placed-by-composer",
+        kind: "reasoning",
+        summary: "Scanning repository",
+        content: "",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        openTargets={[]}
+        selectedOpenAppId=""
+        renderActiveWorkingIndicator={false}
+      />,
+    );
+
+    expect(container.querySelector("[data-oai-thinking-shimmer]")).toBeNull();
+  });
+
   it("renders reasoning rows when there is reasoning body content", () => {
     const items: ConversationItem[] = [
       {
@@ -1702,6 +1728,174 @@ describe("Messages", () => {
     expect(container.querySelectorAll(".explore-inline-item").length).toBe(0);
     expect(screen.getByText("before message")).toBeTruthy();
     expect(screen.getByText("after message")).toBeTruthy();
+  });
+
+  it("renders memory citations at the end of the assistant turn", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-memory-citation",
+        kind: "message",
+        role: "user",
+        text: "Explain the window state behavior",
+      },
+      {
+        id: "assistant-memory-citation",
+        kind: "message",
+        role: "assistant",
+        text: [
+          "这个像是之前保存的窗口状态。",
+          "",
+          "<oai-mem-citation>",
+          "<citation_entries>",
+          "MEMORY.md:289-317|note=[used coChat launch and runtime context guidance]",
+          "</citation_entries>",
+          "<rollout_ids>",
+          "019e1fcc-9fd1-7e60-89a1-7b5dc6669e4b",
+          "</rollout_ids>",
+          "</oai-mem-citation>",
+        ].join("\n"),
+      },
+      {
+        id: "assistant-after-memory-citation",
+        kind: "message",
+        role: "assistant",
+        text: "要从代码上改默认启动尺寸。",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent ?? "").toContain("要从代码上改默认启动尺寸。");
+    });
+    expect(container.textContent ?? "").not.toContain("<oai-mem-citation>");
+
+    const assistantTurn = container.querySelector("[data-assistant-turn]");
+    const footer = assistantTurn?.querySelector("[data-assistant-turn-footer]");
+    const citation = footer?.querySelector("[data-memory-citation]");
+    const assistantParagraph = Array.from(
+      assistantTurn?.querySelectorAll("[data-assistant-turn-body] .markdown p") ?? [],
+    ).find((node) => node.textContent?.includes("要从代码上改默认启动尺寸。"));
+
+    expect(citation).toBeTruthy();
+    expect(assistantParagraph).toBeTruthy();
+    expect(citation?.textContent ?? "").toContain("1 条记忆引用");
+    expect(citation?.textContent ?? "").toContain("MEMORY.md:289-317");
+    expect(
+      (assistantParagraph as Node).compareDocumentPosition(citation as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps inline memory citation examples while rendering footer citations", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-memory-citation-inline-example",
+        kind: "message",
+        role: "user",
+        text: "Show the memory citation footer",
+      },
+      {
+        id: "assistant-memory-citation-inline-example",
+        kind: "message",
+        role: "assistant",
+        text: [
+          "你看这条 assistant 回复的底部：我会放一个真实的 raw `<oai-mem-citation>` 块。",
+          "正常效果是正文里看不到 XML，消息底部会出现 `2 条记忆引用` 的折叠 footer。",
+          "",
+          "<oai-mem-citation>",
+          "<citation_entries>",
+          "MEMORY.md:165-177|note=[coChat message renderer compatibility context]",
+          "MEMORY.md:239-244|note=[compat renderer boundary and validation context]",
+          "</citation_entries>",
+          "<rollout_ids>",
+          "019e1cde-bd15-7312-bb69-ce529b93ce48",
+          "</rollout_ids>",
+          "</oai-mem-citation>",
+        ].join("\n"),
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent ?? "").toContain("折叠 footer。");
+    });
+
+    const assistantTurn = container.querySelector("[data-assistant-turn]");
+    const citation = assistantTurn?.querySelector("[data-memory-citation]");
+
+    expect(container.querySelector("code")?.textContent).toBe("<oai-mem-citation>");
+    expect(container.textContent ?? "").not.toContain("</oai-mem-citation>");
+    expect(citation).toBeTruthy();
+    expect(citation?.textContent ?? "").toContain("2 条记忆引用");
+    expect(citation?.textContent ?? "").toContain("MEMORY.md:165-177");
+    expect(citation?.textContent ?? "").toContain("019e1cde-bd15-7312-bb69-ce529b93ce48");
+  });
+
+  it("keeps active explore activity expanded so live read and search progress is visible", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "explore-live",
+        kind: "explore",
+        status: "exploring",
+        entries: [
+          {
+            kind: "read",
+            label: "threadItems.conversion.ts",
+            detail: "src/utils/threadItems.conversion.ts",
+          },
+          {
+            kind: "search",
+            label: "thread/turns in src",
+          },
+        ],
+      },
+      {
+        id: "assistant-live",
+        kind: "message",
+        role: "assistant",
+        text: "我正在检查历史恢复链路。",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={true}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /正在探索 1 个文件,1 次搜索/i })).toBeTruthy();
+    });
+    const activityRow = container.querySelector("[data-collapsed-tool-activity-item]");
+    expect(activityRow?.getAttribute("data-collapsed-tool-activity-item-expanded")).toBe("true");
+    expect(screen.getByText("threadItems.conversion.ts")).toBeTruthy();
+    expect(screen.getByText("src/utils/threadItems.conversion.ts")).toBeTruthy();
+    expect(screen.getByText("thread/turns in src")).toBeTruthy();
   });
 
   it("keeps edited file details folded until each summary is expanded", async () => {

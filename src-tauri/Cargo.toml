@@ -1,6 +1,6 @@
 [package]
 name = "codex-monitor"
-version = "0.7.68"
+version = "0.7.69"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -21,6 +21,14 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [[bin]]
 name = "codex-monitor-memory-mcp"
 path = "src/bin/codex_monitor_memory_mcp.rs"
+
+[[bin]]
+name = "codex_monitor_daemon"
+path = "src/bin/codex_monitor_daemon.rs"
+
+[[bin]]
+name = "codex_monitor_daemonctl"
+path = "src/bin/codex_monitor_daemonctl.rs"
 
 [build-dependencies]
 tauri-build = { version = "2.5.6", features = [] }

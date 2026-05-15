@@ -28,6 +28,7 @@ describe("playNotificationSound", () => {
     const source = {
       buffer: null as AudioBuffer | null,
       connect: vi.fn(),
+      onended: null as (() => void) | null,
       start: vi.fn(),
     };
     const gainNode = {
@@ -35,7 +36,12 @@ describe("playNotificationSound", () => {
       connect: vi.fn(),
     };
     const decodeAudioData = vi.fn().mockResolvedValue({} as AudioBuffer);
-    const resume = vi.fn().mockResolvedValue(undefined);
+    const resume = vi
+      .fn()
+      .mockImplementation(function (this: { state: MockAudioContextState }) {
+        this.state = "running";
+        return Promise.resolve();
+      });
 
     class MockAudioContext {
       state = state;
@@ -67,7 +73,7 @@ describe("playNotificationSound", () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith("https://example.com/success.mp3");
     expect(decodeAudioData).toHaveBeenCalledWith(arrayBuffer);
-    expect(gainNode.gain.value).toBe(0.05);
+    expect(gainNode.gain.value).toBe(0.7);
   });
 
   it("logs debug information when fetch fails", async () => {

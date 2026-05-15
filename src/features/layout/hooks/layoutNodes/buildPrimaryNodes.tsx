@@ -31,10 +31,17 @@ type PrimaryLayoutNodes = Pick<
 
 export function buildPrimaryNodes(options: PrimaryLayoutNodesOptions): PrimaryLayoutNodes {
   const sidebarNode = <Sidebar {...options.sidebarProps} />;
+  const messagesKey = [
+    "messages",
+    options.messagesProps.workspaceId ?? "no-workspace",
+    options.messagesProps.threadId ?? "draft",
+  ].join(":");
 
-  const messagesNode = <Messages {...options.messagesProps} />;
+  const messagesNode = <Messages key={messagesKey} {...options.messagesProps} />;
 
-  const composerNode = options.composerProps ? <Composer {...options.composerProps} /> : null;
+  const composerNode = options.composerProps ? (
+    <Composer {...options.composerProps} />
+  ) : null;
 
   const approvalToastsNode = <ApprovalToasts {...options.approvalToastsProps} />;
 

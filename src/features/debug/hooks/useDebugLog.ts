@@ -204,6 +204,9 @@ export function useDebugLog({ enabled = false }: UseDebugLogOptions = {}) {
     setDebugEntries([]);
     setHasDebugAlerts(false);
     setDebugFilter("all");
+    if (!enabledRef.current) {
+      setDebugOpenState(false);
+    }
     setDebugResetVersion((version) => version + 1);
   }, []);
 

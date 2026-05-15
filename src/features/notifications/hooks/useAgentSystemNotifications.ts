@@ -14,6 +14,7 @@ type SystemNotificationOptions = {
   subagentNotificationsEnabled?: boolean;
   isSubagentThread?: (workspaceId: string, threadId: string) => boolean;
   getWorkspaceName?: (workspaceId: string) => string | undefined;
+  getThreadTitle?: (workspaceId: string, threadId: string) => string | undefined;
   onThreadNotificationSent?: (workspaceId: string, threadId: string) => void;
   onDebug?: (entry: DebugEntry) => void;
 };
@@ -55,6 +56,7 @@ export function useAgentSystemNotifications({
   subagentNotificationsEnabled = true,
   isSubagentThread,
   getWorkspaceName,
+  getThreadTitle,
   onThreadNotificationSent,
   onDebug,
 }: SystemNotificationOptions) {
@@ -179,7 +181,10 @@ export function useAgentSystemNotifications({
 
   const getNotificationContent = useCallback(
     (workspaceId: string, threadId: string, fallbackBody: string) => {
-      const rawTitle = getWorkspaceName?.(workspaceId) ?? "Codex";
+      const rawTitle =
+        getThreadTitle?.(workspaceId, threadId) ??
+        getWorkspaceName?.(workspaceId) ??
+        "Codex";
       const title = truncateText(
         normalizeNotificationText(rawTitle) || "Codex",
         MAX_TITLE_LENGTH,
@@ -190,7 +195,7 @@ export function useAgentSystemNotifications({
       const body = truncateText(normalizedBody || fallbackBody, MAX_BODY_LENGTH);
       return { title, body };
     },
-    [getWorkspaceName],
+    [getThreadTitle, getWorkspaceName],
   );
 
   const handleTurnStarted = useCallback(
@@ -245,10 +250,11 @@ export function useAgentSystemNotifications({
       if (!shouldNotify(workspaceId, threadId, durationMs, threadKey)) {
         return;
       }
-      const title = truncateText(
-        normalizeNotificationText(getWorkspaceName?.(workspaceId) ?? "Codex") || "Codex",
-        MAX_TITLE_LENGTH,
-      );
+      const rawTitle =
+        getThreadTitle?.(workspaceId, threadId) ??
+        getWorkspaceName?.(workspaceId) ??
+        "Codex";
+      const title = truncateText(normalizeNotificationText(rawTitle) || "Codex", MAX_TITLE_LENGTH);
       const body =
         normalizeNotificationText(payload.message) || "An error occurred.";
       onThreadNotificationSent?.(workspaceId, threadId);
@@ -260,7 +266,14 @@ export function useAgentSystemNotifications({
       });
       lastMessageByThread.current.delete(threadKey);
     },
-    [consumeDuration, getWorkspaceName, notify, onThreadNotificationSent, shouldNotify],
+    [
+      consumeDuration,
+      getThreadTitle,
+      getWorkspaceName,
+      notify,
+      onThreadNotificationSent,
+      shouldNotify,
+    ],
   );
 
   const handleItemStarted = useCallback(

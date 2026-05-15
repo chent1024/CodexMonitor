@@ -6,12 +6,17 @@ import type {
   RequestUserInputRequest,
 } from "../../../types";
 import { sendNotification } from "../../../services/tauri";
+import { playNotificationSound } from "../../../utils/notificationSounds";
 import { useAgentResponseRequiredNotifications } from "./useAgentResponseRequiredNotifications";
 
 const useAppServerEventsMock = vi.fn();
 
 vi.mock("../../../services/tauri", () => ({
   sendNotification: vi.fn(),
+}));
+
+vi.mock("../../../utils/notificationSounds", () => ({
+  playNotificationSound: vi.fn(),
 }));
 
 vi.mock("../../app/hooks/useAppServerEvents", () => ({
@@ -23,6 +28,7 @@ describe("useAgentResponseRequiredNotifications", () => {
     vi.useFakeTimers();
     vi.mocked(sendNotification).mockReset();
     vi.mocked(sendNotification).mockResolvedValue();
+    vi.mocked(playNotificationSound).mockReset();
     useAppServerEventsMock.mockReset();
   });
 
@@ -132,6 +138,49 @@ describe("useAgentResponseRequiredNotifications", () => {
     expect(vi.mocked(sendNotification).mock.calls[1]?.[2]).toMatchObject({
       extra: { type: "approval", requestId: 1 },
     });
+  });
+
+  it("plays an attention sound when response-required sound notifications are enabled", async () => {
+    const approvals: ApprovalRequest[] = [
+      {
+        workspace_id: "ws-1",
+        request_id: 1,
+        method: "workspace/requestApproval",
+        params: { command: "npm run lint", threadId: "thread-1" },
+      },
+    ];
+
+    renderHook(() =>
+      useAgentResponseRequiredNotifications({
+        enabled: true,
+        isWindowFocused: false,
+        notificationSoundsEnabled: true,
+        notificationSoundUrl: "attention.mp3",
+        approvals,
+        userInputRequests: [],
+        getWorkspaceName: () => "Workspace One",
+        getThreadTitle: () => "Thread Title",
+      }),
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(playNotificationSound).toHaveBeenCalledWith(
+      "attention.mp3",
+      "error",
+      undefined,
+    );
+    expect(sendNotification).toHaveBeenCalledWith(
+      "Thread Title",
+      expect.any(String),
+      expect.objectContaining({
+        extra: expect.objectContaining({
+          threadId: "thread-1",
+        }),
+      }),
+    );
   });
 
   it("notifies each pending question request without suppressing older ones", async () => {

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { createPortal } from "react-dom";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as Sentry from "@sentry/react";
-import { openWorkspaceIn } from "../../../services/tauri";
+import { getGitDiffs, openWorkspaceIn, readWorkspaceFile } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
+import type { GitFileDiff } from "../../../types";
 import type { OpenAppTarget } from "../../../types";
 import {
   type ParsedFileLocation,
@@ -16,6 +18,11 @@ import {
   joinWorkspacePath,
   revealInFileManagerLabel,
 } from "../../../utils/platformPaths";
+import { FilePreviewPopover } from "../../files/components/FilePreviewPopover";
+import {
+  buildFilePreviewDiffInfo,
+  type FilePreviewDiffInfo,
+} from "../../files/utils/filePreviewDiff";
 import { resolveMountedWorkspacePath } from "../utils/mountedWorkspacePaths";
 
 type OpenTarget = {
@@ -38,6 +45,26 @@ type FileLinkMenuState = {
   x: number;
   y: number;
   items: FileLinkMenuItem[];
+};
+
+type FileLinkPreviewState = {
+  relativePath: string;
+  absolutePath: string;
+  top: number;
+  arrowTop: number;
+  height: number;
+  width: number;
+};
+
+type UseFileLinkOpenerOptions = {
+  workspaceId?: string | null;
+  previewOnOpen?: boolean;
+  openAppIconById?: Record<string, string>;
+  onSelectOpenAppId?: (id: string) => void;
+};
+
+type OpenFileLinkOptions = {
+  forceExternal?: boolean;
 };
 
 const DEFAULT_OPEN_TARGET: OpenTarget = {
@@ -88,6 +115,104 @@ function resolveFilePath(path: string, workspacePath?: string | null) {
   return joinWorkspacePath(workspacePath, trimmed);
 }
 
+const imageExtensions = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "svg",
+  "webp",
+  "avif",
+  "bmp",
+  "heic",
+  "heif",
+  "tif",
+  "tiff",
+]);
+
+function isImagePath(path: string) {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return imageExtensions.has(ext);
+}
+
+function normalizePathForCompare(path: string) {
+  return path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+function relativePathFromWorkspace(absolutePath: string, workspacePath: string | null) {
+  if (!workspacePath) {
+    return null;
+  }
+  const normalizedAbsolute = normalizePathForCompare(absolutePath);
+  const normalizedWorkspace = normalizePathForCompare(workspacePath);
+  if (!normalizedWorkspace || normalizedAbsolute === normalizedWorkspace) {
+    return null;
+  }
+  const prefix = `${normalizedWorkspace}/`;
+  if (!normalizedAbsolute.startsWith(prefix)) {
+    return null;
+  }
+  return normalizedAbsolute.slice(prefix.length);
+}
+
+function relativeFileLinkPath(
+  fileLocation: ParsedFileLocation,
+  workspacePath: string | null,
+) {
+  const rawPath = fileLocation.path.trim();
+  if (!rawPath) {
+    return null;
+  }
+  const mountedPath = resolveMountedWorkspacePath(rawPath, workspacePath);
+  if (mountedPath) {
+    const relativePath = relativePathFromWorkspace(mountedPath, workspacePath);
+    return relativePath ? { relativePath, absolutePath: mountedPath } : null;
+  }
+  if (workspacePath && isAbsolutePath(rawPath)) {
+    const relativePath = relativePathFromWorkspace(rawPath, workspacePath);
+    return relativePath ? { relativePath, absolutePath: rawPath } : null;
+  }
+  if (!isAbsolutePath(rawPath) && !rawPath.startsWith("/")) {
+    const relativePath = rawPath.replace(/^\.\//, "");
+    return {
+      relativePath,
+      absolutePath: resolveFilePath(relativePath, workspacePath),
+    };
+  }
+  return null;
+}
+
+function findMatchingGitDiff(diffs: GitFileDiff[], relativePath: string) {
+  const normalizedRelativePath = normalizePathForCompare(relativePath);
+  return diffs.find((diff) => normalizePathForCompare(diff.path) === normalizedRelativePath) ?? null;
+}
+
+function buildPreviewAnchor(event?: MouseEvent | null) {
+  const padding = 16;
+  const preferredWidth = 980;
+  const estimatedWidth = Math.min(
+    preferredWidth,
+    Math.max(360, window.innerWidth - padding * 2),
+  );
+  const estimatedHeight = 520;
+  const maxHeight = Math.min(
+    estimatedHeight,
+    Math.max(240, window.innerHeight - padding * 2),
+  );
+  const target = event?.currentTarget instanceof Element ? event.currentTarget : null;
+  const rect = target?.getBoundingClientRect();
+  const anchorY = rect ? rect.top + rect.height / 2 : window.innerHeight * 0.38;
+  const top = Math.min(
+    Math.max(padding, anchorY - maxHeight * 0.35),
+    Math.max(padding, window.innerHeight - maxHeight - padding),
+  );
+  const arrowTop = Math.min(
+    Math.max(16, anchorY - top),
+    Math.max(16, maxHeight - 16),
+  );
+  return { top, arrowTop, height: maxHeight, width: estimatedWidth };
+}
+
 function resolveFileLinkContext(
   fileLocation: ParsedFileLocation,
   workspacePath?: string | null,
@@ -107,11 +232,34 @@ export function useFileLinkOpener(
   workspacePath: string | null,
   openTargets: OpenAppTarget[],
   selectedOpenAppId: string,
+  options: UseFileLinkOpenerOptions = {},
 ) {
   const [fileLinkMenuState, setFileLinkMenuState] = useState<FileLinkMenuState | null>(null);
+  const [filePreviewState, setFilePreviewState] = useState<FileLinkPreviewState | null>(null);
+  const [previewContent, setPreviewContent] = useState("");
+  const [previewTruncated, setPreviewTruncated] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewDiffInfo, setPreviewDiffInfo] = useState<FilePreviewDiffInfo | null>(null);
+  const [previewSelection, setPreviewSelection] = useState<{ start: number; end: number } | null>(
+    null,
+  );
+  const workspaceId = options.workspaceId ?? null;
+  const previewOnOpen = Boolean(options.previewOnOpen);
+  const openAppIconById = options.openAppIconById ?? {};
+  const onSelectOpenAppId = options.onSelectOpenAppId ?? (() => {});
 
   const closeFileLinkMenu = useCallback(() => {
     setFileLinkMenuState(null);
+  }, []);
+  const closeFilePreview = useCallback(() => {
+    setFilePreviewState(null);
+    setPreviewContent("");
+    setPreviewTruncated(false);
+    setPreviewLoading(false);
+    setPreviewError(null);
+    setPreviewDiffInfo(null);
+    setPreviewSelection(null);
   }, []);
 
   useEffect(() => {
@@ -130,6 +278,7 @@ export function useFileLinkOpener(
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         closeFileLinkMenu();
+        closeFilePreview();
       }
     };
 
@@ -142,7 +291,74 @@ export function useFileLinkOpener(
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("blur", closeFileLinkMenu);
     };
-  }, [closeFileLinkMenu, fileLinkMenuState]);
+  }, [closeFileLinkMenu, closeFilePreview, fileLinkMenuState]);
+
+  useEffect(() => {
+    if (!filePreviewState || !workspaceId) {
+      return undefined;
+    }
+    let cancelled = false;
+    const isImagePreview = isImagePath(filePreviewState.relativePath);
+    if (isImagePreview) {
+      setPreviewContent("");
+      setPreviewTruncated(false);
+      setPreviewLoading(false);
+      setPreviewError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewDiffInfo(null);
+    readWorkspaceFile(workspaceId, filePreviewState.relativePath)
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        setPreviewContent(response.content ?? "");
+        setPreviewTruncated(Boolean(response.truncated));
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        setPreviewError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPreviewLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filePreviewState, workspaceId]);
+
+  useEffect(() => {
+    if (!filePreviewState || !workspaceId) {
+      return undefined;
+    }
+    let cancelled = false;
+    getGitDiffs(workspaceId)
+      .then((diffs) => {
+        if (cancelled) {
+          return;
+        }
+        const matchingDiff = findMatchingGitDiff(diffs, filePreviewState.relativePath);
+        setPreviewDiffInfo(
+          matchingDiff ? buildFilePreviewDiffInfo(matchingDiff.diff) : null,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPreviewDiffInfo(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filePreviewState, workspaceId]);
 
   const reportOpenError = useCallback(
     (error: unknown, context: Record<string, string | null>) => {
@@ -166,7 +382,11 @@ export function useFileLinkOpener(
   );
 
   const openFileLink = useCallback(
-    async (targetLocation: ParsedFileLocation) => {
+    async (
+      targetLocation: ParsedFileLocation,
+      event?: MouseEvent,
+      openOptions: OpenFileLinkOptions = {},
+    ) => {
       const target = resolveOpenTarget(openTargets, selectedOpenAppId);
       const { fileLocation, rawPathLabel, resolvedPath } = resolveFileLinkContext(
         targetLocation,
@@ -178,6 +398,24 @@ export function useFileLinkOpener(
       };
 
       try {
+        if (previewOnOpen && workspaceId && !openOptions.forceExternal) {
+          const previewPath = relativeFileLinkPath(fileLocation, workspacePath);
+          if (previewPath) {
+            const anchor = buildPreviewAnchor(event);
+            const initialLine =
+              fileLocation.line && fileLocation.line > 0 ? fileLocation.line - 1 : null;
+            setFilePreviewState({
+              relativePath: previewPath.relativePath,
+              absolutePath: previewPath.absolutePath,
+              ...anchor,
+            });
+            setPreviewSelection(
+              initialLine === null ? null : { start: initialLine, end: initialLine },
+            );
+            closeFileLinkMenu();
+            return;
+          }
+        }
         if (!canOpenTarget(target)) {
           return;
         }
@@ -220,7 +458,15 @@ export function useFileLinkOpener(
         });
       }
     },
-    [openTargets, reportOpenError, selectedOpenAppId, workspacePath],
+    [
+      closeFileLinkMenu,
+      openTargets,
+      previewOnOpen,
+      reportOpenError,
+      selectedOpenAppId,
+      workspaceId,
+      workspacePath,
+    ],
   );
 
   const showFileLinkMenu = useCallback(
@@ -251,7 +497,7 @@ export function useFileLinkOpener(
           text: openLabel,
           enabled: canOpen,
           action: async () => {
-            await openFileLink(fileLocation);
+            await openFileLink(fileLocation, undefined, { forceExternal: true });
           },
         },
         ...(target.kind === "finder"
@@ -347,5 +593,72 @@ export function useFileLinkOpener(
     return createPortal(menu, document.body);
   }, [closeFileLinkMenu, fileLinkMenuState]);
 
-  return { openFileLink, showFileLinkMenu, fileLinkMenu };
+  const fileLinkPreview = useMemo<ReactNode>(() => {
+    if (!filePreviewState || typeof document === "undefined") {
+      return null;
+    }
+    const isImagePreview = isImagePath(filePreviewState.relativePath);
+    const imageSrc = isImagePreview ? convertFileSrc(filePreviewState.absolutePath) : null;
+    const selectionHints = isImagePreview
+      ? []
+      : ["Shift + click", "for multi-line selection"];
+    return createPortal(
+      <FilePreviewPopover
+        path={filePreviewState.relativePath}
+        absolutePath={filePreviewState.absolutePath}
+        content={previewContent}
+        truncated={previewTruncated}
+        previewKind={isImagePreview ? "image" : "text"}
+        imageSrc={imageSrc}
+        openTargets={openTargets}
+        openAppIconById={openAppIconById}
+        selectedOpenAppId={selectedOpenAppId}
+        onSelectOpenAppId={onSelectOpenAppId}
+        selection={previewSelection}
+        onSelectLine={(index, event) => {
+          if (event.shiftKey && previewSelection) {
+            const start = Math.min(previewSelection.start, index);
+            const end = Math.max(previewSelection.start, index);
+            setPreviewSelection({ start, end });
+            return;
+          }
+          setPreviewSelection({ start: index, end: index });
+        }}
+        onClearSelection={() => setPreviewSelection(null)}
+        onAddSelection={() => {}}
+        canInsertText={false}
+        onClose={closeFilePreview}
+        selectionHints={selectionHints}
+        diffInfo={previewDiffInfo}
+        style={{
+          position: "fixed",
+          top: filePreviewState.top,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: filePreviewState.width,
+          maxHeight: filePreviewState.height,
+          ["--file-preview-arrow-top" as string]: `${filePreviewState.arrowTop}px`,
+          ["--file-preview-arrow-display" as string]: "none",
+        }}
+        isLoading={previewLoading}
+        error={previewError}
+      />,
+      document.body,
+    );
+  }, [
+    closeFilePreview,
+    filePreviewState,
+    onSelectOpenAppId,
+    openAppIconById,
+    openTargets,
+    previewContent,
+    previewError,
+    previewDiffInfo,
+    previewLoading,
+    previewSelection,
+    previewTruncated,
+    selectedOpenAppId,
+  ]);
+
+  return { openFileLink, showFileLinkMenu, fileLinkMenu, fileLinkPreview };
 }

@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, useState, type MouseEvent } from "react";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 
 import type { ThreadSummary } from "../../../types";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
@@ -146,18 +147,20 @@ function ThreadListInner({
       ))}
       {showExpandToggle && totalThreadRoots > 3 && (
         <button
-          className="thread-more"
+          className={`thread-more thread-more-expand${isExpanded ? " is-expanded" : ""}`}
+          aria-expanded={isExpanded}
           onClick={(event) => {
             event.stopPropagation();
             onToggleExpanded(workspaceId);
           }}
         >
-          {isExpanded ? "收起" : "更多..."}
+          <span>{isExpanded ? "收起" : "展开"}</span>
+          <ChevronDown aria-hidden />
         </button>
       )}
       {showLoadOlder && nextCursor && (isExpanded || totalThreadRoots <= 3) && (
         <button
-          className="thread-more"
+          className="thread-more thread-more-load-older"
           onClick={(event) => {
             event.stopPropagation();
             onLoadOlderThreads(workspaceId);

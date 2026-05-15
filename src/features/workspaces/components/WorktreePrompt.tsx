@@ -105,14 +105,14 @@ export function WorktreePrompt({
   return (
     <ModalShell
       className="worktree-modal"
-      ariaLabel="新建工作树智能体"
+      ariaLabel="新建worktree会话"
       onBackdropClick={() => {
         if (!isBusy) {
           onCancel();
         }
       }}
     >
-      <div className="ds-modal-title worktree-modal-title">新建工作树智能体</div>
+      <div className="ds-modal-title worktree-modal-title">新建worktree会话</div>
       <div className="ds-modal-subtitle worktree-modal-subtitle">
         在“{workspaceName}”下创建一个工作树。
       </div>

@@ -31,6 +31,7 @@ const THREAD_LIST_SOURCE_KINDS: &[&str] = &[
     "subAgentThreadSpawn",
     "unknown",
 ];
+const THREAD_TURNS_ITEMS_VIEW_FULL: &str = "items";
 
 #[allow(dead_code)]
 fn image_extension_for_path(path: &str) -> Option<String> {
@@ -309,14 +310,19 @@ pub(crate) async fn list_thread_turns_core(
     limit: Option<u32>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({
-        "threadId": thread_id,
-        "cursor": cursor,
-        "limit": limit
-    });
+    let params = list_thread_turns_params(thread_id, cursor, limit);
     session
         .send_request_for_workspace(&workspace_id, "thread/turns/list", params)
         .await
+}
+
+fn list_thread_turns_params(thread_id: String, cursor: Option<String>, limit: Option<u32>) -> Value {
+    json!({
+        "threadId": thread_id,
+        "cursor": cursor,
+        "limit": limit,
+        "itemsView": THREAD_TURNS_ITEMS_VIEW_FULL
+    })
 }
 
 pub(crate) async fn thread_unsubscribe_core(
@@ -1148,5 +1154,19 @@ mod tests {
         assert!(THREAD_LIST_SOURCE_KINDS.contains(&"subAgentReview"));
         assert!(THREAD_LIST_SOURCE_KINDS.contains(&"subAgentCompact"));
         assert!(THREAD_LIST_SOURCE_KINDS.contains(&"subAgentThreadSpawn"));
+    }
+
+    #[test]
+    fn list_thread_turns_params_request_full_items_view() {
+        let params = list_thread_turns_params(
+            "thread-1".to_string(),
+            Some("cursor-1".to_string()),
+            Some(20),
+        );
+
+        assert_eq!(params.get("threadId"), Some(&json!("thread-1")));
+        assert_eq!(params.get("cursor"), Some(&json!("cursor-1")));
+        assert_eq!(params.get("limit"), Some(&json!(20)));
+        assert_eq!(params.get("itemsView"), Some(&json!("items")));
     }
 }

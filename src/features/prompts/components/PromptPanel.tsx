@@ -367,9 +367,9 @@ export function PromptPanel({
               }
               void onSendPromptToNewAgent(text);
             }}
-            title="发送给新智能体"
+            title="发送给新会话"
           >
-            新建智能体
+            新建会话
           </button>
           <button
             type="button"

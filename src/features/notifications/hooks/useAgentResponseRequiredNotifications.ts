@@ -5,9 +5,11 @@ import type {
   RequestUserInputRequest,
 } from "../../../types";
 import { sendNotification } from "../../../services/tauri";
+import { playNotificationSound } from "../../../utils/notificationSounds";
 import { getApprovalCommandInfo } from "../../../utils/approvalRules";
 import { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
 
+const MAX_TITLE_LENGTH = 40;
 const MAX_BODY_LENGTH = 200;
 const MIN_NOTIFICATION_SPACING_MS = 1500;
 
@@ -48,9 +50,12 @@ type ResponseRequiredNotificationOptions = {
   isWindowFocused: boolean;
   approvals: ApprovalRequest[];
   userInputRequests: RequestUserInputRequest[];
+  notificationSoundsEnabled?: boolean;
+  notificationSoundUrl?: string;
   subagentNotificationsEnabled?: boolean;
   isSubagentThread?: (workspaceId: string, threadId: string) => boolean;
   getWorkspaceName?: (workspaceId: string) => string | undefined;
+  getThreadTitle?: (workspaceId: string, threadId: string) => string | undefined;
   onDebug?: (entry: DebugEntry) => void;
 };
 
@@ -65,9 +70,12 @@ export function useAgentResponseRequiredNotifications({
   isWindowFocused,
   approvals,
   userInputRequests,
+  notificationSoundsEnabled = false,
+  notificationSoundUrl,
   subagentNotificationsEnabled = true,
   isSubagentThread,
   getWorkspaceName,
+  getThreadTitle,
   onDebug,
 }: ResponseRequiredNotificationOptions) {
   const lastNotifiedAtRef = useRef(0);
@@ -115,6 +123,9 @@ export function useAgentResponseRequiredNotifications({
       extra?: Record<string, unknown>,
     ) => {
       try {
+        if (notificationSoundsEnabled && notificationSoundUrl) {
+          playNotificationSound(notificationSoundUrl, "error", onDebug);
+        }
         await sendNotification(title, body, {
           autoCancel: true,
           extra,
@@ -136,7 +147,7 @@ export function useAgentResponseRequiredNotifications({
         });
       }
     },
-    [onDebug],
+    [notificationSoundUrl, notificationSoundsEnabled, onDebug],
   );
 
   const shouldMuteSubagentThread = useCallback(
@@ -148,6 +159,20 @@ export function useAgentResponseRequiredNotifications({
       return isSubagentThread?.(workspaceId, normalizedThreadId) ?? false;
     },
     [isSubagentThread, subagentNotificationsEnabled],
+  );
+
+  const getNotificationTitle = useCallback(
+    (workspaceId: string, threadId?: string | null) => {
+      const normalizedThreadId = String(threadId ?? "").trim();
+      const rawTitle =
+        (normalizedThreadId
+          ? getThreadTitle?.(workspaceId, normalizedThreadId)
+          : undefined) ??
+        getWorkspaceName?.(workspaceId) ??
+        "Codex";
+      return truncateText(rawTitle.trim() || "Codex", MAX_TITLE_LENGTH);
+    },
+    [getThreadTitle, getWorkspaceName],
   );
 
   useEffect(
@@ -222,25 +247,43 @@ export function useAgentResponseRequiredNotifications({
     );
     notifiedApprovalsRef.current.add(approvalKey);
 
-    const workspaceName = getWorkspaceName?.(latestUnnotifiedApproval.workspace_id);
-    const title = workspaceName
-      ? `Approval needed — ${workspaceName}`
-      : "Approval needed";
     const commandInfo = getApprovalCommandInfo(latestUnnotifiedApproval.params ?? {});
     const body = commandInfo?.preview
       ? truncateText(commandInfo.preview, MAX_BODY_LENGTH)
       : truncateText(latestUnnotifiedApproval.method, MAX_BODY_LENGTH);
+    const approvalThreadId = String(
+      latestUnnotifiedApproval.params?.threadId ??
+        latestUnnotifiedApproval.params?.thread_id ??
+        "",
+    ).trim();
+    const approvalTurnId = String(
+      latestUnnotifiedApproval.params?.turnId ??
+        latestUnnotifiedApproval.params?.turn_id ??
+        "",
+    ).trim();
+    const approvalItemId = String(
+      latestUnnotifiedApproval.params?.itemId ??
+      latestUnnotifiedApproval.params?.item_id ??
+        "",
+    ).trim();
+    const title = getNotificationTitle(
+      latestUnnotifiedApproval.workspace_id,
+      approvalThreadId,
+    );
 
     void notify(title, body, {
       kind: "response_required",
       type: "approval",
       workspaceId: latestUnnotifiedApproval.workspace_id,
       requestId: latestUnnotifiedApproval.request_id,
+      ...(approvalThreadId ? { threadId: approvalThreadId } : {}),
+      ...(approvalTurnId ? { turnId: approvalTurnId } : {}),
+      ...(approvalItemId ? { itemId: approvalItemId } : {}),
     });
     scheduleRetry();
   }, [
     canNotifyNow,
-    getWorkspaceName,
+    getNotificationTitle,
     latestUnnotifiedApproval,
     notify,
     retrySignal,
@@ -282,11 +325,13 @@ export function useAgentResponseRequiredNotifications({
     );
     notifiedUserInputsRef.current.add(questionKey);
 
-    const workspaceName = getWorkspaceName?.(latestUnnotifiedQuestion.workspace_id);
-    const title = workspaceName ? `Question — ${workspaceName}` : "Question";
     const first = latestUnnotifiedQuestion.params.questions[0];
     const bodyRaw = first?.header?.trim() || first?.question?.trim() || "Your input is needed.";
     const body = truncateText(bodyRaw, MAX_BODY_LENGTH);
+    const title = getNotificationTitle(
+      latestUnnotifiedQuestion.workspace_id,
+      latestUnnotifiedQuestion.params.thread_id,
+    );
 
     void notify(title, body, {
       kind: "response_required",
@@ -300,7 +345,7 @@ export function useAgentResponseRequiredNotifications({
     scheduleRetry();
   }, [
     canNotifyNow,
-    getWorkspaceName,
+    getNotificationTitle,
     latestUnnotifiedQuestion,
     notify,
     retrySignal,
@@ -354,8 +399,7 @@ export function useAgentResponseRequiredNotifications({
       ) {
         return;
       }
-      const workspaceName = getWorkspaceName?.(workspaceId);
-      const title = workspaceName ? `Plan ready — ${workspaceName}` : "Plan ready";
+      const title = getNotificationTitle(workspaceId, threadId);
       const text = String(item.text ?? "").trim();
       const body = text
         ? truncateText(text.split("\n")[0] ?? text, MAX_BODY_LENGTH)
@@ -377,7 +421,7 @@ export function useAgentResponseRequiredNotifications({
 
       void notify(title, body, extra);
     },
-    [canNotifyNow, getWorkspaceName, notify, scheduleRetry, shouldMuteSubagentThread],
+    [canNotifyNow, getNotificationTitle, notify, scheduleRetry, shouldMuteSubagentThread],
   );
 
   useAppServerEvents(

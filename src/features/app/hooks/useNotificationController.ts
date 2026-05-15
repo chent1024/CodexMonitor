@@ -12,6 +12,7 @@ type Params = {
   subagentSystemNotificationsEnabled: boolean;
   isSubagentThread?: (workspaceId: string, threadId: string) => boolean;
   getWorkspaceName?: (workspaceId: string) => string | undefined;
+  getThreadTitle?: (workspaceId: string, threadId: string) => string | undefined;
   onThreadNotificationSent?: (workspaceId: string, threadId: string) => void;
   onDebug: (entry: DebugEntry) => void;
   successSoundUrl: string;
@@ -24,6 +25,7 @@ export function useNotificationController({
   subagentSystemNotificationsEnabled,
   isSubagentThread,
   getWorkspaceName,
+  getThreadTitle,
   onThreadNotificationSent,
   onDebug,
   successSoundUrl,
@@ -44,6 +46,7 @@ export function useNotificationController({
     isSubagentThread,
     isWindowFocused,
     getWorkspaceName,
+    getThreadTitle,
     onThreadNotificationSent,
     onDebug,
   });

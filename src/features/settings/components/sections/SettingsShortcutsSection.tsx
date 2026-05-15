@@ -86,19 +86,19 @@ export function SettingsShortcutsSection({
         subtitle: "通过键盘创建智能体和 worktree。",
         items: [
           {
-            label: "新建智能体",
+            label: "新建会话",
             draftKey: "newAgent",
             settingKey: "newAgentShortcut",
             help: `默认：${formatShortcut("cmd+n")}`,
           },
           {
-            label: "新建 Worktree 智能体",
+            label: "新建worktree会话",
             draftKey: "newWorktreeAgent",
             settingKey: "newWorktreeAgentShortcut",
             help: `默认：${formatShortcut("cmd+shift+n")}`,
           },
           {
-            label: "新建克隆智能体",
+            label: "新建副本会话",
             draftKey: "newCloneAgent",
             settingKey: "newCloneAgentShortcut",
             help: `默认：${formatShortcut("cmd+alt+n")}`,

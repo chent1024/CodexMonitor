@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openWorkspaceIn } from "../../../services/tauri";
+import { getGitDiffs, openWorkspaceIn, readWorkspaceFile } from "../../../services/tauri";
 import { fileTarget } from "../test/fileLinkAssertions";
 import { useFileLinkOpener } from "./useFileLinkOpener";
 
 vi.mock("../../../services/tauri", () => ({
+  getGitDiffs: vi.fn(),
   openWorkspaceIn: vi.fn(),
+  readWorkspaceFile: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -177,6 +179,98 @@ describe("useFileLinkOpener", () => {
         args: [],
         line: 33,
       }),
+    );
+  });
+
+  it("previews workspace file links in-app when preview mode is enabled", async () => {
+    const workspacePath = "/Users/sotiriskaniras/Documents/Development/Forks/CodexMonitor";
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: "first line\nsecond line",
+      truncated: false,
+    });
+    vi.mocked(getGitDiffs).mockResolvedValue([
+      {
+        path: "src/App.tsx",
+        diff: [
+          "diff --git a/src/App.tsx b/src/App.tsx",
+          "--- a/src/App.tsx",
+          "+++ b/src/App.tsx",
+          "@@ -1,2 +1,2 @@",
+          " first line",
+          "-old second line",
+          "+second line",
+        ].join("\n"),
+      },
+    ]);
+    let hookResult: ReturnType<typeof useFileLinkOpener> | null = null;
+
+    function Harness() {
+      hookResult = useFileLinkOpener(workspacePath, [], "", {
+        workspaceId: "ws-1",
+        previewOnOpen: true,
+      });
+      return <>{hookResult.fileLinkPreview}</>;
+    }
+
+    render(<Harness />);
+
+    await act(async () => {
+      await hookResult?.openFileLink(fileTarget("/workspace/src/App.tsx#L2"));
+    });
+
+    expect(openWorkspaceIn).not.toHaveBeenCalled();
+    expect(readWorkspaceFile).toHaveBeenCalledWith("ws-1", "src/App.tsx");
+    expect(getGitDiffs).toHaveBeenCalledWith("ws-1");
+    await waitFor(() => {
+      expect(screen.getByText("src/App.tsx")).toBeTruthy();
+      expect(screen.getByText("second line")).toBeTruthy();
+      expect(screen.getByText("Lines 2-2")).toBeTruthy();
+      expect(screen.getByText("+1")).toBeTruthy();
+      expect(screen.getByText("-1")).toBeTruthy();
+    });
+    const preview = document.querySelector(".file-preview-popover") as HTMLElement;
+    expect(preview.style.left).toBe("50%");
+    expect(preview.style.transform).toBe("translateX(-50%)");
+  });
+
+  it("keeps context-menu open action external when preview mode is enabled", async () => {
+    const workspacePath = "/Users/sotiriskaniras/Documents/Development/Forks/CodexMonitor";
+    let hookResult: ReturnType<typeof useFileLinkOpener> | null = null;
+
+    function Harness() {
+      hookResult = useFileLinkOpener(workspacePath, [], "", {
+        workspaceId: "ws-1",
+        previewOnOpen: true,
+      });
+      return (
+        <>
+          {hookResult.fileLinkMenu}
+          {hookResult.fileLinkPreview}
+        </>
+      );
+    }
+
+    render(<Harness />);
+
+    await act(async () => {
+      await hookResult?.showFileLinkMenu(
+        {
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+          clientX: 12,
+          clientY: 24,
+        } as never,
+        fileTarget("/workspace/src/App.tsx#L2"),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Open in Visual Studio Code" }));
+    });
+
+    expect(readWorkspaceFile).not.toHaveBeenCalled();
+    expect(openWorkspaceIn).toHaveBeenCalledWith(
+      "/Users/sotiriskaniras/Documents/Development/Forks/CodexMonitor/src/App.tsx",
+      expect.objectContaining({ appName: "Visual Studio Code", line: 2 }),
     );
   });
 

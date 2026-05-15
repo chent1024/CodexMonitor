@@ -173,21 +173,23 @@ export const ThreadRow = memo(function ThreadRow({
         }
       }}
     >
-      {canPin && (
-        <button
-          type="button"
-          className={`thread-pin-button${isPinned ? " is-pinned" : ""}`}
-          aria-label={isPinned ? "Unpin thread" : "Pin thread"}
-          aria-pressed={isPinned}
-          title={isPinned ? "Unpin" : "Pin"}
-          onClick={handleTogglePin}
-          onKeyDown={(event) => event.stopPropagation()}
-          data-tauri-drag-region="false"
-        >
-          <Pin aria-hidden />
-        </button>
-      )}
-      <span className={`thread-status ${statusClass}`} aria-hidden />
+      <div className={`thread-leading${canPin ? " can-pin" : ""}`}>
+        {canPin && (
+          <button
+            type="button"
+            className={`thread-pin-button${isPinned ? " is-pinned" : ""}`}
+            aria-label={isPinned ? "Unpin thread" : "Pin thread"}
+            aria-pressed={isPinned}
+            title={isPinned ? "Unpin" : "Pin"}
+            onClick={handleTogglePin}
+            onKeyDown={(event) => event.stopPropagation()}
+            data-tauri-drag-region="false"
+          >
+            <Pin aria-hidden />
+          </button>
+        )}
+        <span className={`thread-status ${statusClass}`} aria-hidden />
+      </div>
       <div className="thread-content">
         <div className="thread-headline">
           <span className="thread-name">{thread.name}</span>

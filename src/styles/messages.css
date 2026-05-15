@@ -18,8 +18,8 @@
   --codex-main-surface: var(--surface-card-strong);
   --codex-elevated-surface: var(--surface-command);
   --codex-user-surface: color-mix(in srgb, var(--codex-foreground) 5%, transparent);
-  --codex-inline-code-surface: color-mix(in srgb, var(--surface-command) 96%, var(--codex-foreground) 4%);
-  --codex-code-surface: color-mix(in srgb, var(--surface-command) 98%, var(--codex-foreground) 2%);
+  --codex-inline-code-surface: color-mix(in srgb, var(--surface-card-strong) 78%, var(--surface-command) 22%);
+  --codex-code-surface: color-mix(in srgb, var(--surface-card-strong) 72%, var(--surface-command) 28%);
   --codex-border: color-mix(in srgb, var(--border-strong) 64%, transparent);
   --codex-border-light: color-mix(in srgb, var(--border-subtle) 72%, transparent);
   --codex-foreground: var(--text-strong);
@@ -3465,31 +3465,31 @@
   line-break: anywhere;
 }
 
-.messages .markdown .markdown-table:has(thead th:nth-child(2):last-child) {
+.messages .markdown .markdown-table-two-col {
   min-width: 0;
 }
 
-.messages .markdown .markdown-table:has(thead th:nth-child(2):last-child) th:first-child,
-.messages .markdown .markdown-table:has(thead th:nth-child(2):last-child) td:first-child {
+.messages .markdown .markdown-table-two-col th:first-child,
+.messages .markdown .markdown-table-two-col td:first-child {
   width: clamp(8rem, 24%, 13rem);
 }
 
-.messages .markdown .markdown-table:has(thead th:nth-child(5)) {
+.messages .markdown .markdown-table-wide-review {
   min-width: min(100%, 58rem);
 }
 
-.messages .markdown .markdown-table:has(thead th:nth-child(5)) th:first-child,
-.messages .markdown .markdown-table:has(thead th:nth-child(5)) td:first-child {
+.messages .markdown .markdown-table-wide-review th:first-child,
+.messages .markdown .markdown-table-wide-review td:first-child {
   width: clamp(14rem, 26%, 22rem);
 }
 
-.messages .markdown .markdown-table:has(thead th:nth-child(5)) th:nth-child(2),
-.messages .markdown .markdown-table:has(thead th:nth-child(5)) td:nth-child(2) {
+.messages .markdown .markdown-table-wide-review th:nth-child(2),
+.messages .markdown .markdown-table-wide-review td:nth-child(2) {
   width: clamp(7rem, 12%, 10rem);
 }
 
-.messages .markdown .markdown-table:has(thead th:nth-child(5)) th:last-child,
-.messages .markdown .markdown-table:has(thead th:nth-child(5)) td:last-child {
+.messages .markdown .markdown-table-wide-review th:last-child,
+.messages .markdown .markdown-table-wide-review td:last-child {
   width: clamp(5.5rem, 10%, 7rem);
   white-space: nowrap;
   color: var(--text-muted);

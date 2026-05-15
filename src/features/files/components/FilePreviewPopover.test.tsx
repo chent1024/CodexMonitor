@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilePreviewPopover } from "./FilePreviewPopover";
 
@@ -36,6 +36,40 @@ describe("FilePreviewPopover", () => {
 
     expect(screen.getByText("Shift + click or drag + click")).toBeTruthy();
     expect(screen.getByText("for multi-line selection")).toBeTruthy();
+  });
+
+  it("copies the absolute file path from the title action", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(
+      <FilePreviewPopover
+        path="src/example.ts"
+        absolutePath="/workspace/src/example.ts"
+        content={"one\ntwo"}
+        truncated={false}
+        previewKind="text"
+        imageSrc={null}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        selection={{ start: 0, end: 0 }}
+        onSelectLine={vi.fn()}
+        onClearSelection={vi.fn()}
+        onAddSelection={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Copy file path" }));
+    });
+
+    expect(writeText).toHaveBeenCalledWith("/workspace/src/example.ts");
   });
 
   it("wires drag selection mouse events to line handlers", () => {
@@ -83,7 +117,7 @@ describe("FilePreviewPopover", () => {
     expect(onSelectLine).toHaveBeenCalledWith(1, expect.any(Object));
   });
 
-  it("disables add-to-chat when insertion is not allowed", () => {
+  it("hides add-to-chat when insertion is not allowed", () => {
     render(
       <FilePreviewPopover
         path="src/example.ts"
@@ -105,7 +139,131 @@ describe("FilePreviewPopover", () => {
       />,
     );
 
-    const addButton = screen.getByRole("button", { name: "Add to chat" });
-    expect(addButton.hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Add to chat" })).toBeNull();
   });
+
+  it("toggles fullscreen preview mode", () => {
+    const contentLayer = document.createElement("div");
+    contentLayer.className = "content-layer is-active";
+    contentLayer.getBoundingClientRect = () =>
+      ({
+        left: 100,
+        top: 80,
+        width: 900,
+        height: 600,
+        right: 1000,
+        bottom: 680,
+        x: 100,
+        y: 80,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    document.body.appendChild(contentLayer);
+
+    render(
+      <FilePreviewPopover
+        path="src/example.ts"
+        absolutePath="/workspace/src/example.ts"
+        content={"one\ntwo"}
+        truncated={false}
+        previewKind="text"
+        imageSrc={null}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        selection={{ start: 0, end: 0 }}
+        onSelectLine={vi.fn()}
+        onClearSelection={vi.fn()}
+        onAddSelection={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand preview" }));
+
+    const popover = document.querySelector(".file-preview-popover") as HTMLElement;
+    expect(popover.className).toContain("is-fullscreen");
+    expect(popover.style.left).toBe("100px");
+    expect(popover.style.top).toBe("80px");
+    expect(popover.style.width).toBe("900px");
+    expect(popover.style.height).toBe("600px");
+    expect(screen.getByRole("button", { name: "Restore preview" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore preview" }));
+    expect(popover.className).not.toContain("is-fullscreen");
+  });
+
+  it("renders diff summary and line markers", () => {
+    render(
+      <FilePreviewPopover
+        path="src/example.ts"
+        absolutePath="/workspace/src/example.ts"
+        content={"one\ntwo\nthree"}
+        truncated={false}
+        previewKind="text"
+        imageSrc={null}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        selection={null}
+        onSelectLine={vi.fn()}
+        onClearSelection={vi.fn()}
+        onAddSelection={vi.fn()}
+        onClose={vi.fn()}
+        diffInfo={{
+          additions: 1,
+          deletions: 2,
+          lineMarkers: new Map([[1, "modify"]]),
+          deletionMarkers: [{ lineIndex: 2, count: 1 }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("+1")).toBeTruthy();
+    expect(screen.getByText("-2")).toBeTruthy();
+    expect(screen.getByText("-1 deleted line")).toBeTruthy();
+    expect(screen.getByText("two").closest("button")?.className).toContain("is-diff-modify");
+  });
+
+  it("scrolls to the first changed line when diff markers are available", () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    render(
+      <FilePreviewPopover
+        path="src/example.ts"
+        absolutePath="/workspace/src/example.ts"
+        content={"one\ntwo\nthree"}
+        truncated={false}
+        previewKind="text"
+        imageSrc={null}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        selection={null}
+        onSelectLine={vi.fn()}
+        onClearSelection={vi.fn()}
+        onAddSelection={vi.fn()}
+        onClose={vi.fn()}
+        diffInfo={{
+          additions: 1,
+          deletions: 0,
+          lineMarkers: new Map([[1, "add"]]),
+          deletionMarkers: [],
+        }}
+      />,
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      block: "center",
+      inline: "nearest",
+      behavior: "auto",
+    });
+
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+  });
+
 });

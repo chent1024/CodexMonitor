@@ -177,12 +177,26 @@
   margin-left: -6px;
   padding: 4px 6px;
   border-radius: 8px;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: outline-color 120ms ease;
 }
 
-.sidebar-title-button:hover,
+.sidebar-title-button:hover {
+  background: transparent;
+  transform: none;
+  box-shadow: none;
+}
+
+button.sidebar-title-button:hover:not(:disabled),
+button.sidebar-title-button:active:not(:disabled) {
+  background: transparent;
+  transform: none;
+  box-shadow: none;
+}
+
 .sidebar-title-button:focus-visible {
-  background: var(--surface-hover);
+  outline: 1px solid var(--border-subtle);
+  outline-offset: 3px;
+  background: transparent;
   transform: none;
   box-shadow: none;
 }
@@ -274,7 +288,7 @@
 
 .sidebar-sort-section-label {
   font-size: var(--sidebar-font-size-sm);
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-faint);
   padding: 4px 8px 2px;
 }
@@ -474,7 +488,7 @@
 
 .subtitle {
   font-size: var(--sidebar-font-size-xl);
-  font-weight: 600;
+  font-weight: 400;
   margin-top: 6px;
   display: inline-flex;
   align-items: center;
@@ -579,7 +593,7 @@
 
 .sidebar-section-title {
   font-size: var(--sidebar-font-size-sm);
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.01em;
   color: var(--text-strong);
 }
@@ -678,7 +692,7 @@
 
 .workspace-group-label {
   font-size: var(--sidebar-font-size-sm);
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.01em;
   color: var(--text-strong);
   padding-left: 0;
@@ -821,13 +835,13 @@
 }
 
 .workspace-row:hover::before {
-  background: color-mix(in srgb, var(--surface-hover) 22%, transparent);
+  background: color-mix(in srgb, var(--surface-hover) 10%, transparent);
   border-color: transparent;
   box-shadow: none;
 }
 
 .workspace-row.active:hover::before {
-  background: color-mix(in srgb, var(--surface-hover) 22%, transparent);
+  background: color-mix(in srgb, var(--surface-hover) 10%, transparent);
   border-color: transparent;
   box-shadow: none;
 }
@@ -839,7 +853,7 @@
 
 .workspace-row.active .workspace-name {
   color: var(--text-strong);
-  font-weight: 650;
+  font-weight: 400;
 }
 
 .workspace-copy {
@@ -858,7 +872,7 @@
 }
 
 .workspace-name {
-  font-weight: 600;
+  font-weight: 400;
   font-size: calc(var(--sidebar-ui-font-size) * 0.875);
   line-height: 1.15;
   min-width: 0;
@@ -909,8 +923,14 @@
 
 .workspace-add:hover {
   color: var(--text-strong);
-  background: color-mix(in srgb, var(--surface-hover) 72%, transparent);
-  border-color: color-mix(in srgb, var(--border-quiet) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-hover) 24%, transparent);
+  border-color: transparent;
+}
+
+button.workspace-add:hover:not(:disabled),
+button.workspace-add:active:not(:disabled) {
+  box-shadow: none;
+  transform: none;
 }
 
 .workspace-row:hover .workspace-add,
@@ -1017,6 +1037,7 @@
   background: transparent;
   color: var(--text-strong);
   font-size: var(--sidebar-font-size-sm);
+  font-weight: 400;
   text-align: left;
   padding: 6px 8px;
   border-radius: 6px;
@@ -1028,6 +1049,7 @@
 }
 
 .thread-list {
+  --thread-row-title-inset: 50px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -1039,6 +1061,27 @@
   flex-direction: column;
   gap: 4px;
   margin-bottom: 4px;
+}
+
+.pinned-section .sidebar-section-header {
+  padding: 0 6px 0 8px;
+}
+
+.pinned-section .sidebar-section-title {
+  color: var(--text-muted);
+  font-size: var(--sidebar-font-size-xs);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.pinned-section .sidebar-section-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  background: transparent;
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+  font-size: calc(var(--sidebar-font-size-xs) * 0.92);
 }
 
 .thread-bucket {
@@ -1060,12 +1103,13 @@
 
 .thread-bucket-label {
   font-size: var(--sidebar-font-size-sm);
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.01em;
   color: var(--text-muted);
 }
 
 .thread-list-nested {
+  --thread-row-title-inset: 43px;
   margin-left: 8px;
 }
 
@@ -1103,11 +1147,12 @@
 }
 
 .thread-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
+  column-gap: 6px;
   min-height: 32px;
-  padding: 4px 10px 4px calc(32px + var(--thread-indent, 0px));
+  padding: 4px 10px 4px calc(8px + var(--thread-indent, 0px));
   border-radius: 10px;
   background: transparent;
   border: 1px solid transparent;
@@ -1140,38 +1185,103 @@
 }
 
 .pinned-thread-list .thread-row.is-pinned {
-  padding-left: calc(44px + var(--thread-indent, 0px));
+  padding-left: calc(8px + var(--thread-indent, 0px));
 }
 
-.pinned-thread-list .thread-row.is-pinned > .thread-status:not(.ready) {
+.pinned-thread-list .thread-row.is-pinned .thread-status:not(.ready) {
   opacity: 1;
 }
 
 .thread-row.is-nested {
   margin-left: 3px;
-  gap: 5px;
+  column-gap: 5px;
   min-height: 28px;
   padding-top: 3px;
   padding-bottom: 3px;
 }
 
-.thread-status {
-  width: 7px;
-  height: 7px;
-  margin-left: -16px;
-  border-radius: 999px;
-  display: inline-block;
+.thread-row-draft {
+  min-height: 38px;
+  color: var(--text-strong);
+}
+
+.thread-row-draft.active {
+  background: color-mix(in srgb, var(--surface-hover) 54%, transparent);
+}
+
+.thread-row-draft .thread-name {
+  font-weight: 400;
+}
+
+.thread-leading.thread-leading-draft {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-faint);
+}
+
+.thread-draft-icon {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-hover) 38%, transparent);
+  transform: translateY(-50%);
+}
+
+.thread-draft-icon svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.2;
+}
+
+.thread-leading {
+  width: 36px;
+  height: 20px;
+  display: block;
+  position: relative;
   align-self: center;
   flex-shrink: 0;
 }
 
-.thread-row.has-secondary-line .thread-status {
+.thread-row.has-secondary-line .thread-leading {
   align-self: flex-start;
-  margin-top: 8px;
+  margin-top: 1px;
+}
+
+.thread-row.is-nested .thread-leading {
+  width: 30px;
+  height: 18px;
+}
+
+.thread-leading-draft .thread-status:not(.ready) {
+  right: 0;
+}
+
+.thread-status {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  display: inline-block;
+  translate: 0 -50%;
+  transform-origin: center;
+  flex-shrink: 0;
+}
+
+.thread-row.has-secondary-line .thread-status {
+  top: 9px;
 }
 
 .thread-row.has-secondary-line.is-nested .thread-status {
-  margin-top: 5px;
+  top: 8px;
 }
 
 .thread-status.processing {
@@ -1197,8 +1307,8 @@
 
 .thread-pin-button {
   position: absolute;
-  left: calc(7px + var(--thread-indent, 0px));
-  top: 16px;
+  left: 0;
+  top: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1230,12 +1340,6 @@
 .thread-pin-button.is-pinned {
   opacity: 1;
   pointer-events: auto;
-}
-
-.thread-row:hover > .thread-status:not(.ready),
-.thread-row:focus-within > .thread-status:not(.ready),
-.thread-row.is-pinned > .thread-status:not(.ready) {
-  opacity: 0;
 }
 
 .thread-pin-button:focus-visible {
@@ -1289,23 +1393,26 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-height: 20px;
   min-width: 0;
 }
 
 .thread-name {
+  display: block;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: calc(var(--sidebar-ui-font-size) * 0.9375);
-  font-weight: 500;
-  line-height: 1.08;
+  font-weight: 400;
+  line-height: 1.25;
+  padding-block: 1px;
 }
 
 .thread-row.active .thread-name {
   font-size: inherit;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .thread-details {
@@ -1478,6 +1585,22 @@
   padding-top: 0;
 }
 
+.thread-draft-label {
+  color: var(--text-faint);
+  font-size: calc(var(--sidebar-ui-font-size) * 0.75);
+  line-height: 1.22;
+  white-space: nowrap;
+}
+
+.thread-draft-hint {
+  color: var(--text-faint);
+  font-size: var(--sidebar-font-size-xs);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .thread-subagent-time-toggle {
   border: none;
   background: transparent;
@@ -1533,22 +1656,41 @@
 .thread-more {
   border: none;
   background: transparent;
-  color: var(--text-muted);
-  font-size: var(--sidebar-font-size-sm);
-  font-weight: 600;
+  color: var(--text-faint);
+  font-size: var(--sidebar-font-size-xs);
+  font-weight: 400;
   text-align: left;
-  padding: 2px 8px 2px 18px;
+  padding: 3px 7px;
+  margin: 2px 0 0 calc(var(--thread-row-title-inset, 50px) - 7px);
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   cursor: pointer;
   -webkit-app-region: no-drag;
-  opacity: 0.86;
-  border-radius: 0;
+  opacity: 0.9;
+  border-radius: 6px;
   box-shadow: none;
   transform: none;
-  transition: color 120ms ease, opacity 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.thread-more svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.1;
+  transition: transform 140ms ease;
+}
+
+.thread-more-expand.is-expanded svg {
+  transform: rotate(180deg);
 }
 
 .thread-more:hover {
-  background: transparent;
+  background: color-mix(in srgb, var(--surface-hover) 36%, transparent);
   color: var(--text-strong);
   opacity: 1;
   box-shadow: none !important;
@@ -1556,7 +1698,7 @@
 }
 
 .thread-more:active {
-  background: transparent;
+  background: color-mix(in srgb, var(--surface-hover) 48%, transparent);
   color: var(--text-strong);
   opacity: 0.94;
   box-shadow: none !important;
@@ -1597,7 +1739,7 @@
   gap: 10px;
   padding: 0 4px;
   font-size: var(--sidebar-font-size-sm);
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.01em;
   color: var(--text-strong);
 }
@@ -1747,7 +1889,7 @@
 
 .worktree-label {
   font-size: var(--sidebar-ui-font-size);
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.2;
   color: var(--text-strong);
   white-space: nowrap;

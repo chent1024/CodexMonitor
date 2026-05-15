@@ -133,4 +133,57 @@ describe("useDebugLog", () => {
     expect(result.current.debugEntries).toHaveLength(0);
     expect(result.current.debugResetVersion).toBe(previousResetVersion + 1);
   });
+
+  it("closes and hides alert-only debug logs when cleared while logging is disabled", () => {
+    const { result } = renderHook(() => useDebugLog());
+
+    act(() => {
+      result.current.addDebugEntry({
+        id: "error-1",
+        timestamp: 1000,
+        source: "error",
+        label: "client error",
+        payload: "boom",
+      });
+    });
+
+    act(() => {
+      result.current.setDebugOpen(true);
+    });
+
+    expect(result.current.debugOpen).toBe(true);
+    expect(result.current.showDebugButton).toBe(true);
+
+    act(() => {
+      result.current.clearDebugEntries();
+    });
+
+    expect(result.current.debugOpen).toBe(false);
+    expect(result.current.showDebugButton).toBe(false);
+    expect(result.current.hasDebugAlerts).toBe(false);
+    expect(result.current.debugEntries).toHaveLength(0);
+  });
+
+  it("keeps the debug panel open after clear when debug logging is enabled", () => {
+    const { result } = renderHook(() => useDebugLog({ enabled: true }));
+
+    act(() => {
+      result.current.setDebugOpen(true);
+      result.current.addDebugEntry({
+        id: "stderr-1",
+        timestamp: 1000,
+        source: "stderr",
+        label: "codex/stderr",
+        payload: stderrEvent("line"),
+      });
+    });
+
+    act(() => {
+      result.current.clearDebugEntries();
+    });
+
+    expect(result.current.debugOpen).toBe(true);
+    expect(result.current.showDebugButton).toBe(true);
+    expect(result.current.debugEntries).toHaveLength(0);
+  });
 });
