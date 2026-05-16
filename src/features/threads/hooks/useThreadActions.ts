@@ -45,8 +45,8 @@ const THREAD_LIST_PAGE_SIZE = 100;
 const THREAD_LIST_MAX_PAGES_OLDER = 6;
 const THREAD_LIST_MAX_PAGES_DEFAULT = 6;
 const THREAD_LIST_CURSOR_PAGE_START = "__codex_monitor_page_start__";
-const THREAD_TURNS_INITIAL_LIMIT = 20;
-const THREAD_TURNS_PAGE_LIMIT = 20;
+const THREAD_TURNS_INITIAL_LIMIT = 5;
+const THREAD_TURNS_PAGE_LIMIT = 5;
 const THREAD_RESUME_REFRESH_COOLDOWN_MS = 1_500;
 const THREAD_TURNS_OLDER_RETRY_COOLDOWN_MS = 1_500;
 
@@ -123,20 +123,43 @@ export function useThreadActions({
       response && typeof response === "object" && "result" in response
         ? (response as Record<string, unknown>).result
         : response
-    ) as Record<string, unknown> | null;
-    const turns = Array.isArray(result?.data)
-      ? (result.data as Record<string, unknown>[])
-      : null;
+    ) as Record<string, unknown> | Record<string, unknown>[] | null;
+    const resultRecord =
+      result && !Array.isArray(result) && typeof result === "object" ? result : null;
+    const threadRecord =
+      resultRecord?.thread &&
+      typeof resultRecord.thread === "object" &&
+      !Array.isArray(resultRecord.thread)
+        ? (resultRecord.thread as Record<string, unknown>)
+        : null;
+    const turns = Array.isArray(result)
+      ? result
+      : Array.isArray(resultRecord?.data)
+        ? (resultRecord.data as Record<string, unknown>[])
+        : Array.isArray(resultRecord?.turns)
+          ? (resultRecord.turns as Record<string, unknown>[])
+          : Array.isArray(resultRecord?.items)
+            ? (resultRecord.items as Record<string, unknown>[])
+            : Array.isArray(threadRecord?.turns)
+              ? (threadRecord.turns as Record<string, unknown>[])
+              : null;
     if (!turns) {
       return null;
     }
     const nextCursor =
-      typeof result?.nextCursor === "string"
-        ? result.nextCursor
-        : typeof result?.next_cursor === "string"
-          ? result.next_cursor
-          : null;
-    return { turns, nextCursor };
+      typeof resultRecord?.nextCursor === "string"
+        ? resultRecord.nextCursor
+        : typeof resultRecord?.next_cursor === "string"
+          ? resultRecord.next_cursor
+          : typeof resultRecord?.nextPageCursor === "string"
+            ? resultRecord.nextPageCursor
+            : typeof resultRecord?.cursor === "string"
+              ? resultRecord.cursor
+              : null;
+    return {
+      turns: turns as Record<string, unknown>[],
+      nextCursor,
+    };
   }, []);
 
   const hydrateInitialThreadTurnsPage = useCallback(
@@ -191,6 +214,7 @@ export function useThreadActions({
               type: "setThreadItems",
               threadId,
               items: mergedItems,
+              preserveHistory: true,
             });
           }
           dispatch({
@@ -498,6 +522,7 @@ export function useThreadActions({
                 type: "setThreadItems",
                 threadId,
                 items: hydrationPlan.mergedItems,
+                preserveHistory: turnsPage !== null,
               });
             }
             if (hydrationPlan.threadName) {
@@ -1072,10 +1097,14 @@ export function useThreadActions({
 
   const loadOlderThreadTurns = useCallback(
     async (workspaceId: string, threadId: string) => {
-      const cursor = threadTurnsCursorById[threadId] ?? null;
+      const hasKnownCursor = Object.prototype.hasOwnProperty.call(
+        threadTurnsCursorById,
+        threadId,
+      );
+      const cursor = hasKnownCursor ? (threadTurnsCursorById[threadId] ?? null) : null;
       const retryAfter = olderTurnsRetryAfterByThreadRef.current[threadId] ?? 0;
       if (
-        !cursor ||
+        (hasKnownCursor && !cursor) ||
         threadTurnsPagingById[threadId] ||
         threadTurnsHasLoadedOldestById[threadId] ||
         Date.now() < retryAfter
@@ -1119,6 +1148,7 @@ export function useThreadActions({
           type: "setThreadItems",
           threadId,
           items: mergedItems,
+          preserveHistory: true,
         });
         dispatch({
           type: "setThreadTurnsCursor",

@@ -131,6 +131,53 @@ describe("PierreDiffBlock", () => {
     );
   });
 
+  it("normalizes raw added-file content so it renders through the file diff grid", () => {
+    parsePatchFilesMock.mockImplementation((diff: string) => {
+      if (!diff.includes("--- /dev/null")) {
+        return [{ files: [] }];
+      }
+
+      return [
+        {
+          files: [
+            {
+              name: ".codex-run/cargo.cmd",
+              prevName: undefined,
+              type: "addition",
+              hunks: [],
+              splitLineCount: 0,
+              unifiedLineCount: 0,
+            },
+          ],
+        },
+      ];
+    });
+
+    render(
+      <PierreDiffBlock
+        displayPath=".codex-run/cargo.cmd"
+        changeKind="add"
+        diff={[
+          "@echo off",
+          "\"%USERPROFILE%\\.cargo\\bin\\rustup.exe\" run stable cargo %*",
+        ].join("\n")}
+      />,
+    );
+
+    expect(screen.getByTestId("mock-file-diff").textContent).toContain(
+      ".codex-run/cargo.cmd",
+    );
+    expect(parsePatchFilesMock).toHaveBeenCalledWith(
+      expect.stringContaining("--- /dev/null"),
+    );
+    expect(parsePatchFilesMock).toHaveBeenCalledWith(
+      expect.stringContaining("+++ b/.codex-run/cargo.cmd"),
+    );
+    expect(parsePatchFilesMock).toHaveBeenCalledWith(
+      expect.stringContaining("+@echo off"),
+    );
+  });
+
   it("renders a bounded raw preview for very large diffs", () => {
     const largeDiff = Array.from(
       { length: 1_510 },

@@ -983,7 +983,6 @@
 }
 
 .chat-pane {
-  --composer-overlay-height: 0px;
   position: relative;
   display: flex;
   flex: 1;
@@ -999,12 +998,7 @@
 }
 
 .chat-pane-composer {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
-  pointer-events: none;
+  display: contents;
 }
 
 .chat-pane-composer-status {

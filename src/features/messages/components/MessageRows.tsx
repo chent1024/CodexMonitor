@@ -26,6 +26,12 @@ import { pushErrorToast } from "@services/toasts";
 import type { ConversationItem } from "../../../types";
 import type { ParsedFileLocation } from "../../../utils/fileLinks";
 import { PierreDiffBlock } from "../../git/components/PierreDiffBlock";
+import {
+  countRawContentLines,
+  hasParseablePatchHeader,
+  hasPatchHunkHeader,
+  isRawAddedFileChange,
+} from "../../git/components/GitDiffViewer.utils";
 import { relativeDisplayPath } from "../utils/messageFileLinks";
 import {
   MAX_COMMAND_OUTPUT_LINES,
@@ -138,9 +144,55 @@ type FileChangeSummaryEntry = FileChangeEntry & {
   displayPath: string;
 };
 
+type ScrollAnchorSnapshot = {
+  container: HTMLDivElement;
+  target: HTMLElement;
+  topPx: number;
+};
+
 type CommandOutputProps = {
   output: string;
 };
+
+function getMessageScrollContainer(node: HTMLElement) {
+  return node.closest<HTMLDivElement>(
+    ".messages.messages-full, [data-thread-reverse-scroll='true']",
+  );
+}
+
+function captureScrollAnchor(target: HTMLElement): ScrollAnchorSnapshot | null {
+  const container = getMessageScrollContainer(target);
+  if (!container) {
+    return null;
+  }
+  return {
+    container,
+    target,
+    topPx: target.getBoundingClientRect().top,
+  };
+}
+
+function restoreScrollAnchor(snapshot: ScrollAnchorSnapshot | null) {
+  if (!snapshot) {
+    return;
+  }
+  const nextTop = snapshot.target.getBoundingClientRect().top;
+  const deltaPx = nextTop - snapshot.topPx;
+  if (!Number.isFinite(deltaPx) || Math.abs(deltaPx) < 1) {
+    return;
+  }
+  snapshot.container.scrollTop += deltaPx;
+}
+
+function scheduleScrollAnchorRestore(snapshot: ScrollAnchorSnapshot | null) {
+  if (!snapshot) {
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    restoreScrollAnchor(snapshot);
+    window.requestAnimationFrame(() => restoreScrollAnchor(snapshot));
+  });
+}
 
 export function MemoryCitationPanel({ citation }: { citation: MemoryCitationInfo }) {
   const count = citation.citationEntries.length || citation.rolloutIds.length;
@@ -900,7 +952,7 @@ function buildTurnDiffRows(item: Extract<ConversationItem, { kind: "tool" }>) {
   }
   if (item.changes?.length) {
     return item.changes.map((change, index) => {
-      const stats = countDiffStats(change.diff);
+      const stats = countDiffStats(change.diff, change.kind);
       return {
         id: `${change.path}-${index}`,
         label: change.path,
@@ -912,9 +964,16 @@ function buildTurnDiffRows(item: Extract<ConversationItem, { kind: "tool" }>) {
   return [];
 }
 
-export function countDiffStats(diff?: string) {
+export function countDiffStats(diff?: string, changeKind?: string | null) {
   if (!diff) {
     return { additions: 0, deletions: 0 };
+  }
+  if (
+    isRawAddedFileChange(changeKind) &&
+    !hasParseablePatchHeader(diff) &&
+    !hasPatchHunkHeader(diff)
+  ) {
+    return { additions: countRawContentLines(diff), deletions: 0 };
   }
   let additions = 0;
   let deletions = 0;
@@ -981,7 +1040,7 @@ function DiffStat({
 function summarizeFileChanges(changes: FileChangeEntry[]) {
   return changes.reduce(
     (summary, change) => {
-      const stats = countDiffStats(change.diff);
+      const stats = countDiffStats(change.diff, change.kind);
       summary.additions += stats.additions;
       summary.deletions += stats.deletions;
       return summary;
@@ -1041,7 +1100,7 @@ function formatFileChangeSummary(
     return `${changes.length} files`;
   }
   const change = changes[0];
-  const { additions, deletions } = countDiffStats(change.diff);
+  const { additions, deletions } = countDiffStats(change.diff, change.kind);
   const stats = [
     additions > 0 ? `+${additions}` : "",
     deletions > 0 ? `-${deletions}` : "",
@@ -1060,7 +1119,7 @@ function FileChangeSummaryText({
   if (changes.length > 1) {
     const totals = changes.reduce(
       (summary, change) => {
-        const stats = countDiffStats(change.diff);
+        const stats = countDiffStats(change.diff, change.kind);
         summary.additions += stats.additions;
         summary.deletions += stats.deletions;
         return summary;
@@ -1076,7 +1135,7 @@ function FileChangeSummaryText({
     );
   }
   const change = changes[0];
-  const { additions, deletions } = countDiffStats(change.diff);
+  const { additions, deletions } = countDiffStats(change.diff, change.kind);
   return (
     <span className="oai-file-change-summary-value">
       <span>{basename(change.path)}</span>
@@ -1608,7 +1667,7 @@ export const DiffRow = memo(function DiffRow({ item }: DiffRowProps) {
         {item.status && <span className="oai-diff-status">{item.status}</span>}
       </div>
       <div className="diff-viewer-output">
-        <PierreDiffBlock diff={item.diff} displayPath={item.title} />
+        <PierreDiffBlock diff={item.diff} displayPath={item.title} changeKind={item.status} />
       </div>
     </div>
   );
@@ -1707,7 +1766,14 @@ export const FileChangeSummaryCard = memo(function FileChangeSummaryCard({
   const totals = useMemo(() => summarizeFileChanges(summaryChanges), [summaryChanges]);
   const fileCount = summaryChanges.length;
 
-  const handleToggleDiff = useCallback((key: string) => {
+  const handleToggleList = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    const anchor = captureScrollAnchor(event.currentTarget);
+    setIsListExpanded((current) => !current);
+    scheduleScrollAnchorRestore(anchor);
+  }, []);
+
+  const handleToggleDiff = useCallback((event: MouseEvent<HTMLButtonElement>, key: string) => {
+    const anchor = captureScrollAnchor(event.currentTarget);
     setExpandedDiffs((previous) => {
       const next = new Set(previous);
       if (next.has(key)) {
@@ -1717,6 +1783,7 @@ export const FileChangeSummaryCard = memo(function FileChangeSummaryCard({
       }
       return next;
     });
+    scheduleScrollAnchorRestore(anchor);
   }, []);
 
   const handleCopyFileDiff = useCallback(
@@ -1773,7 +1840,7 @@ export const FileChangeSummaryCard = memo(function FileChangeSummaryCard({
           className="oai-review-diff-summary-toggle"
           data-utility-button
           data-diffs-summary-toggle
-          onClick={() => setIsListExpanded((current) => !current)}
+          onClick={handleToggleList}
           aria-expanded={isListExpanded}
         >
           <span className="oai-review-diff-summary-title">
@@ -1795,7 +1862,7 @@ export const FileChangeSummaryCard = memo(function FileChangeSummaryCard({
         <div className="oai-review-diff-file-list" data-diffs-file-list>
           {summaryChanges.map((change, index) => {
               const changeKey = `${change.path}-${index}`;
-              const { additions, deletions } = countDiffStats(change.diff);
+              const { additions, deletions } = countDiffStats(change.diff, change.kind);
               const isDiffExpanded = expandedDiffs.has(changeKey);
               const reviewPath = change.reviewPath ?? change.path;
               const repositorySource = change.repositorySource ?? "local";
@@ -1821,7 +1888,7 @@ export const FileChangeSummaryCard = memo(function FileChangeSummaryCard({
                     data-review-path={reviewPath}
                     data-repository-source={repositorySource}
                     data-review-summary-source={reviewSummarySource}
-                    onClick={() => handleToggleDiff(changeKey)}
+                    onClick={(event) => handleToggleDiff(event, changeKey)}
                   aria-expanded={isDiffExpanded}
                   aria-label={`${basename(change.displayPath)} ${additions > 0 ? `+${additions}` : ""} ${
                     deletions > 0 ? `-${deletions}` : ""
@@ -1874,7 +1941,7 @@ const FileDiffCard = memo(function FileDiffCard({
   fileBody = false,
   className,
 }: FileDiffCardProps) {
-  const { additions, deletions } = countDiffStats(change.diff);
+  const { additions, deletions } = countDiffStats(change.diff, change.kind);
   const reviewPath = change.reviewPath ?? change.path;
   const fileName = basename(reviewPath || change.path);
   const changeType = change.kind ?? "file";
@@ -1949,7 +2016,11 @@ const FileDiffCard = memo(function FileDiffCard({
           data-file-body-content
         >
           <div className="thread-diff-virtualized oai-thread-diff-virtualized" data-thread-diff-virtualized>
-            <PierreDiffBlock diff={change.diff} displayPath={reviewPath || change.path} />
+            <PierreDiffBlock
+              diff={change.diff}
+              displayPath={reviewPath || change.path}
+              changeKind={change.kind}
+            />
           </div>
         </div>
       )}

@@ -38,6 +38,14 @@ fn is_auth_error_message(message: &str) -> bool {
     lower.contains("unauthorized") || lower.contains("invalid token")
 }
 
+fn is_transient_probe_error(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("connection closed")
+        || lower.contains("timed out")
+        || lower.contains("connection reset")
+        || lower.contains("broken pipe")
+}
+
 fn parse_daemon_info(value: &Value) -> Result<DaemonInfo, String> {
     let name = value
         .get("name")
@@ -178,6 +186,9 @@ pub(super) async fn probe_daemon(listen_addr: &str, token: Option<&str>) -> Daem
         },
         Err(message) => {
             if !is_auth_error_message(&message) {
+                if is_transient_probe_error(&message) {
+                    return DaemonProbe::NotReachable;
+                }
                 return DaemonProbe::NotDaemon;
             }
 
@@ -229,11 +240,35 @@ pub(super) async fn probe_daemon(listen_addr: &str, token: Option<&str>) -> Daem
                             info: None,
                         }
                     } else {
+                        if is_transient_probe_error(&auth_error) {
+                            return DaemonProbe::NotReachable;
+                        }
                         DaemonProbe::NotDaemon
                     }
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_auth_error_message, is_transient_probe_error};
+
+    #[test]
+    fn classifies_auth_errors() {
+        assert!(is_auth_error_message("Unauthorized"));
+        assert!(is_auth_error_message("invalid token"));
+        assert!(!is_auth_error_message("connection closed"));
+    }
+
+    #[test]
+    fn classifies_transient_probe_errors() {
+        assert!(is_transient_probe_error("connection closed"));
+        assert!(is_transient_probe_error("timed out waiting for daemon response"));
+        assert!(is_transient_probe_error("connection reset by peer"));
+        assert!(is_transient_probe_error("broken pipe"));
+        assert!(!is_transient_probe_error("expected value at line 1 column 1"));
     }
 }
 

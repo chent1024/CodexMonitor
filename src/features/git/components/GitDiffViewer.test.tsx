@@ -18,36 +18,42 @@ vi.mock("@tanstack/react-virtual", () => ({
 }));
 
 vi.mock("@pierre/diffs", () => ({
-  parsePatchFiles: (diff: string) =>
-    diff.includes("@@")
-      ? [
+  parsePatchFiles: (diff: string) => {
+    if (!diff.includes("@@")) {
+      return [];
+    }
+    const name = /^\+\+\+ b\/(.+)$/m.exec(diff)?.[1] ?? "src/main.ts";
+    return [
+      {
+        files: [
           {
-            files: [
-              {
-                name: "src/main.ts",
-                prevName: undefined,
-                type: "change",
-                hunks: [],
-                splitLineCount: 0,
-                unifiedLineCount: 0,
-              },
-            ],
+            name,
+            prevName: undefined,
+            type: "change",
+            hunks: [],
+            splitLineCount: 0,
+            unifiedLineCount: 0,
           },
-        ]
-      : [],
+        ],
+      },
+    ];
+  },
 }));
 
 vi.mock("@pierre/diffs/react", () => ({
   FileDiff: ({
+    fileDiff,
     renderHoverUtility,
   }: {
+    fileDiff?: { name: string };
     renderHoverUtility?: (
       getHoveredLine: () =>
         | { lineNumber: number; side?: "additions" | "deletions" }
         | undefined,
     ) => ReactNode;
   }) => (
-    <div>
+    <div data-testid="mock-file-diff">
+      {fileDiff?.name}
       {renderHoverUtility
         ? renderHoverUtility(() => ({ lineNumber: 2, side: "additions" }))
         : null}
@@ -128,6 +134,32 @@ describe("GitDiffViewer", () => {
     const rawLines = Array.from(document.querySelectorAll(".diff-viewer-raw-line"));
     expect(rawLines[1]?.className).toContain("diff-viewer-raw-line-add");
     expect(rawLines[2]?.className).toContain("diff-viewer-raw-line-del");
+  });
+
+  it("renders raw added-file content through the file diff grid", () => {
+    render(
+      <GitDiffViewer
+        diffs={[
+          {
+            path: ".codex-run/cargo.cmd",
+            displayPath: ".codex-run/cargo.cmd",
+            status: "A",
+            diff: [
+              "@echo off",
+              "\"%USERPROFILE%\\.cargo\\bin\\rustup.exe\" run stable cargo %*",
+            ].join("\n"),
+          },
+        ]}
+        selectedPath=".codex-run/cargo.cmd"
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByTestId("mock-file-diff").textContent).toContain(
+      ".codex-run/cargo.cmd",
+    );
+    expect(document.querySelector(".diff-viewer-output-raw")).toBeNull();
   });
 
   it("bounds very large diff previews", () => {

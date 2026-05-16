@@ -61,6 +61,32 @@ The intended data flow is:
 4. The compatibility renderer emits the target DOM structure and classes.
 5. Local CodexMonitor callbacks provide file opening, quote, copy, image preview, plan follow-up, and user-input submission.
 
+## Scroll and Pagination Contract
+
+The message pane follows the VS Code-style bottom-anchored scroll model instead of a normal top-anchored list.
+
+- `src/features/messages-vscode-compat/VscodeMessages.tsx` owns the scroll container and sets `data-thread-reverse-scroll="true"`.
+- `src/features/messages/utils/threadScroll.ts` is the only helper surface for translating between DOM `scrollTop` and logical distance from the bottom.
+- Message scroll writes must route through the `ThreadScrollController` exposed by `useMessagesViewState`; virtual row measurement, footer height changes, pagination restore, and explicit bottom pinning must not write `scrollTop` directly.
+- In reverse scroll mode, the visual bottom is `scrollTop === 0`; scrolling upward is represented by a negative `scrollTop`.
+- Per-thread restoration stores logical distance from the bottom, scoped by `workspaceId:threadId`.
+- A thread that was left pinned to bottom must return pinned to bottom after switching away and back.
+- A thread that was left scrolled upward must return to the same logical distance from bottom.
+- Loading older history must preserve the current logical distance from bottom before the browser paints the prepended content.
+- Composer/footer height changes must keep pinned threads pinned and must preserve non-pinned logical distance.
+- The composer is rendered as the message footer through `ChatPane` cloning `footerNode`; message content and composer width must come from the same scroll container width.
+- Virtualized turns use VS Code-style bottom-offset layout math with binary range lookup. Each rendered virtual item must expose `data-turn-key` so turn-key anchoring/search can target stable turn identities.
+- If a thread returns before enough content has rendered to satisfy its saved distance, the restore remains pending and is retried on content resize instead of being replaced by the temporary clipped scroll position.
+
+Historical pagination is already wired through the thread action layer:
+
+1. `useMainAppLayoutSurfaces` passes `hasOlderTurns`, `isLoadingOlderTurns`, and `onLoadOlderTurns` to `Messages`.
+2. `Messages` calls `onLoadOlderTurns` when the reverse scroll container is near the oldest edge.
+3. `useThreadActions.loadOlderThreadTurns` calls `list_thread_turns` with the stored cursor and the VS Code page size.
+4. The reducer merges older items with `preserveHistory: true` and updates `threadTurnsCursorById` / `threadTurnsHasLoadedOldestById`.
+
+Do not reintroduce height-delta `scrollTop += delta` restoration in the message renderer. Prepend restoration must be distance-from-bottom based so it works with normal, reverse, and virtualized layouts.
+
 ## Backend and Reducer Escalation
 
 Default to frontend adaptation. Backend protocol or reducer changes are allowed only after a short written gap analysis proves that the target extension exposes message-output state that CodexMonitor does not currently preserve.
@@ -214,7 +240,7 @@ Run these after each meaningful step:
 
 ```bash
 npm run typecheck
-npm run test -- src/features/messages-vscode-compat src/features/messages/components/Messages.test.tsx
+npm run test -- src/features/messages-vscode-compat src/features/messages/components/Messages.test.tsx src/features/messages/utils/threadScroll.test.ts
 ```
 
 Run the full frontend suite before handoff:
@@ -224,6 +250,15 @@ npm run test
 ```
 
 For structure/style parity milestones, add and run screenshot coverage against representative message fixtures. Do not rely on a passing unit suite as visual parity proof.
+
+For scroll milestones, verify these runtime states in the WebView or browser:
+
+- A streaming response stays pinned above the composer.
+- A user-scrolled thread does not snap to bottom while new output arrives.
+- Switching away from a bottom-pinned thread and back keeps it pinned.
+- Switching away from a scrolled-up thread and back restores the same visual position.
+- Scrolling to the oldest edge loads older turns and does not jump after the page prepends.
+- Mobile/touch scroll still moves vertically with the composer safe-area padding applied.
 
 If protocol, reducer, app-server, or backend surfaces change, also run the targeted tests for those files and the relevant app/daemon parity checks. Backend changes require:
 

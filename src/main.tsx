@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import * as Sentry from "@sentry/react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import App from "./App";
 import { isMobilePlatform } from "./utils/platformPaths";
 
@@ -89,8 +90,39 @@ function syncMobileViewportHeight() {
 disableMobileZoomGestures();
 syncMobileViewportHeight();
 
+let appWindowRevealRequested = false;
+
+function revealAppWindow() {
+  if (
+    appWindowRevealRequested ||
+    typeof window === "undefined" ||
+    !("__TAURI_INTERNALS__" in window)
+  ) {
+    return;
+  }
+
+  appWindowRevealRequested = true;
+  const windowHandle = getCurrentWindow();
+  window.setTimeout(() => {
+    void windowHandle
+      .show()
+      .then(() => windowHandle.setFocus())
+      .catch(() => {
+        appWindowRevealRequested = false;
+      });
+  }, 0);
+}
+
+function AppRoot() {
+  React.useEffect(() => {
+    revealAppWindow();
+  }, []);
+
+  return <App />;
+}
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <AppRoot />
   </React.StrictMode>,
 );

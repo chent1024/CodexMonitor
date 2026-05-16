@@ -20,6 +20,12 @@ import type { ConversationItem } from "../../types";
 import type { ParsedFileLocation } from "../../utils/fileLinks";
 import { PierreDiffBlock } from "../git/components/PierreDiffBlock";
 import {
+  countRawContentLines,
+  hasParseablePatchHeader,
+  hasPatchHunkHeader,
+  isRawAddedFileChange,
+} from "../git/components/GitDiffViewer.utils";
+import {
   buildToolSummary,
   exploreKindLabel,
   formatDurationMs,
@@ -60,6 +66,8 @@ type DiffStats = { additions: number; deletions: number };
 
 const DIFF_STATS_CACHE_LIMIT = 500;
 const diffStatsCache = new Map<string, DiffStats>();
+const VSCODE_COMMAND_OUTPUT_RENDER_LINE_LIMIT = 300;
+const VSCODE_COMMAND_OUTPUT_RENDER_CHAR_LIMIT = 80_000;
 
 function isRunningStatus(status?: string | null) {
   return /in[_\s-]*progress|running|started/.test((status ?? "").toLowerCase());
@@ -78,13 +86,32 @@ function basename(path: string) {
   return normalized.split("/").filter(Boolean).pop() ?? normalized;
 }
 
-function countDiffStats(diff?: string): DiffStats {
+function countDiffStats(diff?: string, changeKind?: string | null): DiffStats {
   if (!diff) {
     return { additions: 0, deletions: 0 };
   }
-  const cached = diffStatsCache.get(diff);
+  const cacheKey = `${changeKind ?? ""}\0${diff}`;
+  const cached = diffStatsCache.get(cacheKey);
   if (cached) {
     return cached;
+  }
+  const cacheStats = (stats: DiffStats) => {
+    if (diffStatsCache.size >= DIFF_STATS_CACHE_LIMIT) {
+      const oldestKey = diffStatsCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        diffStatsCache.delete(oldestKey);
+      }
+    }
+    diffStatsCache.set(cacheKey, stats);
+    return stats;
+  };
+  if (
+    isRawAddedFileChange(changeKind) &&
+    !hasParseablePatchHeader(diff) &&
+    !hasPatchHunkHeader(diff)
+  ) {
+    const stats = { additions: countRawContentLines(diff), deletions: 0 };
+    return cacheStats(stats);
   }
   let additions = 0;
   let deletions = 0;
@@ -99,14 +126,7 @@ function countDiffStats(diff?: string): DiffStats {
     }
   });
   const stats = { additions, deletions };
-  if (diffStatsCache.size >= DIFF_STATS_CACHE_LIMIT) {
-    const oldestKey = diffStatsCache.keys().next().value;
-    if (oldestKey !== undefined) {
-      diffStatsCache.delete(oldestKey);
-    }
-  }
-  diffStatsCache.set(diff, stats);
-  return stats;
+  return cacheStats(stats);
 }
 
 function getFileChangeSummaryParts(changes: FileChangeEntry[]) {
@@ -115,7 +135,7 @@ function getFileChangeSummaryParts(changes: FileChangeEntry[]) {
   }
   if (changes.length === 1) {
     const change = changes[0];
-    const stats = countDiffStats(change.diff);
+    const stats = countDiffStats(change.diff, change.kind);
     return {
       label: basename(change.path),
       additions: stats.additions,
@@ -124,7 +144,7 @@ function getFileChangeSummaryParts(changes: FileChangeEntry[]) {
   }
   const stats = changes.reduce(
     (total, change) => {
-      const next = countDiffStats(change.diff);
+      const next = countDiffStats(change.diff, change.kind);
       return {
         additions: total.additions + next.additions,
         deletions: total.deletions + next.deletions,
@@ -171,7 +191,7 @@ function buildTurnDiffRows(item: ToolItem) {
     return [];
   }
   return item.changes.map((change, index) => {
-    const stats = countDiffStats(change.diff);
+    const stats = countDiffStats(change.diff, change.kind);
     return {
       id: `${change.path}-${index}`,
       label: change.path,
@@ -346,6 +366,52 @@ function contextCompactionLabel(tone: "completed" | "processing" | "failed") {
   return "上下文已自动压缩";
 }
 
+function buildCommandOutputWindow(output: string, expanded: boolean) {
+  if (!output) {
+    return {
+      renderedOutput: output,
+      hiddenLineCount: 0,
+      hiddenCharCount: 0,
+      isTruncated: false,
+    };
+  }
+
+  const lines = output.split(/\r?\n/);
+  const hiddenLineCount = Math.max(0, lines.length - VSCODE_COMMAND_OUTPUT_RENDER_LINE_LIMIT);
+  if (expanded) {
+    return {
+      renderedOutput: output,
+      hiddenLineCount,
+      hiddenCharCount:
+        hiddenLineCount > 0
+          ? 0
+          : Math.max(0, output.length - VSCODE_COMMAND_OUTPUT_RENDER_CHAR_LIMIT),
+      isTruncated:
+        hiddenLineCount > 0 || output.length > VSCODE_COMMAND_OUTPUT_RENDER_CHAR_LIMIT,
+    };
+  }
+
+  let renderedOutput =
+    hiddenLineCount > 0
+      ? (() => {
+          return lines.slice(-VSCODE_COMMAND_OUTPUT_RENDER_LINE_LIMIT).join("\n");
+        })()
+      : output;
+
+  let hiddenCharCount = 0;
+  if (renderedOutput.length > VSCODE_COMMAND_OUTPUT_RENDER_CHAR_LIMIT) {
+    hiddenCharCount = renderedOutput.length - VSCODE_COMMAND_OUTPUT_RENDER_CHAR_LIMIT;
+    renderedOutput = renderedOutput.slice(-VSCODE_COMMAND_OUTPUT_RENDER_CHAR_LIMIT);
+  }
+
+  return {
+    renderedOutput,
+    hiddenLineCount,
+    hiddenCharCount,
+    isTruncated: hiddenLineCount > 0 || hiddenCharCount > 0,
+  };
+}
+
 const VscodeCommandOutput = memo(function VscodeCommandOutput({
   output,
   command,
@@ -363,8 +429,21 @@ const VscodeCommandOutput = memo(function VscodeCommandOutput({
   const [isPinned, setIsPinned] = useState(true);
   const [copiedCommand, setCopiedCommand] = useState(false);
   const [copiedOutput, setCopiedOutput] = useState(false);
+  const [outputExpanded, setOutputExpanded] = useState(false);
   const hasOutput = /\S/.test(output);
-  const outputText = hasOutput ? output : "No output";
+  const outputWindow = useMemo(
+    () => buildCommandOutputWindow(output, outputExpanded),
+    [output, outputExpanded],
+  );
+  const outputText = hasOutput ? outputWindow.renderedOutput : "No output";
+  const truncatedSummary = [
+    outputWindow.hiddenLineCount > 0
+      ? `${outputWindow.hiddenLineCount} earlier lines hidden`
+      : null,
+    outputWindow.hiddenCharCount > 0
+      ? `${outputWindow.hiddenCharCount} earlier chars hidden`
+      : null,
+  ].filter(Boolean).join(" / ");
 
   const handleScroll = useCallback(() => {
     const node = containerRef.current;
@@ -411,7 +490,8 @@ const VscodeCommandOutput = memo(function VscodeCommandOutput({
       data-oai-tool-terminal
       data-vscode-command-output
       data-command-expanded={commandExpanded ? "true" : "false"}
-      data-output-expanded="true"
+      data-output-expanded={outputExpanded || !outputWindow.isTruncated ? "true" : "false"}
+      data-output-truncated={outputWindow.isTruncated ? "true" : "false"}
     >
       <div className="oai-vscode-shell-header" data-vscode-shell-header>
         <span>Shell</span>
@@ -451,6 +531,11 @@ const VscodeCommandOutput = memo(function VscodeCommandOutput({
         </div>
       </div>
       <div className="oai-vscode-output-shell" data-vscode-output-shell>
+        {outputWindow.isTruncated ? (
+          <div className="oai-vscode-output-truncation" data-vscode-output-truncation>
+            <span>{truncatedSummary}</span>
+          </div>
+        ) : null}
         <div
           className="oai-tool-terminal-lines oai-vscode-terminal-lines vertical-scroll-fade-mask"
           data-oai-tool-terminal-lines
@@ -472,6 +557,18 @@ const VscodeCommandOutput = memo(function VscodeCommandOutput({
             {outputText}
           </div>
         </div>
+        {outputWindow.isTruncated ? (
+          <button
+            type="button"
+            className="ghost oai-vscode-output-toggle"
+            data-vscode-toggle-output
+            aria-expanded={outputExpanded}
+            onClick={() => setOutputExpanded((current) => !current)}
+          >
+            <ScrollText size={12} aria-hidden />
+            <span>{outputExpanded ? "Show tail" : "Show full output"}</span>
+          </button>
+        ) : null}
         <button
           type="button"
           className="ghost oai-vscode-output-copy"
@@ -500,7 +597,7 @@ function VscodeFileDiffCard({
   copiedChangeKey: string | null;
   onCopy: (event: MouseEvent<HTMLButtonElement>, key: string, diff: string) => void;
 }) {
-  const stats = countDiffStats(change.diff);
+  const stats = countDiffStats(change.diff, change.kind);
   const displayPath = change.reviewPath || change.path;
   return (
     <div
@@ -559,7 +656,11 @@ function VscodeFileDiffCard({
         data-thread-diff-virtualized
       >
         {change.diff ? (
-          <PierreDiffBlock diff={change.diff} displayPath={displayPath} />
+          <PierreDiffBlock
+            diff={change.diff}
+            displayPath={displayPath}
+            changeKind={change.kind}
+          />
         ) : (
           <div className="oai-file-diff-empty">No diff available.</div>
         )}
@@ -784,7 +885,7 @@ function VscodeDiffRow({ item }: { item: Extract<ConversationItem, { kind: "diff
         {item.status ? <span className="oai-vscode-activity-status">{item.status}</span> : null}
       </div>
       <div className="oai-vscode-activity-body oai-file-diff-body" data-oai-activity-detail-body>
-        <PierreDiffBlock diff={item.diff} displayPath={item.title} />
+        <PierreDiffBlock diff={item.diff} displayPath={item.title} changeKind={item.status} />
       </div>
     </div>
   );

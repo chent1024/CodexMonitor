@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import type { ConversationItem } from "../../../types";
+import { COMPOSER_OVERLAY_HEIGHT_CHANGE_EVENT } from "../../layout/utils/composerOverlayEvents";
 import { isPlanReadyTaggedMessage } from "../../../utils/internalPlanReadyMessages";
 import {
   SCROLL_THRESHOLD_PX,
@@ -16,6 +17,11 @@ import {
   parseReasoning,
   scrollKeyForItems,
 } from "../utils/messageRenderUtils";
+import {
+  getScrollDistanceFromBottom,
+  isNearScrollBottom,
+  setScrollDistanceFromBottom,
+} from "../utils/threadScroll";
 
 function toMarkdownQuote(text: string): string {
   const trimmed = text.trim();
@@ -32,6 +38,7 @@ function toMarkdownQuote(text: string): string {
 type UseMessagesViewStateArgs = {
   items: ConversationItem[];
   threadId: string | null;
+  workspaceId?: string | null;
   isThinking: boolean;
   activeUserInputRequestId: string | number | null;
   hasVisibleUserInputRequest: boolean;
@@ -46,9 +53,127 @@ type ReasoningParseCacheEntry = {
   parsed: ReturnType<typeof parseReasoning>;
 };
 
+type ScrollSnapshot = {
+  anchor?: {
+    offsetTopPx: number;
+    turnKey: string;
+  };
+  distanceFromBottom: number;
+  wasPinned: boolean;
+};
+
+export type ThreadScrollController = {
+  adjustForMeasuredTurnHeightDelta: (input: {
+    heightDeltaPx: number;
+    turnBottomDistanceFromBottomPx: number;
+    viewportDistanceFromBottomPx: number;
+  }) => void;
+  getLastScrollDistanceFromBottomPx: () => number;
+  getScrollElement: () => HTMLDivElement | null;
+  scrollToBottom: () => void;
+  scrollToDistanceFromBottomPx: (
+    distanceFromBottom: number,
+    behavior?: ScrollBehavior,
+  ) => void;
+};
+
+const MAX_THREAD_SCROLL_SNAPSHOTS = 200;
+const SCROLL_RESTORE_TOLERANCE_PX = 2;
+const threadScrollSnapshots = new Map<string, ScrollSnapshot>();
+
+function getScrollAnchor(container: HTMLDivElement): ScrollSnapshot["anchor"] {
+  const containerRect = container.getBoundingClientRect();
+  const turnNodes = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-turn-key]"),
+  );
+  let best:
+    | {
+        distanceFromTopPx: number;
+        offsetTopPx: number;
+        turnKey: string;
+      }
+    | null = null;
+  turnNodes.forEach((node) => {
+    const turnKey = node.dataset.turnKey;
+    if (!turnKey) {
+      return;
+    }
+    const rect = node.getBoundingClientRect();
+    if (rect.bottom < containerRect.top || rect.top > containerRect.bottom) {
+      return;
+    }
+    const offsetTopPx = rect.top - containerRect.top;
+    const distanceFromTopPx = Math.abs(offsetTopPx);
+    if (!best || distanceFromTopPx < best.distanceFromTopPx) {
+      best = { distanceFromTopPx, offsetTopPx, turnKey };
+    }
+  });
+  if (best == null) {
+    return undefined;
+  }
+  const anchor = best as {
+    distanceFromTopPx: number;
+    offsetTopPx: number;
+    turnKey: string;
+  };
+  return {
+    offsetTopPx: anchor.offsetTopPx,
+    turnKey: anchor.turnKey,
+  };
+}
+
+function getScrollSnapshot(container: HTMLDivElement, wasPinned: boolean): ScrollSnapshot {
+  return {
+    anchor: wasPinned ? undefined : getScrollAnchor(container),
+    distanceFromBottom: getScrollDistanceFromBottom(container),
+    wasPinned,
+  };
+}
+
+function getScrollDistanceSnapshot(
+  container: HTMLDivElement,
+  wasPinned: boolean,
+): ScrollSnapshot {
+  return {
+    distanceFromBottom: getScrollDistanceFromBottom(container),
+    wasPinned,
+  };
+}
+
+function restoreScrollAnchor(container: HTMLDivElement, snapshot: ScrollSnapshot) {
+  if (!snapshot.anchor || snapshot.wasPinned) {
+    return;
+  }
+  const anchorNode = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-turn-key]"),
+  ).find((node) => node.dataset.turnKey === snapshot.anchor?.turnKey);
+  if (!anchorNode) {
+    return;
+  }
+  const containerRect = container.getBoundingClientRect();
+  const anchorRect = anchorNode.getBoundingClientRect();
+  const deltaPx =
+    anchorRect.top - containerRect.top - snapshot.anchor.offsetTopPx;
+  if (!Number.isFinite(deltaPx) || Math.abs(deltaPx) < 1) {
+    return;
+  }
+  container.scrollTop += deltaPx;
+}
+
+function rememberThreadScrollSnapshot(key: string, snapshot: ScrollSnapshot) {
+  if (threadScrollSnapshots.size >= MAX_THREAD_SCROLL_SNAPSHOTS) {
+    const oldestKey = threadScrollSnapshots.keys().next().value;
+    if (oldestKey !== undefined && oldestKey !== key) {
+      threadScrollSnapshots.delete(oldestKey);
+    }
+  }
+  threadScrollSnapshots.set(key, snapshot);
+}
+
 export function useMessagesViewState({
   items,
   threadId,
+  workspaceId = null,
   isThinking,
   activeUserInputRequestId,
   hasVisibleUserInputRequest,
@@ -59,6 +184,10 @@ export function useMessagesViewState({
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
+  const scrollFrameRef = useRef<number | null>(null);
+  const restoreFrameRef = useRef<number | null>(null);
+  const pendingRestoreRef = useRef<ScrollSnapshot | null>(null);
+  const isRestoringScrollRef = useRef(false);
   const copyTimeoutRef = useRef<number | null>(null);
   const manuallyToggledExpandedRef = useRef<Set<string>>(new Set());
   const reasoningParseCacheRef = useRef<Map<string, ReasoningParseCacheEntry>>(
@@ -74,57 +203,342 @@ export function useMessagesViewState({
     useState<Record<string, string>>({});
 
   const scrollKey = `${scrollKeyForItems(items)}-${activeUserInputRequestId ?? "no-input"}`;
+  const scrollScopeKey = `${workspaceId ?? "no-workspace"}:${threadId ?? "draft"}`;
+  const initialScrollSnapshot = threadScrollSnapshots.get(scrollScopeKey);
+  const initialScrollDistanceFromBottom = initialScrollSnapshot?.wasPinned
+    ? 0
+    : (initialScrollSnapshot?.distanceFromBottom ?? 0);
+  const lastScrollSnapshotRef = useRef<ScrollSnapshot>({
+    distanceFromBottom: initialScrollDistanceFromBottom,
+    wasPinned: initialScrollDistanceFromBottom <= SCROLL_THRESHOLD_PX,
+  });
+
+  useEffect(() => {
+    manuallyToggledExpandedRef.current.clear();
+    setExpandedItems((current) => (current.size > 0 ? new Set() : current));
+    setCollapsedToolGroups((current) => (current.size > 0 ? new Set() : current));
+    setCopiedMessageId(null);
+  }, [threadId, workspaceId]);
 
   const isNearBottom = useCallback(
-    (node: HTMLDivElement) =>
-      node.scrollHeight - node.scrollTop - node.clientHeight <= SCROLL_THRESHOLD_PX,
+    (node: HTMLDivElement) => isNearScrollBottom(node, SCROLL_THRESHOLD_PX),
     [],
   );
 
+  const storeScrollSnapshot = useCallback(
+    (snapshot: ScrollSnapshot) => {
+      lastScrollSnapshotRef.current = snapshot;
+      rememberThreadScrollSnapshot(scrollScopeKey, snapshot);
+    },
+    [scrollScopeKey],
+  );
+
+  const isScrollSnapshotRestored = useCallback(
+    (node: HTMLDivElement, snapshot: ScrollSnapshot) => {
+      if (snapshot.wasPinned) {
+        return isNearBottom(node);
+      }
+      return (
+        Math.abs(
+          getScrollDistanceFromBottom(node) - snapshot.distanceFromBottom,
+        ) <= SCROLL_RESTORE_TOLERANCE_PX
+      );
+    },
+    [isNearBottom],
+  );
+
   const updateAutoScroll = useCallback(() => {
-    if (!containerRef.current) {
+    const container = containerRef.current;
+    if (!container) {
       return;
     }
-    autoScrollRef.current = isNearBottom(containerRef.current);
+    if (isRestoringScrollRef.current) {
+      return;
+    }
+    pendingRestoreRef.current = null;
+    const wasPinned = isNearBottom(container);
+    autoScrollRef.current = wasPinned;
+    storeScrollSnapshot(getScrollDistanceSnapshot(container, wasPinned));
+  }, [isNearBottom, storeScrollSnapshot]);
+
+  const scrollToPinnedBottom = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+      return;
+    }
+    setScrollDistanceFromBottom(container, 0);
+    autoScrollRef.current = true;
+    storeScrollSnapshot({
+      distanceFromBottom: 0,
+      wasPinned: true,
+    });
+  }, [storeScrollSnapshot]);
+
+  const scrollToDistanceFromBottomPx = useCallback(
+    (distanceFromBottom: number, behavior: ScrollBehavior = "auto") => {
+      const container = containerRef.current;
+      if (!container) {
+        return;
+      }
+      const nextDistance = Math.max(0, distanceFromBottom);
+      setScrollDistanceFromBottom(container, nextDistance, behavior);
+      const wasPinned = nextDistance <= SCROLL_THRESHOLD_PX;
+      autoScrollRef.current = wasPinned;
+      storeScrollSnapshot({
+        distanceFromBottom: nextDistance,
+        wasPinned,
+      });
+    },
+    [storeScrollSnapshot],
+  );
+
+  const restoreScrollSnapshot = useCallback(
+    (snapshot: ScrollSnapshot) => {
+      const container = containerRef.current;
+      if (!container) {
+        return;
+      }
+      if (snapshot.wasPinned) {
+        scrollToPinnedBottom();
+      } else {
+        setScrollDistanceFromBottom(container, snapshot.distanceFromBottom);
+        restoreScrollAnchor(container, snapshot);
+        storeScrollSnapshot(snapshot);
+      }
+    },
+    [scrollToPinnedBottom, storeScrollSnapshot],
+  );
+
+  const scheduleScrollSnapshotRestore = useCallback(
+    (snapshot: ScrollSnapshot) => {
+      pendingRestoreRef.current = snapshot;
+      isRestoringScrollRef.current = true;
+      if (restoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(restoreFrameRef.current);
+      }
+      restoreFrameRef.current = window.requestAnimationFrame(() => {
+        restoreScrollSnapshot(snapshot);
+        restoreFrameRef.current = window.requestAnimationFrame(() => {
+          restoreFrameRef.current = null;
+          const container = containerRef.current;
+          if (!container) {
+            pendingRestoreRef.current = null;
+            isRestoringScrollRef.current = false;
+            return;
+          }
+          if (pendingRestoreRef.current === snapshot) {
+            restoreScrollSnapshot(snapshot);
+            restoreScrollAnchor(container, snapshot);
+            if (isScrollSnapshotRestored(container, snapshot)) {
+              pendingRestoreRef.current = null;
+            }
+          }
+          isRestoringScrollRef.current = false;
+        });
+      });
+    },
+    [isScrollSnapshotRestored, restoreScrollSnapshot],
+  );
+
+  const shouldKeepPinnedToBottom = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return autoScrollRef.current;
+    }
+    const isPinnedNow = isNearBottom(container);
+    if (!isPinnedNow && !isRestoringScrollRef.current) {
+      autoScrollRef.current = false;
+    }
+    return autoScrollRef.current && isPinnedNow;
   }, [isNearBottom]);
+
+  const schedulePinnedScroll = useCallback(() => {
+    if (!shouldKeepPinnedToBottom()) {
+      return;
+    }
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+    }
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      if (shouldKeepPinnedToBottom()) {
+        scrollToPinnedBottom();
+      }
+    });
+  }, [scrollToPinnedBottom, shouldKeepPinnedToBottom]);
 
   const requestAutoScroll = useCallback(() => {
-    const container = containerRef.current;
-    const shouldScroll =
-      autoScrollRef.current || (container ? isNearBottom(container) : true);
-    if (!shouldScroll) {
+    if (!shouldKeepPinnedToBottom()) {
       return;
     }
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-      return;
-    }
-    bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [isNearBottom]);
+    scrollToPinnedBottom();
+    schedulePinnedScroll();
+  }, [schedulePinnedScroll, scrollToPinnedBottom, shouldKeepPinnedToBottom]);
+
+  const adjustForMeasuredTurnHeightDelta = useCallback(
+    ({
+      heightDeltaPx,
+      turnBottomDistanceFromBottomPx,
+      viewportDistanceFromBottomPx,
+    }: {
+      heightDeltaPx: number;
+      turnBottomDistanceFromBottomPx: number;
+      viewportDistanceFromBottomPx: number;
+    }) => {
+      const container = containerRef.current;
+      if (!container || heightDeltaPx === 0 || isRestoringScrollRef.current) {
+        return;
+      }
+      if (viewportDistanceFromBottomPx <= SCROLL_THRESHOLD_PX) {
+        scrollToPinnedBottom();
+        return;
+      }
+      if (turnBottomDistanceFromBottomPx <= viewportDistanceFromBottomPx) {
+        scrollToDistanceFromBottomPx(
+          getScrollDistanceFromBottom(container) + heightDeltaPx,
+        );
+      }
+    },
+    [scrollToDistanceFromBottomPx, scrollToPinnedBottom],
+  );
+
+  const threadScrollController = useMemo<ThreadScrollController>(
+    () => ({
+      adjustForMeasuredTurnHeightDelta,
+      getLastScrollDistanceFromBottomPx: () =>
+        lastScrollSnapshotRef.current.distanceFromBottom,
+      getScrollElement: () => containerRef.current,
+      scrollToBottom: scrollToPinnedBottom,
+      scrollToDistanceFromBottomPx,
+    }),
+    [
+      adjustForMeasuredTurnHeightDelta,
+      scrollToDistanceFromBottomPx,
+      scrollToPinnedBottom,
+    ],
+  );
 
   useLayoutEffect(() => {
-    autoScrollRef.current = true;
-  }, [threadId]);
+    const container = containerRef.current;
+    if (!container) {
+      autoScrollRef.current = true;
+      return undefined;
+    }
+
+    const snapshot = threadScrollSnapshots.get(scrollScopeKey);
+    if (snapshot) {
+      lastScrollSnapshotRef.current = snapshot;
+      autoScrollRef.current = snapshot.wasPinned;
+      restoreScrollSnapshot(snapshot);
+      scheduleScrollSnapshotRestore(snapshot);
+    } else {
+      lastScrollSnapshotRef.current = {
+        distanceFromBottom: 0,
+        wasPinned: true,
+      };
+      autoScrollRef.current = true;
+      scrollToPinnedBottom();
+      schedulePinnedScroll();
+    }
+
+    return () => {
+      const latestContainer = containerRef.current;
+      if (latestContainer?.dataset.threadScrollScope === scrollScopeKey) {
+        const wasPinned = isNearBottom(latestContainer);
+        rememberThreadScrollSnapshot(
+          scrollScopeKey,
+          getScrollSnapshot(latestContainer, wasPinned),
+        );
+        return;
+      }
+      rememberThreadScrollSnapshot(scrollScopeKey, lastScrollSnapshotRef.current);
+    };
+  }, [
+    isNearBottom,
+    schedulePinnedScroll,
+    scheduleScrollSnapshotRestore,
+    scrollScopeKey,
+    scrollToPinnedBottom,
+    restoreScrollSnapshot,
+  ]);
 
   useLayoutEffect(() => {
+    if (pendingRestoreRef.current) {
+      restoreScrollSnapshot(pendingRestoreRef.current);
+      scheduleScrollSnapshotRestore(pendingRestoreRef.current);
+      return;
+    }
+    if (!shouldKeepPinnedToBottom()) {
+      return;
+    }
+    scrollToPinnedBottom();
+    schedulePinnedScroll();
+  }, [
+    schedulePinnedScroll,
+    scrollKey,
+    scrollToPinnedBottom,
+    shouldKeepPinnedToBottom,
+    restoreScrollSnapshot,
+    scheduleScrollSnapshotRestore,
+    isThinking,
+    threadId,
+  ]);
+
+  useEffect(() => {
     const container = containerRef.current;
-    const shouldScroll =
-      autoScrollRef.current || (container ? isNearBottom(container) : true);
-    if (!shouldScroll) {
-      return;
+    const observed =
+      container?.querySelector("[data-thread-find-target='conversation']") ??
+      container?.firstElementChild;
+    if (!container || !observed || typeof ResizeObserver === "undefined") {
+      return undefined;
     }
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-      return;
-    }
-    bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [scrollKey, isThinking, isNearBottom, threadId]);
+    const observer = new ResizeObserver(() => {
+      if (pendingRestoreRef.current) {
+        restoreScrollSnapshot(pendingRestoreRef.current);
+        scheduleScrollSnapshotRestore(pendingRestoreRef.current);
+        return;
+      }
+      schedulePinnedScroll();
+    });
+    observer.observe(observed);
+    return () => observer.disconnect();
+  }, [
+    restoreScrollSnapshot,
+    schedulePinnedScroll,
+    scheduleScrollSnapshotRestore,
+    scrollKey,
+    threadId,
+  ]);
+
+  useEffect(() => {
+    const handleComposerOverlayHeightChange = () => {
+      schedulePinnedScroll();
+    };
+    window.addEventListener(
+      COMPOSER_OVERLAY_HEIGHT_CHANGE_EVENT,
+      handleComposerOverlayHeightChange,
+    );
+    return () => {
+      window.removeEventListener(
+        COMPOSER_OVERLAY_HEIGHT_CHANGE_EVENT,
+        handleComposerOverlayHeightChange,
+      );
+    };
+  }, [schedulePinnedScroll]);
 
   useEffect(() => {
     return () => {
       if (copyTimeoutRef.current) {
         window.clearTimeout(copyTimeoutRef.current);
       }
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
+      if (restoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(restoreFrameRef.current);
+      }
+      isRestoringScrollRef.current = false;
     };
   }, []);
 
@@ -299,6 +713,8 @@ export function useMessagesViewState({
     containerRef,
     updateAutoScroll,
     requestAutoScroll,
+    initialScrollDistanceFromBottom,
+    threadScrollController,
     expandedItems,
     toggleExpanded,
     collapsedToolGroups,

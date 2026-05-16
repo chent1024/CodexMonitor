@@ -5,6 +5,7 @@ Canonical navigation guide for CodexMonitor. Use this as: "if you need X, edit Y
 Related docs:
 
 - Setup/build/release: `README.md`
+- Android 远程移动端开发: `docs/android-remote-development.md`
 - iOS remote over Tailscale (TCP): `docs/mobile-ios-tailscale-blueprint.md`
 - Local memory architecture: `docs/local-memory-architecture.md`
 - Restart-safe sessions: `docs/restart-safe-sessions.md`
@@ -33,6 +34,7 @@ If a behavior must work in both app and daemon, implement it in `src-tauri/src/s
 | Add/change app-server event handling in UI | `src/services/events.ts`, `src/features/app/hooks/useAppServerEvents.ts`, `src/utils/appServerEvents.ts`, `src/features/threads/utils/threadNormalize.ts` |
 | Change thread state transitions | `src/features/threads/hooks/useThreadsReducer.ts`, `src/features/threads/hooks/threadReducer/*`, `src/features/threads/hooks/useThreads.ts`, focused thread hooks under `src/features/threads/hooks/*` |
 | Align message output with OpenAI ChatGPT VS Code extension | Start with `docs/vscode-message-renderer-compat.md`, then edit `src/features/messages-vscode-compat/*`; keep `src/features/messages/components/Messages.tsx` as the thin entrypoint |
+| Change message scroll, bottom pinning, or older-history pagination | Start with `docs/vscode-message-renderer-compat.md#scroll-and-pagination-contract`, then edit `src/features/messages/utils/threadScroll.ts`, `src/features/messages/components/useMessagesViewState.ts`, `src/features/messages-vscode-compat/VscodeMessages.tsx`, and thread pagination hooks only if the existing `onLoadOlderTurns` cursor contract is insufficient |
 | Change workspace lifecycle/worktree behavior | `src/features/workspaces/hooks/useWorkspaces.ts`, `src-tauri/src/workspaces/commands.rs`, `src-tauri/src/shared/workspaces_core.rs`, `src-tauri/src/shared/workspaces_core/*`, `src-tauri/src/shared/worktree_core.rs` |
 | Change settings model/load/update | `src/features/settings/components/SettingsView.tsx`, `src/features/settings/hooks/useAppSettings.ts`, `src/services/tauri.ts`, `src-tauri/src/settings/mod.rs`, `src-tauri/src/shared/settings_core.rs`, `src-tauri/src/types.rs`, `src/types.ts` |
 | Change Git/GitHub backend behavior | `src/features/git/hooks/*`, `src/services/tauri.ts`, `src-tauri/src/git/mod.rs`, `src-tauri/src/shared/git_ui_core.rs`, `src-tauri/src/shared/git_ui_core/*`, `src-tauri/src/shared/git_core.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc/git.rs` |

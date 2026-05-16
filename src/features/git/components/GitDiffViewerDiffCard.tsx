@@ -19,6 +19,7 @@ import {
 import { splitPath } from "./GitDiffPanel.utils";
 import type { GitDiffViewerItem } from "./GitDiffViewer.types";
 import {
+  buildRenderablePatch,
   isFallbackRawDiffLineHighlightable,
   limitRenderedDiff,
   normalizePatchName,
@@ -128,12 +129,19 @@ export const DiffCard = memo(function DiffCard({
     [displayPath],
   );
   const limitedDiff = useMemo(() => limitRenderedDiff(entry.diff), [entry.diff]);
+  const renderableDiff = useMemo(
+    () =>
+      limitedDiff.isTruncated
+        ? limitedDiff.diff
+        : buildRenderablePatch(limitedDiff.diff, displayPath, entry.status),
+    [displayPath, entry.status, limitedDiff.diff, limitedDiff.isTruncated],
+  );
 
   const fileDiff = useMemo(() => {
     if (!limitedDiff.diff.trim() || limitedDiff.isTruncated) {
       return null;
     }
-    const patch = parsePatchFiles(limitedDiff.diff);
+    const patch = parsePatchFiles(renderableDiff);
     const parsed = patch[0]?.files[0];
     if (!parsed) {
       return null;
@@ -155,6 +163,7 @@ export const DiffCard = memo(function DiffCard({
     entry.oldLines,
     limitedDiff.diff,
     limitedDiff.isTruncated,
+    renderableDiff,
   ]);
 
   const placeholder = useMemo(() => {
@@ -168,12 +177,12 @@ export const DiffCard = memo(function DiffCard({
   }, [entry.diff, ignoreWhitespaceChanges, isLoading]);
 
   const parsedLines = useMemo(() => {
-    const parsed = parseDiff(limitedDiff.diff);
+    const parsed = parseDiff(renderableDiff);
     if (parsed.length > 0) {
       return parsed;
     }
     return parseRawDiffLines(limitedDiff.diff);
-  }, [limitedDiff.diff]);
+  }, [limitedDiff.diff, renderableDiff]);
 
   const hasSelectableLines = useMemo(
     () => parsedLines.some(isSelectableLine),

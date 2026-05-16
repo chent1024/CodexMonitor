@@ -900,4 +900,27 @@ describe("threadReducer", () => {
     expect(trimmed.itemsByThread["thread-1"]?.[0]?.id).toBe("msg-2");
   });
 
+  it("preserves paged history when setting thread items from turn pagination", () => {
+    const items: ConversationItem[] = Array.from({ length: 5 }, (_, index) => ({
+      id: `msg-${index}`,
+      kind: "message",
+      role: "assistant",
+      text: `message ${index}`,
+    }));
+    const capped = threadReducer(initialState, {
+      type: "setMaxItemsPerThread",
+      maxItemsPerThread: 3,
+    });
+
+    const next = threadReducer(capped, {
+      type: "setThreadItems",
+      threadId: "thread-1",
+      items,
+      preserveHistory: true,
+    });
+
+    expect(next.itemsByThread["thread-1"]).toHaveLength(5);
+    expect(next.itemsByThread["thread-1"]?.[0]?.id).toBe("msg-0");
+  });
+
 });

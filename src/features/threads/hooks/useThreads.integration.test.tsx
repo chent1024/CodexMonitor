@@ -755,7 +755,7 @@ describe("useThreads UX integration", () => {
         "ws-1",
         "thread-live",
         null,
-        20,
+        5,
       );
     });
     expect(vi.mocked(resumeThread)).not.toHaveBeenCalled();

@@ -6,6 +6,8 @@ import { Messages } from "../../../messages/components/Messages";
 import { ApprovalToasts } from "../../../app/components/ApprovalToasts";
 import { ErrorToasts } from "../../../notifications/components/ErrorToasts";
 import { Composer } from "../../../composer/components/Composer";
+import { WorkingIndicator } from "../../../messages/components/MessageRows";
+import { getLatestReasoningWorkingLabel } from "../../../messages/utils/messageRenderUtils";
 import { TabBar } from "../../../app/components/TabBar";
 import { TabletNav } from "../../../app/components/TabletNav";
 import type {
@@ -31,16 +33,33 @@ type PrimaryLayoutNodes = Pick<
 
 export function buildPrimaryNodes(options: PrimaryLayoutNodesOptions): PrimaryLayoutNodes {
   const sidebarNode = <Sidebar {...options.sidebarProps} />;
-  const messagesKey = [
-    "messages",
-    options.messagesProps.workspaceId ?? "no-workspace",
-    options.messagesProps.threadId ?? "draft",
-  ].join(":");
+  const hasComposer = Boolean(options.composerProps);
+  const hasComposerStatus = options.messagesProps.isThinking;
 
-  const messagesNode = <Messages key={messagesKey} {...options.messagesProps} />;
+  const messagesNode = (
+    <Messages
+      {...options.messagesProps}
+      renderActiveWorkingIndicator={!hasComposer}
+    />
+  );
 
   const composerNode = options.composerProps ? (
-    <Composer {...options.composerProps} />
+    <>
+      {hasComposerStatus ? (
+        <div className="chat-pane-composer-status">
+          <WorkingIndicator
+            isThinking={options.messagesProps.isThinking}
+            processingStartedAt={options.messagesProps.processingStartedAt}
+            lastDurationMs={null}
+            hasItems={options.messagesProps.items.length > 0}
+            reasoningLabel={getLatestReasoningWorkingLabel(options.messagesProps.items)}
+            showPollingFetchStatus={options.messagesProps.showPollingFetchStatus}
+            pollingIntervalMs={options.messagesProps.pollingIntervalMs}
+          />
+        </div>
+      ) : null}
+      <Composer {...options.composerProps} />
+    </>
   ) : null;
 
   const approvalToastsNode = <ApprovalToasts {...options.approvalToastsProps} />;

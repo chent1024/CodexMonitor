@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
+import { COMPOSER_OVERLAY_HEIGHT_CHANGE_EVENT } from "../../layout/utils/composerOverlayEvents";
 import { expectOpenedFileTarget } from "../test/fileLinkAssertions";
 import { FileChangeSummaryCard } from "./MessageRows";
 import { Messages } from "./Messages";
@@ -247,10 +248,101 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector("[data-turn-virtualizer]")).toBeTruthy();
+    const virtualizer = container.querySelector("[data-turn-virtualizer]");
+    expect(virtualizer).toBeTruthy();
     expect(container.querySelectorAll("[data-turn-key]").length).toBeLessThan(
       items.length,
     );
+    expect(Number(virtualizer?.getAttribute("data-initial-scroll-offset"))).toBeGreaterThan(0);
+  });
+
+  it("does not adjust scroll position when virtualized rows measure during manual upward scrolling", () => {
+    const resizeCallbacks: ResizeObserverCallback[] = [];
+    const observedNodes: Element[] = [];
+    const originalGlobalResizeObserver = globalThis.ResizeObserver;
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallbacks.push(callback);
+      }
+
+      observe(node: Element) {
+        observedNodes.push(node);
+      }
+
+      unobserve() {}
+
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+
+    try {
+      const items: ConversationItem[] = Array.from({ length: 13 }, (_, index) => ({
+        id: `manual-scroll-user-${index}`,
+        kind: "message",
+        role: "user",
+        text: `Prompt ${index}`,
+      }));
+      const { container } = render(
+        <Messages
+          items={items}
+          threadId="thread-virtual-measure"
+          workspaceId="ws-1"
+          isThinking={false}
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+      Object.defineProperty(scrollNode, "clientHeight", {
+        configurable: true,
+        value: 200,
+      });
+      Object.defineProperty(scrollNode, "scrollHeight", {
+        configurable: true,
+        value: 1200,
+      });
+      scrollNode.scrollTop = -300;
+      fireEvent.scroll(scrollNode);
+
+      const measuredNode = observedNodes.find((node) =>
+        (node as HTMLElement).hasAttribute("data-turn-virtualizer-item"),
+      ) as HTMLElement | undefined;
+      expect(measuredNode).toBeTruthy();
+      const measuredElement = measuredNode as HTMLElement;
+      rectSpy.mockImplementation(function getRect(this: HTMLElement) {
+        return {
+          bottom: 0,
+          height: this === measuredElement ? 420 : 0,
+          left: 0,
+          right: 240,
+          top: 0,
+          width: 240,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+
+      act(() => {
+        resizeCallbacks.forEach((callback) => {
+          callback(
+            [{ target: measuredElement } as unknown as ResizeObserverEntry],
+            {} as ResizeObserver,
+          );
+        });
+      });
+
+      expect(scrollNode.scrollTop).toBe(-300);
+    } finally {
+      rectSpy.mockRestore();
+      if (originalGlobalResizeObserver) {
+        vi.stubGlobal("ResizeObserver", originalGlobalResizeObserver);
+      } else {
+        vi.unstubAllGlobals();
+      }
+    }
   });
 
   it("renders empty user messages with the OpenAI no-content fallback", () => {
@@ -1280,6 +1372,7 @@ describe("Messages", () => {
         workspaceId="ws-1"
         isThinking
         processingStartedAt={Date.now() - 1_000}
+        lastDurationMs={31_000}
         openTargets={[]}
         selectedOpenAppId=""
         renderActiveWorkingIndicator={false}
@@ -1287,6 +1380,7 @@ describe("Messages", () => {
     );
 
     expect(container.querySelector("[data-oai-thinking-shimmer]")).toBeNull();
+    expect(screen.queryByText("Done in 0:31")).toBeNull();
   });
 
   it("renders reasoning rows when there is reasoning body content", () => {
@@ -2144,6 +2238,173 @@ describe("Messages", () => {
     });
   });
 
+  it("keeps the clicked file row anchored when expanding a footer diff", async () => {
+    const requestAnimationFrameCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        requestAnimationFrameCallbacks.push(callback);
+        return requestAnimationFrameCallbacks.length;
+      });
+    let scrollTop = 0;
+    let rowTop = 240;
+
+    try {
+      const { container } = render(
+        <div className="messages messages-full" data-thread-reverse-scroll="true">
+          <FileChangeSummaryCard
+            workspacePath="/repo"
+            changes={[
+              {
+                path: "/repo/src/features/messages/components/MessageRows.tsx",
+                diff: ["@@ -1,1 +1,2 @@", " old", "+new"].join("\n"),
+              },
+            ]}
+          />
+        </div>,
+      );
+      const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+      Object.defineProperty(scrollNode, "scrollTop", {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value: number) => {
+          scrollTop = value;
+        },
+      });
+      const fileRow = await screen.findByRole("button", {
+        name: /MessageRows\.tsx \+1/i,
+      });
+      vi.spyOn(fileRow, "getBoundingClientRect").mockImplementation(
+        () =>
+          ({
+            bottom: rowTop - scrollTop + 40,
+            height: 40,
+            left: 0,
+            right: 400,
+            top: rowTop - scrollTop,
+            width: 400,
+            x: 0,
+            y: rowTop - scrollTop,
+            toJSON: () => ({}),
+          }) as DOMRect,
+      );
+
+      fireEvent.click(fileRow);
+      rowTop = 120;
+
+      act(() => {
+        while (requestAnimationFrameCallbacks.length > 0) {
+          requestAnimationFrameCallbacks.shift()?.(0);
+        }
+      });
+
+      expect(scrollNode.scrollTop).toBe(-120);
+      expect(container.querySelector("[data-diffs-file-panel]")).toBeTruthy();
+    } finally {
+      requestAnimationFrameSpy.mockRestore();
+    }
+  });
+
+  it("shows the latest turn file-change summary only after the turn completes", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-live-file-change",
+        kind: "message",
+        role: "user",
+        text: "Tune the scrollbar",
+      },
+      {
+        id: "tool-live-file-change",
+        kind: "tool",
+        toolType: "fileChange",
+        title: "File changes",
+        detail: "",
+        status: "completed",
+        changes: [
+          {
+            path: "src/styles/messages.css",
+            diff: [
+              "diff --git a/src/styles/messages.css b/src/styles/messages.css",
+              "@@ -1,2 +1,3 @@",
+              "-old line",
+              "+new line",
+              "+extra line",
+            ].join("\n"),
+          },
+        ],
+      },
+      {
+        id: "assistant-live-file-change",
+        kind: "message",
+        role: "assistant",
+        text: "Adjusting the scrollbar.",
+      },
+    ];
+
+    const { container, rerender } = render(
+      <Messages
+        items={items}
+        threadId="thread-live-file-change"
+        workspaceId="ws-1"
+        isThinking
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-assistant-turn-footer]")).toBeTruthy();
+    });
+    expect(
+      container.querySelector(
+        '[data-assistant-turn-footer] [data-diffs][data-diffs-mode="summary"]',
+      ),
+    ).toBeNull();
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-live-file-change"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        container.querySelector(
+          '[data-assistant-turn-footer] [data-diffs][data-diffs-mode="summary"]',
+        ),
+      ).toBeTruthy();
+    });
+  });
+
+  it("counts raw added-file content in the footer review summary", async () => {
+    const { container } = render(
+      <FileChangeSummaryCard
+        workspacePath="/repo"
+        changes={[
+          {
+            path: "/repo/.codex-run/cargo.cmd",
+            kind: "add",
+            diff: [
+              "@echo off",
+              "\"%USERPROFILE%\\.cargo\\bin\\rustup.exe\" run stable cargo %*",
+            ].join("\n"),
+          },
+        ]}
+      />,
+    );
+
+    await waitFor(() => {
+      const rowText = container.querySelector("[data-diffs-file-row]")?.textContent ?? "";
+      expect(rowText).toContain("cargo.cmd");
+      expect(rowText).toContain("+2");
+    });
+  });
+
   it("keeps one assistant reading flow when tools are interleaved between messages", async () => {
     const items: ConversationItem[] = [
       {
@@ -2338,7 +2599,708 @@ describe("Messages", () => {
       />,
     );
 
-    expect(scrollNode.scrollTop).toBe(900);
+    expect(scrollNode.scrollTop).toBe(0);
+  });
+
+  it("restores the previous scroll position when returning to a thread", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-shared",
+        kind: "message",
+        role: "assistant",
+        text: "Shared tail",
+      },
+    ];
+
+    const { container, rerender } = render(
+      <Messages
+        items={items}
+        threadId="thread-restore-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 900,
+    });
+    scrollNode.scrollTop = -580;
+    fireEvent.scroll(scrollNode);
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-restore-2"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+    expect(scrollNode.scrollTop).toBe(0);
+
+    scrollNode.scrollTop = -460;
+    fireEvent.scroll(scrollNode);
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-restore-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(scrollNode.scrollTop).toBe(-580);
+  });
+
+  it("saves the latest user scroll position when switching threads", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-dom-save",
+        kind: "message",
+        role: "assistant",
+        text: "DOM save tail",
+      },
+    ];
+
+    const { container, rerender } = render(
+      <Messages
+        items={items}
+        threadId="thread-dom-save-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 900,
+    });
+    scrollNode.scrollTop = -580;
+    fireEvent.scroll(scrollNode);
+    scrollNode.scrollTop = -420;
+    fireEvent.scroll(scrollNode);
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-dom-save-2"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-dom-save-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(scrollNode.scrollTop).toBe(-420);
+  });
+
+  it("does not measure turn layout on every scroll event", () => {
+    const items: ConversationItem[] = Array.from({ length: 12 }, (_, index) => ({
+      id: `msg-scroll-layout-${index}`,
+      kind: "message",
+      role: index % 2 === 0 ? "user" : "assistant",
+      text: `Scroll layout ${index}`,
+    }));
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-scroll-layout"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 900,
+    });
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(() => ({
+        bottom: 0,
+        height: 0,
+        left: 0,
+        right: 0,
+        top: 0,
+        width: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }));
+
+    try {
+      scrollNode.scrollTop = -320;
+      fireEvent.scroll(scrollNode);
+
+      expect(rectSpy).not.toHaveBeenCalled();
+    } finally {
+      rectSpy.mockRestore();
+    }
+  });
+
+  it("keeps a pending thread scroll restore until returning thread content is loaded", () => {
+    const requestAnimationFrameCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        requestAnimationFrameCallbacks.push(callback);
+        return requestAnimationFrameCallbacks.length;
+      });
+    const cancelAnimationFrameSpy = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation(() => {});
+    const items: ConversationItem[] = [
+      {
+        id: "msg-delayed-restore-tail",
+        kind: "message",
+        role: "assistant",
+        text: "Delayed restore tail",
+      },
+    ];
+
+    const { container, rerender } = render(
+      <Messages
+        items={items}
+        threadId="thread-delayed-restore-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    let clientHeight = 200;
+    let scrollHeight = 900;
+    let scrollTop = 0;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      get: () => clientHeight,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    Object.defineProperty(scrollNode, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        const maxDistance = Math.max(0, scrollHeight - clientHeight);
+        const nextScrollTop = Math.max(-maxDistance, Math.min(maxDistance, value));
+        scrollTop = Object.is(nextScrollTop, -0) ? 0 : nextScrollTop;
+      },
+    });
+
+    scrollNode.scrollTop = -580;
+    fireEvent.scroll(scrollNode);
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-delayed-restore-2"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+    expect(scrollNode.scrollTop).toBe(0);
+
+    scrollHeight = 200;
+    rerender(
+      <Messages
+        items={[]}
+        threadId="thread-delayed-restore-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        isLoadingMessages
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    act(() => {
+      while (requestAnimationFrameCallbacks.length > 0) {
+        requestAnimationFrameCallbacks.shift()?.(0);
+      }
+    });
+    expect(scrollNode.scrollTop).toBe(0);
+
+    scrollHeight = 900;
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-delayed-restore-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(scrollNode.scrollTop).toBe(-580);
+    requestAnimationFrameSpy.mockRestore();
+    cancelAnimationFrameSpy.mockRestore();
+  });
+
+  it("keeps a restored non-bottom position through programmatic restore scroll events", () => {
+    const requestAnimationFrameCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        requestAnimationFrameCallbacks.push(callback);
+        return requestAnimationFrameCallbacks.length;
+      });
+    const cancelAnimationFrameSpy = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation(() => {});
+    const items: ConversationItem[] = [
+      {
+        id: "msg-restored-scroll",
+        kind: "message",
+        role: "assistant",
+        text: "Shared tail",
+      },
+    ];
+
+    const { container, rerender } = render(
+      <Messages
+        items={items}
+        threadId="thread-restore-programmatic-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 900,
+    });
+    scrollNode.scrollTop = -580;
+    fireEvent.scroll(scrollNode);
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-restore-programmatic-2"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-restore-programmatic-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(scrollNode.scrollTop).toBe(-580);
+    scrollNode.scrollTop = 0;
+    fireEvent.scroll(scrollNode);
+
+    while (requestAnimationFrameCallbacks.length > 0) {
+      requestAnimationFrameCallbacks.shift()?.(0);
+    }
+
+    expect(scrollNode.scrollTop).toBe(-580);
+    requestAnimationFrameSpy.mockRestore();
+    cancelAnimationFrameSpy.mockRestore();
+  });
+
+  it("keeps a thread pinned to bottom when returning after it was left at bottom", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-pinned-tail",
+        kind: "message",
+        role: "assistant",
+        text: "Pinned tail",
+      },
+    ];
+
+    const { container, rerender } = render(
+      <Messages
+        items={items}
+        threadId="thread-pinned-return-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 900,
+    });
+    scrollNode.scrollTop = 0;
+    fireEvent.scroll(scrollNode);
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-pinned-return-2"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 1200,
+    });
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-pinned-return-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(scrollNode.scrollTop).toBe(0);
+  });
+
+  it("restores bottom pinning after remount when message height is measured later", () => {
+    const requestAnimationFrameCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        requestAnimationFrameCallbacks.push(callback);
+        return requestAnimationFrameCallbacks.length;
+      });
+    const cancelAnimationFrameSpy = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation(() => {});
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "clientHeight",
+    );
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollHeight",
+    );
+    let scrollHeight = 900;
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    const items: ConversationItem[] = [
+      {
+        id: "msg-delayed-height",
+        kind: "message",
+        role: "assistant",
+        text: "Delayed height",
+      },
+    ];
+    const renderThread = (threadId: string) => (
+      <Messages
+        key={`messages:${threadId}`}
+        items={items}
+        threadId={threadId}
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />
+    );
+
+    const { container, rerender } = render(renderThread("thread-delayed-1"));
+    let scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    scrollNode.scrollTop = 0;
+    fireEvent.scroll(scrollNode);
+
+    rerender(renderThread("thread-delayed-2"));
+
+    scrollHeight = 0;
+    rerender(renderThread("thread-delayed-1"));
+    scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    expect(scrollNode.scrollTop).toBe(0);
+
+    scrollHeight = 1200;
+    while (requestAnimationFrameCallbacks.length > 0) {
+      const callback = requestAnimationFrameCallbacks.shift();
+      callback?.(0);
+    }
+
+    expect(scrollNode.scrollTop).toBe(0);
+
+    if (originalClientHeight) {
+      Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
+    }
+    if (originalScrollHeight) {
+      Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+    }
+    requestAnimationFrameSpy.mockRestore();
+    cancelAnimationFrameSpy.mockRestore();
+  });
+
+  it("keeps streamed output pinned above composer overlay height changes", () => {
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+    const items: ConversationItem[] = [
+      {
+        id: "msg-tail",
+        kind: "message",
+        role: "assistant",
+        text: "Current tail",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 600,
+    });
+    scrollNode.scrollTop = 0;
+    fireEvent.scroll(scrollNode);
+
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 900,
+    });
+    window.dispatchEvent(new Event(COMPOSER_OVERLAY_HEIGHT_CHANGE_EVENT));
+
+    expect(scrollNode.scrollTop).toBe(0);
+    requestAnimationFrameSpy.mockRestore();
+  });
+
+  it("does not force streamed output to bottom after the user scrolls up", () => {
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+    const items: ConversationItem[] = [
+      {
+        id: "msg-tail",
+        kind: "message",
+        role: "assistant",
+        text: "Current tail",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 600,
+    });
+    scrollNode.scrollTop = -300;
+    fireEvent.scroll(scrollNode);
+
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 900,
+    });
+    window.dispatchEvent(new Event(COMPOSER_OVERLAY_HEIGHT_CHANGE_EVENT));
+
+    expect(scrollNode.scrollTop).toBe(-300);
+    requestAnimationFrameSpy.mockRestore();
+  });
+
+  it("does not use stale bottom pinning when the composer changes while scrolled up", () => {
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+    const items: ConversationItem[] = [
+      {
+        id: "msg-tail-stale-pin",
+        kind: "message",
+        role: "assistant",
+        text: "Current tail",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-stale-pin"
+        workspaceId="ws-1"
+        isThinking
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 600,
+    });
+    scrollNode.scrollTop = -300;
+
+    window.dispatchEvent(new Event(COMPOSER_OVERLAY_HEIGHT_CHANGE_EVENT));
+
+    expect(scrollNode.scrollTop).toBe(-300);
+    requestAnimationFrameSpy.mockRestore();
+  });
+
+  it("restores non-bottom position when browser scrolls the focused footer input into view", () => {
+    const requestAnimationFrameCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        requestAnimationFrameCallbacks.push(callback);
+        return requestAnimationFrameCallbacks.length;
+      });
+    const cancelAnimationFrameSpy = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation(() => {});
+    const items: ConversationItem[] = [
+      {
+        id: "msg-footer-input-scroll",
+        kind: "message",
+        role: "assistant",
+        text: "Current tail",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-footer-input-scroll"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        footerNode={<textarea aria-label="Composer input" />}
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 600,
+    });
+    scrollNode.scrollTop = -300;
+    fireEvent.scroll(scrollNode);
+
+    const textarea = screen.getByLabelText("Composer input");
+    fireEvent(textarea, new Event("beforeinput", { bubbles: true, cancelable: true }));
+    scrollNode.scrollTop = 0;
+    fireEvent.input(textarea, { target: { value: "a" } });
+
+    while (requestAnimationFrameCallbacks.length > 0) {
+      requestAnimationFrameCallbacks.shift()?.(0);
+    }
+
+    expect(scrollNode.scrollTop).toBe(-300);
+    requestAnimationFrameSpy.mockRestore();
+    cancelAnimationFrameSpy.mockRestore();
   });
 
   it("loads older turns when scrolled near the top and preserves viewport position", async () => {
@@ -2380,7 +3342,7 @@ describe("Messages", () => {
       configurable: true,
       value: 600,
     });
-    scrollNode.scrollTop = 60;
+    scrollNode.scrollTop = -340;
     onLoadOlderTurns.mockImplementation(async () => {
       Object.defineProperty(scrollNode, "scrollHeight", {
         configurable: true,
@@ -2393,7 +3355,148 @@ describe("Messages", () => {
     await waitFor(() => {
       expect(onLoadOlderTurns).toHaveBeenCalledTimes(1);
     });
-    expect(scrollNode.scrollTop).toBe(360);
+    expect(scrollNode.scrollTop).toBe(-340);
+    requestAnimationFrameSpy.mockRestore();
+  });
+
+  it("restores older-turn pagination before the next paint when items prepend", async () => {
+    const requestAnimationFrameCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        requestAnimationFrameCallbacks.push(callback);
+        return requestAnimationFrameCallbacks.length;
+      });
+    let resolveLoadOlder: (() => void) | null = null;
+    let scrollHeight = 600;
+
+    function Harness() {
+      const [items, setItems] = useState<ConversationItem[]>([
+        {
+          id: "msg-tail",
+          kind: "message",
+          role: "assistant",
+          text: "Current tail",
+        },
+      ]);
+      const handleLoadOlderTurns = useCallback(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveLoadOlder = resolve;
+            scrollHeight = 900;
+            setItems((current) => [
+              {
+                id: "msg-older",
+                kind: "message",
+                role: "assistant",
+                text: "Older turn",
+              },
+              ...current,
+            ]);
+          }),
+        [],
+      );
+
+      return (
+        <Messages
+          items={items}
+          threadId="thread-layout-restore"
+          workspaceId="ws-1"
+          isThinking={false}
+          openTargets={[]}
+          selectedOpenAppId=""
+          hasOlderTurns
+          onLoadOlderTurns={handleLoadOlderTurns}
+        />
+      );
+    }
+
+    const { container } = render(<Harness />);
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    scrollNode.scrollTop = -340;
+
+    await act(async () => {
+      fireEvent.scroll(scrollNode);
+    });
+    await waitFor(() => {
+      expect(container.textContent ?? "").toContain("Older turn");
+    });
+
+    expect(scrollNode.scrollTop).toBe(-340);
+
+    await act(async () => {
+      resolveLoadOlder?.();
+    });
+    while (requestAnimationFrameCallbacks.length > 0) {
+      requestAnimationFrameCallbacks.shift()?.(0);
+    }
+    requestAnimationFrameSpy.mockRestore();
+  });
+
+  it("loads older turns when the current page is too short to scroll", async () => {
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+    const onLoadOlderTurns = vi.fn(async () => {});
+    const items: ConversationItem[] = [
+      {
+        id: "msg-short-page-tail",
+        kind: "message",
+        role: "assistant",
+        text: "Current short tail",
+      },
+    ];
+
+    const { container, rerender } = render(
+      <Messages
+        items={items}
+        threadId="thread-short-page"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        hasOlderTurns={false}
+        onLoadOlderTurns={onLoadOlderTurns}
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 300,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 180,
+    });
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-short-page"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        hasOlderTurns
+        onLoadOlderTurns={onLoadOlderTurns}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onLoadOlderTurns).toHaveBeenCalledTimes(1);
+    });
     requestAnimationFrameSpy.mockRestore();
   });
 
@@ -3720,8 +4823,11 @@ describe("Messages", () => {
     expect(execSummary?.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("keeps command output panels vertically scrollable from the top", async () => {
-    const output = Array.from({ length: 24 }, (_, index) => `line ${index + 1}`).join("\n");
+  it("windows long command output while keeping the panel scrollable", async () => {
+    const output = Array.from(
+      { length: 360 },
+      (_, index) => `line ${String(index + 1).padStart(4, "0")}`,
+    ).join("\n");
     const items: ConversationItem[] = [
       {
         id: "cmd-scroll-user",
@@ -3772,8 +4878,18 @@ describe("Messages", () => {
     expect(style.overflowX).toBe("auto");
     expect(style.overflowY).toBe("auto");
     expect(style.justifyContent).toBe("flex-start");
-    expect(outputLines.textContent ?? "").toContain("line 1");
-    expect(outputLines.textContent ?? "").toContain("line 24");
+    expect(outputLines.textContent ?? "").not.toContain("line 0001");
+    expect(outputLines.textContent ?? "").toContain("line 0360");
+    expect(container.querySelector("[data-vscode-output-truncation]")?.textContent).toContain(
+      "60 earlier lines hidden",
+    );
+    const toggle = container.querySelector("[data-vscode-toggle-output]") as HTMLButtonElement;
+    expect(toggle).toBeTruthy();
+    expect(container.querySelector("[data-vscode-command-output]")?.getAttribute("data-output-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(container.querySelector("[data-vscode-command-output]")?.getAttribute("data-output-expanded")).toBe("true");
+    expect(outputLines.textContent ?? "").toContain("line 0001");
+    expect(outputLines.textContent ?? "").toContain("line 0360");
   });
 
   it("renders context compaction as standalone Codex-style divider status rows", async () => {

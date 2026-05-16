@@ -53,6 +53,7 @@ type DaemonIndicatorState = {
 };
 
 const DAEMON_INDICATOR_REFRESH_INTERVAL_MS = 60_000;
+const DAEMON_INDICATOR_ERROR_RETRY_MS = 3_000;
 
 function daemonIndicatorStateEqual(
   a: DaemonIndicatorState,
@@ -321,6 +322,16 @@ function useDaemonIndicatorState(): [DaemonIndicatorState, () => void] {
       window.removeEventListener("focus", handleFocus);
     };
   }, [refresh, tauriRuntime]);
+
+  useEffect(() => {
+    if (!tauriRuntime || state.tone !== "error") {
+      return;
+    }
+    const retry = window.setTimeout(() => {
+      refresh();
+    }, DAEMON_INDICATOR_ERROR_RETRY_MS);
+    return () => window.clearTimeout(retry);
+  }, [refresh, state.tone, tauriRuntime]);
 
   return [state, () => refresh()];
 }

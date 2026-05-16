@@ -154,7 +154,12 @@ export type ThreadAction =
       item: ConversationItem;
       hasCustomName?: boolean;
     }
-  | { type: "setThreadItems"; threadId: string; items: ConversationItem[] }
+  | {
+      type: "setThreadItems";
+      threadId: string;
+      items: ConversationItem[];
+      preserveHistory?: boolean;
+    }
   | { type: "setThreadTurnsPaging"; threadId: string; isLoading: boolean }
   | { type: "setThreadTurnsCursor"; threadId: string; cursor: string | null }
   | {

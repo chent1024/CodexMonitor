@@ -275,13 +275,14 @@ describe("useThreadActions", () => {
       await result.current.resumeThreadForWorkspace("ws-1", "thread-1");
     });
 
-    expect(listThreadTurns).toHaveBeenCalledWith("ws-1", "thread-1", null, 20);
+    expect(listThreadTurns).toHaveBeenCalledWith("ws-1", "thread-1", null, 5);
     expect(resumeThread).not.toHaveBeenCalled();
     expect(mergeThreadItems).toHaveBeenCalledWith([pagedItem], [localItem]);
     expect(dispatch).toHaveBeenCalledWith({
       type: "setThreadItems",
       threadId: "thread-1",
       items: [pagedItem, localItem],
+      preserveHistory: true,
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "setThreadTurnsCursor",
@@ -373,6 +374,7 @@ describe("useThreadActions", () => {
       type: "setThreadItems",
       threadId: "thread-2",
       items: [assistantItem],
+      preserveHistory: false,
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "markReviewing",
@@ -435,7 +437,7 @@ describe("useThreadActions", () => {
       await result.current.resumeThreadForWorkspace("ws-1", "thread-1", true);
     });
 
-    expect(listThreadTurns).toHaveBeenCalledWith("ws-1", "thread-1", null, 20);
+    expect(listThreadTurns).toHaveBeenCalledWith("ws-1", "thread-1", null, 5);
     expect(resumeThread).toHaveBeenCalledWith("ws-1", "thread-1", {
       excludeTurns: true,
     });
@@ -454,6 +456,7 @@ describe("useThreadActions", () => {
       type: "setThreadItems",
       threadId: "thread-1",
       items: [pagedItem, localItem],
+      preserveHistory: true,
     });
   });
 
@@ -493,7 +496,7 @@ describe("useThreadActions", () => {
       "ws-1",
       "thread-1",
       "older-cursor",
-      20,
+      5,
     );
     expect(mergeThreadItems).toHaveBeenCalledWith([olderItem], [localItem]);
     expect(dispatch).toHaveBeenCalledWith({
@@ -515,6 +518,129 @@ describe("useThreadActions", () => {
       type: "setThreadItems",
       threadId: "thread-1",
       items: [olderItem, localItem],
+      preserveHistory: true,
+    });
+  });
+
+  it("loads the first turn page when the older cursor is still unknown", async () => {
+    const olderItem: ConversationItem = {
+      id: "unknown-cursor-assistant-1",
+      kind: "message",
+      role: "assistant",
+      text: "Initial paged history",
+    };
+    const localItem: ConversationItem = {
+      id: "unknown-cursor-local-1",
+      kind: "message",
+      role: "assistant",
+      text: "Current local output",
+    };
+
+    vi.mocked(listThreadTurns).mockResolvedValue({
+      result: {
+        data: [{ id: "turn-tail", status: "completed", items: [] }],
+        nextCursor: "older-cursor",
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([olderItem]);
+    vi.mocked(mergeThreadItems).mockReturnValue([olderItem, localItem]);
+
+    const { result, dispatch } = renderActions({
+      itemsByThread: { "thread-unknown-cursor": [localItem] },
+    });
+
+    await act(async () => {
+      await result.current.loadOlderThreadTurns("ws-1", "thread-unknown-cursor");
+    });
+
+    expect(listThreadTurns).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-unknown-cursor",
+      null,
+      5,
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnsCursor",
+      threadId: "thread-unknown-cursor",
+      cursor: "older-cursor",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "thread-unknown-cursor",
+      items: [olderItem, localItem],
+      preserveHistory: true,
+    });
+  });
+
+  it("accepts alternate thread turn page response shapes", async () => {
+    const directTurnItem: ConversationItem = {
+      id: "direct-turn-assistant",
+      kind: "message",
+      role: "assistant",
+      text: "Direct turns shape",
+    };
+    const nestedTurnItem: ConversationItem = {
+      id: "nested-turn-assistant",
+      kind: "message",
+      role: "assistant",
+      text: "Nested turns shape",
+    };
+
+    vi.mocked(listThreadTurns)
+      .mockResolvedValueOnce({
+        result: {
+          turns: [{ id: "turn-direct", status: "completed", items: [] }],
+          next_cursor: "cursor-2",
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          thread: {
+            turns: [{ id: "turn-nested", status: "completed", items: [] }],
+          },
+        },
+      });
+    vi.mocked(buildItemsFromThread)
+      .mockReturnValueOnce([directTurnItem])
+      .mockReturnValueOnce([nestedTurnItem]);
+    vi.mocked(mergeThreadItems)
+      .mockReturnValueOnce([directTurnItem])
+      .mockReturnValueOnce([nestedTurnItem]);
+
+    const first = renderActions({
+      threadTurnsCursorById: { "thread-direct": "cursor-1" },
+    });
+    await act(async () => {
+      await first.result.current.loadOlderThreadTurns("ws-1", "thread-direct");
+    });
+    expect(first.dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnsCursor",
+      threadId: "thread-direct",
+      cursor: "cursor-2",
+    });
+    expect(first.dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "thread-direct",
+      items: [directTurnItem],
+      preserveHistory: true,
+    });
+
+    const second = renderActions({
+      threadTurnsCursorById: { "thread-nested": "cursor-1" },
+    });
+    await act(async () => {
+      await second.result.current.loadOlderThreadTurns("ws-1", "thread-nested");
+    });
+    expect(second.dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnsCursor",
+      threadId: "thread-nested",
+      cursor: null,
+    });
+    expect(second.dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "thread-nested",
+      items: [nestedTurnItem],
+      preserveHistory: true,
     });
   });
 

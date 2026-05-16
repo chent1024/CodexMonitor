@@ -16,6 +16,18 @@ type ComposerProps = NonNullable<LayoutNodesOptions["primary"]["composerProps"]>
 type MainHeaderProps = NonNullable<LayoutNodesOptions["primary"]["mainHeaderProps"]>;
 type GitDiffPanelProps = LayoutNodesOptions["git"]["gitDiffPanelProps"];
 
+export function hasLoadableOlderTurnsForThread(
+  threadId: string | null,
+  threadTurnsCursorById: ThreadState["threadTurnsCursorById"],
+  threadTurnsHasLoadedOldestById: ThreadState["threadTurnsHasLoadedOldestById"],
+) {
+  if (!threadId || threadTurnsHasLoadedOldestById[threadId] === true) {
+    return false;
+  }
+  const cursor = threadTurnsCursorById[threadId];
+  return cursor === undefined || Boolean(cursor);
+}
+
 type UseMainAppLayoutSurfacesArgs = {
   appSettings: Pick<
     AppSettings,
@@ -447,10 +459,11 @@ function buildPrimarySurface({
       isLoadingMessages: activeThreadId
         ? threadResumeLoadingById[activeThreadId] ?? false
         : false,
-      hasOlderTurns: activeThreadId
-        ? Boolean(threadTurnsCursorById[activeThreadId]) &&
-          !threadTurnsHasLoadedOldestById[activeThreadId]
-        : false,
+      hasOlderTurns: hasLoadableOlderTurnsForThread(
+        activeThreadId,
+        threadTurnsCursorById,
+        threadTurnsHasLoadedOldestById,
+      ),
       isLoadingOlderTurns: activeThreadId
         ? threadTurnsPagingById[activeThreadId] ?? false
         : false,

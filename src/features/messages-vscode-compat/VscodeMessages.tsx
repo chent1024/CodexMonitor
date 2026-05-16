@@ -2,13 +2,13 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
   type RefObject,
 } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
@@ -23,6 +23,7 @@ import type {
 import { PlanReadyFollowupMessage } from "../app/components/PlanReadyFollowupMessage";
 import { RequestUserInputMessage } from "../app/components/RequestUserInputMessage";
 import { useFileLinkOpener } from "../messages/hooks/useFileLinkOpener";
+import type { ThreadScrollController } from "../messages/components/useMessagesViewState";
 import {
   formatCount,
   type AssistantTurn,
@@ -41,6 +42,15 @@ import {
   type MemoryCitationInfo,
 } from "../messages/utils/memoryCitations";
 import { useMessagesViewState } from "../messages/components/useMessagesViewState";
+import {
+  buildVirtualScrollLayout,
+  getBottomVirtualRange,
+  getMaxScrollDistanceFromBottom,
+  getScrollDistanceFromBottom,
+  isNearScrollBottom,
+  isNearScrollTop,
+  type VirtualScrollLayout,
+} from "../messages/utils/threadScroll";
 import { ActivityItemRow } from "./ActivityRows";
 import {
   AnimatedDisclosureBody,
@@ -92,6 +102,7 @@ type MessagesProps = {
   onQuoteMessage?: (text: string) => void;
   onLoadOlderTurns?: () => void | Promise<void>;
   renderActiveWorkingIndicator?: boolean;
+  footerNode?: ReactNode;
 };
 
 function activityBlocksFromTurn(turn: AssistantTurn) {
@@ -187,9 +198,47 @@ function useWorkingElapsedMs(isWorking: boolean, startedAtMs?: number | null) {
 }
 
 const TURN_VIRTUALIZATION_THRESHOLD = 12;
-const TURN_VIRTUALIZATION_ESTIMATED_SIZE = 240;
-const TURN_VIRTUALIZATION_GAP = 8;
+const TURN_VIRTUALIZATION_ESTIMATED_SIZE = 280;
+const TURN_VIRTUALIZATION_GAP = 12;
 const TURN_VIRTUALIZATION_OVERSCAN = 2;
+const TURN_VIRTUALIZATION_INITIAL_VIEWPORT_HEIGHT = 800;
+const MAX_VIRTUAL_TURN_HEIGHT_CACHE_ENTRIES = 100;
+const virtualTurnHeightCache = new Map<string, Record<string, number>>();
+
+function rememberVirtualTurnHeights(
+  cacheKey: string,
+  heightByTurnId: Record<string, number>,
+) {
+  if (virtualTurnHeightCache.size >= MAX_VIRTUAL_TURN_HEIGHT_CACHE_ENTRIES) {
+    const oldestKey = virtualTurnHeightCache.keys().next().value;
+    if (oldestKey !== undefined && oldestKey !== cacheKey) {
+      virtualTurnHeightCache.delete(oldestKey);
+    }
+  }
+  virtualTurnHeightCache.set(cacheKey, heightByTurnId);
+}
+
+function getEstimatedVirtualTurnsTotalSize(count: number) {
+  if (count <= 0) {
+    return 0;
+  }
+  return (
+    count * TURN_VIRTUALIZATION_ESTIMATED_SIZE +
+    Math.max(0, count - 1) * TURN_VIRTUALIZATION_GAP
+  );
+}
+
+function getInitialVirtualTurnsOffset(
+  turnCount: number,
+  distanceFromBottom: number,
+) {
+  return Math.max(
+    0,
+    getEstimatedVirtualTurnsTotalSize(turnCount) -
+      TURN_VIRTUALIZATION_INITIAL_VIEWPORT_HEIGHT -
+      Math.max(0, distanceFromBottom),
+  );
+}
 
 type VscodeConversationTurn = ReturnType<
   typeof buildVscodeViewModelFromEntries
@@ -197,31 +246,200 @@ type VscodeConversationTurn = ReturnType<
 
 type VirtualizedConversationTurnsProps = {
   turns: VscodeConversationTurn[];
+  heightCacheKey: string;
   scrollElementRef: RefObject<HTMLDivElement | null>;
+  scrollController: ThreadScrollController;
+  initialScrollDistanceFromBottom: number;
   renderTurn: (turn: VscodeConversationTurn, index: number) => ReactNode;
 };
 
 const VirtualizedConversationTurns = memo(function VirtualizedConversationTurns({
   turns,
+  heightCacheKey,
   scrollElementRef,
+  scrollController,
+  initialScrollDistanceFromBottom,
   renderTurn,
 }: VirtualizedConversationTurnsProps) {
-  const turnVirtualizer = useVirtualizer({
-    count: turns.length,
-    getScrollElement: () => scrollElementRef.current,
-    estimateSize: () => TURN_VIRTUALIZATION_ESTIMATED_SIZE,
-    getItemKey: (index) => turns[index]?.id ?? index,
-    gap: TURN_VIRTUALIZATION_GAP,
-    initialRect: { width: 1, height: 800 },
-    overscan: TURN_VIRTUALIZATION_OVERSCAN,
-  });
-  const virtualTurnRows = turnVirtualizer.getVirtualItems();
+  const [heightByTurnId, setHeightByTurnId] = useState<Record<string, number>>(
+    () => virtualTurnHeightCache.get(heightCacheKey) ?? {},
+  );
+  const [scrollVersion, setScrollVersion] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(
+    TURN_VIRTUALIZATION_INITIAL_VIEWPORT_HEIGHT,
+  );
+  const itemNodesRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const initialVirtualOffset = useMemo(
+    () => getInitialVirtualTurnsOffset(turns.length, initialScrollDistanceFromBottom),
+    [initialScrollDistanceFromBottom, turns.length],
+  );
+  const turnIndexById = useMemo(() => {
+    const next = new Map<string, number>();
+    turns.forEach((turn, index) => next.set(turn.id, index));
+    return next;
+  }, [turns]);
+  const heights = useMemo(
+    () =>
+      turns.map((turn) => heightByTurnId[turn.id] ?? TURN_VIRTUALIZATION_ESTIMATED_SIZE),
+    [heightByTurnId, turns],
+  );
+  const layout: VirtualScrollLayout = useMemo(
+    () => buildVirtualScrollLayout(heights, TURN_VIRTUALIZATION_GAP),
+    [heights],
+  );
+  const measureTurnHeight = useCallback(
+    (turnId: string, nextHeight: number) => {
+      if (!Number.isFinite(nextHeight) || nextHeight <= 0) {
+        return;
+      }
+      const index = turnIndexById.get(turnId);
+      if (index === undefined) {
+        return;
+      }
+      const previousHeight = heightByTurnId[turnId] ?? TURN_VIRTUALIZATION_ESTIMATED_SIZE;
+      const heightDelta = Math.ceil(nextHeight) - previousHeight;
+      if (heightDelta === 0) {
+        return;
+      }
+
+      const container = scrollElementRef.current;
+      if (container) {
+        const distanceFromBottom = getScrollDistanceFromBottom(container);
+        scrollController.adjustForMeasuredTurnHeightDelta({
+          heightDeltaPx: heightDelta,
+          turnBottomDistanceFromBottomPx: layout.bottomOffsets[index] ?? 0,
+          viewportDistanceFromBottomPx: distanceFromBottom,
+        });
+      }
+
+      setHeightByTurnId((current) => {
+        if (current[turnId] === Math.ceil(nextHeight)) {
+          return current;
+        }
+        const next = { ...current, [turnId]: Math.ceil(nextHeight) };
+        rememberVirtualTurnHeights(heightCacheKey, next);
+        return next;
+      });
+    },
+    [
+      heightByTurnId,
+      heightCacheKey,
+      layout.bottomOffsets,
+      scrollController,
+      scrollElementRef,
+      turnIndexById,
+    ],
+  );
+  const distanceFromBottom = scrollElementRef.current
+    ? getScrollDistanceFromBottom(scrollElementRef.current)
+    : initialScrollDistanceFromBottom;
+  const virtualRange = useMemo(
+    () =>
+      getBottomVirtualRange({
+        layout,
+        viewportTopDistanceFromBottom:
+          Math.max(0, distanceFromBottom) + Math.max(1, viewportHeight),
+        viewportBottomDistanceFromBottom: Math.max(0, distanceFromBottom),
+        overscanCount: TURN_VIRTUALIZATION_OVERSCAN,
+      }),
+    // scrollVersion intentionally invalidates the range when only scrollTop changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [distanceFromBottom, layout, scrollVersion, viewportHeight],
+  );
+  const virtualTurnRows = useMemo(() => {
+    const rows: Array<{
+      index: number;
+      key: string;
+      start: number;
+      size: number;
+    }> = [];
+    for (let index = virtualRange.startIndex; index < virtualRange.endIndex; index += 1) {
+      const turn = turns[index];
+      if (!turn) {
+        continue;
+      }
+      rows.push({
+        index,
+        key: turn.id,
+        start: layout.topOffsets[index] ?? 0,
+        size: layout.heights[index] ?? TURN_VIRTUALIZATION_ESTIMATED_SIZE,
+      });
+    }
+    return rows;
+  }, [layout.heights, layout.topOffsets, turns, virtualRange]);
+
+  useLayoutEffect(() => {
+    const container = scrollElementRef.current;
+    if (!container) {
+      return undefined;
+    }
+    const syncViewport = () => {
+      setViewportHeight(container.clientHeight || TURN_VIRTUALIZATION_INITIAL_VIEWPORT_HEIGHT);
+      setScrollVersion((current) => current + 1);
+    };
+    syncViewport();
+    container.addEventListener("scroll", syncViewport, { passive: true });
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(syncViewport);
+    resizeObserver?.observe(container);
+    return () => {
+      container.removeEventListener("scroll", syncViewport);
+      resizeObserver?.disconnect();
+    };
+  }, [scrollElementRef]);
+
+  useLayoutEffect(() => {
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+    const observer = new ResizeObserver((entries) => {
+      entries.forEach((entry) => {
+        const node = entry.target as HTMLDivElement;
+        const turnId = node.dataset.turnVirtualizerItemId;
+        if (!turnId) {
+          return;
+        }
+        measureTurnHeight(turnId, node.getBoundingClientRect().height);
+      });
+    });
+    resizeObserverRef.current = observer;
+    itemNodesRef.current.forEach((node) => observer.observe(node));
+    return () => {
+      observer.disconnect();
+      resizeObserverRef.current = null;
+    };
+  }, [measureTurnHeight, virtualTurnRows]);
+
+  const setVirtualItemNode = useCallback(
+    (turnId: string, node: HTMLDivElement | null) => {
+      const observer = resizeObserverRef.current;
+      const previousNode = itemNodesRef.current.get(turnId);
+      if (previousNode && previousNode !== node) {
+        observer?.unobserve(previousNode);
+        itemNodesRef.current.delete(turnId);
+      }
+      if (!node) {
+        return;
+      }
+      itemNodesRef.current.set(turnId, node);
+      observer?.observe(node);
+      measureTurnHeight(turnId, node.getBoundingClientRect().height);
+    },
+    [measureTurnHeight],
+  );
 
   return (
     <div
       className="oai-turn-virtualizer"
       data-turn-virtualizer
-      style={{ height: `${turnVirtualizer.getTotalSize()}px` }}
+      data-initial-scroll-offset={initialVirtualOffset}
+      data-scroll-distance-from-bottom={distanceFromBottom}
+      data-visible-turn-start-index={virtualRange.startIndex}
+      data-visible-turn-end-index={virtualRange.endIndex}
+      style={{ height: `${layout.totalHeight}px` }}
     >
       {virtualTurnRows.map((virtualRow) => {
         const turn = turns[virtualRow.index];
@@ -231,9 +449,11 @@ const VirtualizedConversationTurns = memo(function VirtualizedConversationTurns(
         return (
           <div
             key={turn.id}
-            ref={turnVirtualizer.measureElement}
+            ref={(node) => setVirtualItemNode(turn.id, node)}
             className="oai-turn-virtualizer-item"
             data-index={virtualRow.index}
+            data-turn-key={turn.id}
+            data-turn-virtualizer-item-id={turn.id}
             data-turn-virtualizer-item
             style={{ transform: `translateY(${virtualRow.start}px)` }}
           >
@@ -270,6 +490,7 @@ export const Messages = memo(function Messages({
   onQuoteMessage,
   onLoadOlderTurns,
   renderActiveWorkingIndicator = true,
+  footerNode = null,
 }: MessagesProps) {
   const activeUserInputRequestId =
     threadId && userInputRequests.length
@@ -290,8 +511,24 @@ export const Messages = memo(function Messages({
   );
   const workingElapsedMs = useWorkingElapsedMs(isThinking, processingStartedAt);
   const olderLoadInFlightRef = useRef(false);
+  const olderLoadRestoreRef = useRef<{ distanceFromBottom: number } | null>(null);
+  const footerRef = useRef<HTMLDivElement | null>(null);
+  const footerHeightRef = useRef(0);
+  const footerScrollRestoreRef = useRef<{ distanceFromBottom: number } | null>(null);
+  const footerScrollRestoreFrameRef = useRef<number | null>(null);
+  const footerScrollRestoreTimeoutRef = useRef<number | null>(null);
   const [selectedTurnById, setSelectedTurnById] = useState<Record<string, number>>({});
   const [collapsedTurns, setCollapsedTurns] = useState<Record<string, boolean | undefined>>({});
+
+  useEffect(() => {
+    setSelectedTurnById((current) =>
+      Object.keys(current).length > 0 ? {} : current,
+    );
+    setCollapsedTurns((current) =>
+      Object.keys(current).length > 0 ? {} : current,
+    );
+  }, [threadId, workspaceId]);
+
   const handleOpenThreadLink = useCallback(
     (threadId: string) => {
       onOpenThreadLink?.(threadId, workspaceId ?? null);
@@ -318,6 +555,8 @@ export const Messages = memo(function Messages({
     containerRef,
     updateAutoScroll,
     requestAutoScroll,
+    initialScrollDistanceFromBottom,
+    threadScrollController,
     expandedItems,
     toggleExpanded,
     collapsedToolGroups,
@@ -332,6 +571,7 @@ export const Messages = memo(function Messages({
   } = useMessagesViewState({
     items: transcriptItems,
     threadId,
+    workspaceId,
     isThinking,
     activeUserInputRequestId,
     hasVisibleUserInputRequest,
@@ -344,6 +584,167 @@ export const Messages = memo(function Messages({
     [groupedItems],
   );
 
+  const captureFooterScrollPosition = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || isNearScrollBottom(container)) {
+      footerScrollRestoreRef.current = null;
+      return;
+    }
+    footerScrollRestoreRef.current = {
+      distanceFromBottom: getScrollDistanceFromBottom(container),
+    };
+  }, [containerRef]);
+
+  const restoreFooterScrollPosition = useCallback(() => {
+    const container = containerRef.current;
+    const pendingRestore = footerScrollRestoreRef.current;
+    if (!container || !pendingRestore) {
+      return;
+    }
+    threadScrollController.scrollToDistanceFromBottomPx(
+      pendingRestore.distanceFromBottom,
+    );
+  }, [containerRef, threadScrollController]);
+
+  const scheduleFooterScrollRestoreClear = useCallback(() => {
+    if (footerScrollRestoreTimeoutRef.current !== null) {
+      window.clearTimeout(footerScrollRestoreTimeoutRef.current);
+    }
+    footerScrollRestoreTimeoutRef.current = window.setTimeout(() => {
+      footerScrollRestoreTimeoutRef.current = null;
+      footerScrollRestoreRef.current = null;
+    }, 700);
+  }, []);
+
+  const scheduleFooterScrollRestore = useCallback(() => {
+    if (!footerScrollRestoreRef.current) {
+      return;
+    }
+    scheduleFooterScrollRestoreClear();
+    if (footerScrollRestoreFrameRef.current !== null) {
+      window.cancelAnimationFrame(footerScrollRestoreFrameRef.current);
+    }
+    footerScrollRestoreFrameRef.current = window.requestAnimationFrame(() => {
+      restoreFooterScrollPosition();
+      footerScrollRestoreFrameRef.current = window.requestAnimationFrame(() => {
+        restoreFooterScrollPosition();
+        footerScrollRestoreFrameRef.current = null;
+      });
+    });
+  }, [restoreFooterScrollPosition, scheduleFooterScrollRestoreClear]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const footer = footerRef.current;
+    if (!container || !footer) {
+      return undefined;
+    }
+
+    const updateFooterHeight = () => {
+      const nextHeight = Math.ceil(footer.getBoundingClientRect().height);
+      const previousHeight = footerHeightRef.current;
+      const heightDelta = nextHeight - previousHeight;
+      footerHeightRef.current = nextHeight;
+      container.style.setProperty(
+        "--thread-scroll-padding-bottom",
+        `${nextHeight + 16}px`,
+      );
+
+      if (heightDelta === 0) {
+        return;
+      }
+      const pendingFooterRestore = footerScrollRestoreRef.current;
+      if (pendingFooterRestore) {
+        pendingFooterRestore.distanceFromBottom += Math.max(0, heightDelta);
+        threadScrollController.scrollToDistanceFromBottomPx(
+          pendingFooterRestore.distanceFromBottom,
+        );
+        scheduleFooterScrollRestore();
+        return;
+      }
+      const distanceFromBottom = getScrollDistanceFromBottom(container);
+      if (isNearScrollBottom(container)) {
+        threadScrollController.scrollToBottom();
+        return;
+      }
+      threadScrollController.scrollToDistanceFromBottomPx(
+        distanceFromBottom + heightDelta,
+      );
+    };
+
+    updateFooterHeight();
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+    const observer = new ResizeObserver(updateFooterHeight);
+    observer.observe(footer);
+    return () => observer.disconnect();
+  }, [containerRef, footerNode, scheduleFooterScrollRestore, threadScrollController]);
+
+  useLayoutEffect(() => {
+    const footer = footerRef.current;
+    if (!footer) {
+      return undefined;
+    }
+
+    const captureThenRestore = () => {
+      captureFooterScrollPosition();
+      scheduleFooterScrollRestore();
+    };
+    const restoreOnly = () => {
+      scheduleFooterScrollRestore();
+    };
+    const captureEvents = [
+      "beforeinput",
+      "keydown",
+      "compositionstart",
+      "compositionupdate",
+      "focusin",
+    ];
+    const restoreEvents = ["input", "keyup", "compositionend", "change"];
+    captureEvents.forEach((eventName) =>
+      footer.addEventListener(eventName, captureThenRestore, true),
+    );
+    restoreEvents.forEach((eventName) =>
+      footer.addEventListener(eventName, restoreOnly, true),
+    );
+    return () => {
+      captureEvents.forEach((eventName) =>
+        footer.removeEventListener(eventName, captureThenRestore, true),
+      );
+      restoreEvents.forEach((eventName) =>
+        footer.removeEventListener(eventName, restoreOnly, true),
+      );
+    };
+  }, [captureFooterScrollPosition, scheduleFooterScrollRestore, footerNode]);
+
+  useEffect(() => {
+    return () => {
+      if (footerScrollRestoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(footerScrollRestoreFrameRef.current);
+      }
+      if (footerScrollRestoreTimeoutRef.current !== null) {
+        window.clearTimeout(footerScrollRestoreTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const pendingRestore = olderLoadRestoreRef.current;
+    const container = containerRef.current;
+    if (!pendingRestore || !container) {
+      return;
+    }
+    threadScrollController.scrollToDistanceFromBottomPx(
+      pendingRestore.distanceFromBottom,
+    );
+  }, [
+    containerRef,
+    threadScrollController,
+    transcriptItems.length,
+    vscodeViewModel.turns.length,
+  ]);
+
   const loadOlderTurns = useCallback(() => {
     if (
       !hasOlderTurns ||
@@ -354,22 +755,32 @@ export const Messages = memo(function Messages({
       return;
     }
     const container = containerRef.current;
-    const previousScrollHeight = container?.scrollHeight ?? 0;
+    const previousDistanceFromBottom = container
+      ? getScrollDistanceFromBottom(container)
+      : 0;
+    olderLoadRestoreRef.current = { distanceFromBottom: previousDistanceFromBottom };
     olderLoadInFlightRef.current = true;
     Promise.resolve(onLoadOlderTurns())
       .catch(() => {
         // Loading errors are surfaced by the thread action debug path.
       })
       .finally(() => {
-        window.requestAnimationFrame(() => {
-          if (container) {
-            const nextScrollHeight = container.scrollHeight;
-            const heightDelta = nextScrollHeight - previousScrollHeight;
-            if (heightDelta > 0) {
-              container.scrollTop += heightDelta;
-            }
+        const preserveDistanceFromBottom = () => {
+          const latestContainer = containerRef.current;
+          const pendingRestore = olderLoadRestoreRef.current;
+          if (latestContainer && pendingRestore) {
+            threadScrollController.scrollToDistanceFromBottomPx(
+              pendingRestore.distanceFromBottom,
+            );
           }
-          olderLoadInFlightRef.current = false;
+        };
+        window.requestAnimationFrame(() => {
+          preserveDistanceFromBottom();
+          window.requestAnimationFrame(() => {
+            preserveDistanceFromBottom();
+            olderLoadRestoreRef.current = null;
+            olderLoadInFlightRef.current = false;
+          });
         });
       });
   }, [
@@ -377,12 +788,33 @@ export const Messages = memo(function Messages({
     hasOlderTurns,
     isLoadingOlderTurns,
     onLoadOlderTurns,
+    threadScrollController,
+  ]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || container.clientHeight <= 0) {
+      return;
+    }
+    if (
+      getMaxScrollDistanceFromBottom(container) <= 0 ||
+      isNearScrollTop(container)
+    ) {
+      loadOlderTurns();
+    }
+  }, [
+    containerRef,
+    hasOlderTurns,
+    isLoadingOlderTurns,
+    loadOlderTurns,
+    transcriptItems.length,
+    vscodeViewModel.turns.length,
   ]);
 
   const handleScroll = useCallback(() => {
     updateAutoScroll();
     const container = containerRef.current;
-    if (!container || container.scrollTop > 80) {
+    if (!container || !isNearScrollTop(container)) {
       return;
     }
     loadOlderTurns();
@@ -764,6 +1196,7 @@ export const Messages = memo(function Messages({
       turnCollapse.shouldAllowCollapse && assistantTurnSplit.collapsibleBlocks.length > 0;
     const summaryDurationMs =
       isMostRecentTurn && workingElapsedMs != null ? workingElapsedMs : turn.durationMs;
+    const shouldShowFileChangeSummary = !(isMostRecentTurn && isThinking);
     const collapseSummary = getTurnCollapseSummary({
       collapsedMessageCount: assistantTurnSplit.collapsedMessageCount,
       workedDurationMs: summaryDurationMs,
@@ -834,7 +1267,7 @@ export const Messages = memo(function Messages({
           data-assistant-turn-footer
         >
           {renderAssistantTurnSelector(turn, messageBlocks)}
-          {fileChanges.length > 0 && (
+          {shouldShowFileChangeSummary && fileChanges.length > 0 && (
             <FileChangeSummaryCard changes={fileChanges} workspacePath={workspacePath} />
           )}
           {memoryCitation ? <MemoryCitationPanel citation={memoryCitation} /> : null}
@@ -1066,8 +1499,12 @@ export const Messages = memo(function Messages({
 
     return (
       <VirtualizedConversationTurns
+        key={`${workspaceId ?? "no-workspace"}:${threadId ?? "draft"}`}
         turns={vscodeViewModel.turns}
+        heightCacheKey={`${workspaceId ?? "no-workspace"}:${threadId ?? "draft"}`}
         scrollElementRef={containerRef}
+        scrollController={threadScrollController}
+        initialScrollDistanceFromBottom={initialScrollDistanceFromBottom}
         renderTurn={renderConversationTurn}
       />
     );
@@ -1118,52 +1555,65 @@ export const Messages = memo(function Messages({
       className="messages messages-full"
       ref={containerRef}
       onScroll={handleScroll}
+      data-thread-reverse-scroll="true"
+      data-thread-scroll-scope={`${workspaceId ?? "no-workspace"}:${threadId ?? "draft"}`}
     >
-      <div
-	        className="messages-inner oai-conversation-thread relative flex flex-col gap-2 electron:[--color-token-description-foreground:color-mix(in_srgb,var(--color-token-foreground)_70%,transparent)]"
-        data-thread-find-target="conversation"
-      >
-        {hasOlderTurns ? (
-          <button
-            type="button"
-            className="ghost messages-load-older-turns"
-            disabled={isLoadingOlderTurns}
-            onClick={loadOlderTurns}
-          >
-            {isLoadingOlderTurns ? "Loading earlier messages..." : "Load earlier messages"}
-          </button>
-        ) : null}
-        {renderConversationTurns()}
+      <div className="messages-scroll-stack">
         <div
-          className="flex flex-col gap-2 oai-thread-find-composer"
-          data-thread-find-composer="true"
+          className="messages-inner oai-conversation-thread relative flex flex-col gap-2 electron:[--color-token-description-foreground:color-mix(in_srgb,var(--color-token-foreground)_70%,transparent)]"
+          data-thread-find-target="conversation"
         >
-          {planFollowupNode}
-          {userInputNode}
-        </div>
-        <WorkingIndicator
-          isThinking={renderActiveWorkingIndicator ? isThinking : false}
-          processingStartedAt={processingStartedAt}
-          lastDurationMs={lastDurationMs}
-          hasItems={transcriptItems.length > 0}
-          reasoningLabel={latestReasoningLabel}
-          showPollingFetchStatus={showPollingFetchStatus}
-          pollingIntervalMs={pollingIntervalMs}
-        />
-        {!transcriptItems.length && !userInputNode && !isThinking && !isLoadingMessages && (
-          <div className="empty messages-empty">
-            {threadId ? "Send a prompt to the agent." : "Send a prompt to start a new agent."}
+          {hasOlderTurns ? (
+            <button
+              type="button"
+              className="ghost messages-load-older-turns"
+              disabled={isLoadingOlderTurns}
+              onClick={loadOlderTurns}
+            >
+              {isLoadingOlderTurns ? "Loading earlier messages..." : "Load earlier messages"}
+            </button>
+          ) : null}
+          {renderConversationTurns()}
+          <div
+            className="flex flex-col gap-2 oai-thread-find-composer"
+            data-thread-find-composer="true"
+          >
+            {planFollowupNode}
+            {userInputNode}
           </div>
-        )}
-        {!transcriptItems.length && !userInputNode && !isThinking && isLoadingMessages && (
-          <div className="empty messages-empty">
-            <div className="messages-loading-indicator" role="status" aria-live="polite">
-              <span className="oai-thinking-shimmer__spinner" aria-hidden />
-              <span className="messages-loading-label">Loading…</span>
+          <WorkingIndicator
+            isThinking={renderActiveWorkingIndicator ? isThinking : false}
+            processingStartedAt={processingStartedAt}
+            lastDurationMs={isThinking ? null : lastDurationMs}
+            hasItems={transcriptItems.length > 0}
+            reasoningLabel={latestReasoningLabel}
+            showPollingFetchStatus={showPollingFetchStatus}
+            pollingIntervalMs={pollingIntervalMs}
+          />
+          {!transcriptItems.length && !userInputNode && !isThinking && !isLoadingMessages && (
+            <div className="empty messages-empty">
+              {threadId ? "Send a prompt to the agent." : "Send a prompt to start a new agent."}
             </div>
+          )}
+          {!transcriptItems.length && !userInputNode && !isThinking && isLoadingMessages && (
+            <div className="empty messages-empty">
+              <div className="messages-loading-indicator" role="status" aria-live="polite">
+                <span className="oai-thinking-shimmer__spinner" aria-hidden />
+                <span className="messages-loading-label">Loading…</span>
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+        {footerNode ? (
+          <div
+            className="messages-footer"
+            data-thread-scroll-footer="true"
+            ref={footerRef}
+          >
+            {footerNode}
           </div>
-        )}
-        <div ref={bottomRef} />
+        ) : null}
       </div>
       {fileLinkMenu}
       {fileLinkPreview}

@@ -9,6 +9,7 @@ import {
   DIFF_VIEWER_SCROLL_CSS,
 } from "../../design-system/diff/diffViewerTheme";
 import {
+  buildRenderablePatch,
   isFallbackRawDiffLineHighlightable,
   limitRenderedDiff,
   normalizePatchName,
@@ -18,12 +19,12 @@ import {
 type PierreDiffBlockProps = {
   diff: string;
   displayPath: string;
+  changeKind?: string | null;
   oldLines?: string[];
   newLines?: string[];
   diffStyle?: "split" | "unified";
 };
 
-const HUNK_ONLY_DIFF_REGEX = /(^|\n)@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/;
 const FILE_CHANGE_GUTTER_CSS = `
 [data-file-change-gutter] {
   position: absolute;
@@ -91,25 +92,6 @@ type RenderedFileChangeGutterMarker = {
   lineNumber: number;
   placement: "line" | "before" | "after";
 };
-
-function buildParseablePatch(diff: string, displayPath: string) {
-  if (/^diff --git /m.test(diff) || /^---\s+/m.test(diff)) {
-    return diff;
-  }
-
-  if (!HUNK_ONLY_DIFF_REGEX.test(diff)) {
-    return diff;
-  }
-
-  const normalizedPath = normalizePatchName(displayPath);
-  const body = diff.endsWith("\n") ? diff : `${diff}\n`;
-  return [
-    `diff --git a/${normalizedPath} b/${normalizedPath}`,
-    `--- a/${normalizedPath}`,
-    `+++ b/${normalizedPath}`,
-    body,
-  ].join("\n");
-}
 
 function buildDeletionMarker(
   hunk: FileDiffMetadata["hunks"][number],
@@ -268,6 +250,7 @@ function applyFileChangeGutters(
 export function PierreDiffBlock({
   diff,
   displayPath,
+  changeKind,
   oldLines,
   newLines,
   diffStyle = "unified",
@@ -279,12 +262,19 @@ export function PierreDiffBlock({
     [],
   );
   const limitedDiff = useMemo(() => limitRenderedDiff(diff), [diff]);
+  const renderableDiff = useMemo(
+    () =>
+      limitedDiff.isTruncated
+        ? limitedDiff.diff
+        : buildRenderablePatch(limitedDiff.diff, displayPath, changeKind),
+    [changeKind, displayPath, limitedDiff.diff, limitedDiff.isTruncated],
+  );
 
   const fileDiff = useMemo(() => {
     if (!limitedDiff.diff.trim() || limitedDiff.isTruncated) {
       return null;
     }
-    const patch = parsePatchFiles(buildParseablePatch(limitedDiff.diff, displayPath));
+    const patch = parsePatchFiles(renderableDiff);
     const parsed = patch[0]?.files[0];
     if (!parsed) {
       return null;
@@ -301,15 +291,22 @@ export function PierreDiffBlock({
       oldLines,
       newLines,
     } satisfies FileDiffMetadata;
-  }, [displayPath, limitedDiff.diff, limitedDiff.isTruncated, newLines, oldLines]);
+  }, [
+    displayPath,
+    limitedDiff.diff,
+    limitedDiff.isTruncated,
+    newLines,
+    oldLines,
+    renderableDiff,
+  ]);
 
   const parsedLines = useMemo(() => {
-    const parsed = parseDiff(limitedDiff.diff);
+    const parsed = parseDiff(renderableDiff);
     if (parsed.length > 0) {
       return parsed;
     }
     return parseRawDiffLines(limitedDiff.diff);
-  }, [limitedDiff.diff]);
+  }, [limitedDiff.diff, renderableDiff]);
   const fallbackLanguage = useMemo(
     () => languageFromPath(displayPath),
     [displayPath],
