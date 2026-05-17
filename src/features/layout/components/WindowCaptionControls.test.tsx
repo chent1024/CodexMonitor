@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const isTauriMock = vi.hoisted(() => vi.fn());
 const getCurrentWindowMock = vi.hoisted(() => vi.fn());
 const isWindowsPlatformMock = vi.hoisted(() => vi.fn());
+const isLinuxPlatformMock = vi.hoisted(() => vi.fn());
+const toggleNativeWindowMaximizeMock = vi.hoisted(() => vi.fn());
 const toggleWindowZoomWithinCurrentDisplayMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -17,9 +19,11 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 vi.mock("@utils/platformPaths", () => ({
   isWindowsPlatform: isWindowsPlatformMock,
+  isLinuxPlatform: isLinuxPlatformMock,
 }));
 
 vi.mock("../utils/windowZoom", () => ({
+  toggleNativeWindowMaximize: toggleNativeWindowMaximizeMock,
   toggleWindowZoomWithinCurrentDisplay: toggleWindowZoomWithinCurrentDisplayMock,
 }));
 
@@ -38,10 +42,12 @@ describe("WindowCaptionControls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     isWindowsPlatformMock.mockReturnValue(true);
+    isLinuxPlatformMock.mockReturnValue(false);
     isTauriMock.mockReturnValue(true);
     windowHandle.isMaximized.mockResolvedValue(false);
     windowHandle.onResized.mockResolvedValue(() => undefined);
     getCurrentWindowMock.mockReturnValue(windowHandle);
+    toggleNativeWindowMaximizeMock.mockResolvedValue(undefined);
     toggleWindowZoomWithinCurrentDisplayMock.mockResolvedValue(undefined);
   });
 
@@ -63,12 +69,34 @@ describe("WindowCaptionControls", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it("does not render when not on Windows", () => {
+  it("does not render when not on an app chrome desktop platform", () => {
     isWindowsPlatformMock.mockReturnValue(false);
+    isLinuxPlatformMock.mockReturnValue(false);
 
     render(<WindowCaptionControls />);
 
     expect(screen.queryByRole("group", { name: "Window controls" })).toBeNull();
+  });
+
+  it("renders controls on Linux in Tauri", () => {
+    isWindowsPlatformMock.mockReturnValue(false);
+    isLinuxPlatformMock.mockReturnValue(true);
+
+    render(<WindowCaptionControls />);
+
+    expect(screen.getByRole("group", { name: "Window controls" })).not.toBeNull();
+  });
+
+  it("uses native maximize on Linux so the window manager keeps system panels visible", () => {
+    isWindowsPlatformMock.mockReturnValue(false);
+    isLinuxPlatformMock.mockReturnValue(true);
+
+    render(<WindowCaptionControls />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Maximize window" }));
+
+    expect(toggleNativeWindowMaximizeMock).toHaveBeenCalledWith(windowHandle);
+    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
   });
 
   it("does not render when not running in Tauri", () => {

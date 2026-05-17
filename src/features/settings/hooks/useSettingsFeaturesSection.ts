@@ -35,6 +35,7 @@ import {
 
 type UseSettingsFeaturesSectionArgs = {
   appSettings: AppSettings;
+  enabled?: boolean;
   featureWorkspaceId: string | null;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
 };
@@ -276,6 +277,7 @@ function importRecordsFromJson(raw: string): ImportLocalMemoryRecord[] {
 
 export const useSettingsFeaturesSection = ({
   appSettings,
+  enabled = true,
   featureWorkspaceId,
   onUpdateAppSettings,
 }: UseSettingsFeaturesSectionArgs): SettingsFeaturesSectionProps => {
@@ -320,6 +322,9 @@ export const useSettingsFeaturesSection = ({
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     let active = true;
     void (async () => {
       try {
@@ -336,7 +341,7 @@ export const useSettingsFeaturesSection = ({
     return () => {
       active = false;
     };
-  }, []);
+  }, [enabled]);
 
   const refreshLocalMemoryData = useCallback(async () => {
     setLocalMemoryActionLoading(true);
@@ -366,6 +371,14 @@ export const useSettingsFeaturesSection = ({
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      setLocalMemoryRecords([]);
+      setLocalMemoryReviewQueue([]);
+      setLocalMemorySelectedReviewIds([]);
+      setLocalMemoryEntities([]);
+      setLocalMemoryEvents([]);
+      return;
+    }
     if (localMemoryStatus?.enabled) {
       void refreshLocalMemoryData();
     } else {
@@ -375,13 +388,19 @@ export const useSettingsFeaturesSection = ({
       setLocalMemoryEntities([]);
       setLocalMemoryEvents([]);
     }
-  }, [localMemoryStatus?.enabled, refreshLocalMemoryData]);
+  }, [enabled, localMemoryStatus?.enabled, refreshLocalMemoryData]);
 
   useEffect(() => {
     setLocalMemoryDbPathDraft(localMemoryStatus?.dbPath ?? "");
   }, [localMemoryStatus?.dbPath]);
 
   useEffect(() => {
+    if (!enabled) {
+      setLocalMemoryStatus(null);
+      setLocalMemoryError(null);
+      setLocalMemoryLoading(false);
+      return;
+    }
     let active = true;
     void (async () => {
       setLocalMemoryLoading(true);
@@ -409,11 +428,11 @@ export const useSettingsFeaturesSection = ({
     return () => {
       active = false;
     };
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     let active = true;
-    if (!featureWorkspaceId) {
+    if (!enabled || !featureWorkspaceId) {
       setFeatures([]);
       setFeatureError(null);
       setFeaturesLoading(false);
@@ -473,7 +492,7 @@ export const useSettingsFeaturesSection = ({
     return () => {
       active = false;
     };
-  }, [featureWorkspaceId]);
+  }, [enabled, featureWorkspaceId]);
 
   const stableFeatures = useMemo(() => {
     let sawFastMode = false;

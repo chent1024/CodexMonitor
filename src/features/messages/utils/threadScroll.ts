@@ -42,7 +42,7 @@ export function setScrollDistanceFromBottom(
   const nextDistance = Math.max(0, distanceFromBottom);
   if (usesReverseScroll(node)) {
     const top = nextDistance === 0 ? 0 : -nextDistance;
-    if (behavior === "auto") {
+    if (behavior === "auto" || typeof node.scrollTo !== "function") {
       node.scrollTop = top;
     } else {
       node.scrollTo({ top, behavior });
@@ -50,7 +50,7 @@ export function setScrollDistanceFromBottom(
     return;
   }
   const top = Math.max(0, node.scrollHeight - node.clientHeight - nextDistance);
-  if (behavior === "auto") {
+  if (behavior === "auto" || typeof node.scrollTo !== "function") {
     node.scrollTop = top;
   } else {
     node.scrollTo({ top, behavior });

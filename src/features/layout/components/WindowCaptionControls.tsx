@@ -5,8 +5,11 @@ import X from "lucide-react/dist/esm/icons/x";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
-import { isWindowsPlatform } from "@utils/platformPaths";
-import { toggleWindowZoomWithinCurrentDisplay } from "../utils/windowZoom";
+import { isLinuxPlatform, isWindowsPlatform } from "@utils/platformPaths";
+import {
+  toggleNativeWindowMaximize,
+  toggleWindowZoomWithinCurrentDisplay,
+} from "../utils/windowZoom";
 
 function currentWindowSafe() {
   try {
@@ -17,7 +20,8 @@ function currentWindowSafe() {
 }
 
 export function WindowCaptionControls() {
-  const isEnabled = isWindowsPlatform() && isTauri();
+  const isLinux = isLinuxPlatform();
+  const isEnabled = (isWindowsPlatform() || isLinux) && isTauri();
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -82,6 +86,12 @@ export function WindowCaptionControls() {
   const handleToggleMaximize = () => {
     const windowHandle = currentWindowSafe();
     if (!windowHandle) {
+      return;
+    }
+    if (isLinux) {
+      void toggleNativeWindowMaximize(windowHandle).catch(() => {
+        // Ignore platform-specific window manager failures.
+      });
       return;
     }
     void toggleWindowZoomWithinCurrentDisplay(windowHandle).catch(() => {

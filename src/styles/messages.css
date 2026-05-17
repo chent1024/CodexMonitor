@@ -86,6 +86,7 @@
   -webkit-overflow-scrolling: touch;
   overflow-anchor: none;
   overscroll-behavior: contain;
+  scroll-behavior: smooth;
   scroll-padding-bottom: var(--thread-scroll-padding-bottom, 0px);
   touch-action: pan-y;
   container-name: thread-content;

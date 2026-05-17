@@ -1,9 +1,9 @@
 import { readGlobalAgentsMd, writeGlobalAgentsMd } from "@services/tauri";
 import { useFileEditor } from "@/features/shared/hooks/useFileEditor";
 
-export function useGlobalAgentsMd() {
+export function useGlobalAgentsMd({ enabled = true }: { enabled?: boolean } = {}) {
   return useFileEditor({
-    key: "global-agents",
+    key: enabled ? "global-agents" : null,
     read: readGlobalAgentsMd,
     write: writeGlobalAgentsMd,
     readErrorTitle: "Couldn’t load global AGENTS.md",

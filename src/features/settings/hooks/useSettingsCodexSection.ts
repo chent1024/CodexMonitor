@@ -16,6 +16,8 @@ import { normalizeCodexArgsInput } from "@/utils/codexArgsInput";
 type UseSettingsCodexSectionArgs = {
   appSettings: AppSettings;
   projects: WorkspaceInfo[];
+  enabled?: boolean;
+  defaultModelsEnabled?: boolean;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
   onRunDoctor: (
     codexBin: string | null,
@@ -80,6 +82,8 @@ export type SettingsCodexSectionProps = {
 export const useSettingsCodexSection = ({
   appSettings,
   projects,
+  enabled = true,
+  defaultModelsEnabled = true,
   onUpdateAppSettings,
   onRunDoctor,
   onRunCodexUpdate,
@@ -103,7 +107,7 @@ export const useSettingsCodexSection = ({
     error: defaultModelsError,
     connectedWorkspaceCount: defaultModelsConnectedWorkspaceCount,
     refresh: refreshDefaultModels,
-  } = useSettingsDefaultModels(projects);
+  } = useSettingsDefaultModels(projects, { enabled: defaultModelsEnabled });
 
   const {
     content: globalAgentsContent,
@@ -116,7 +120,7 @@ export const useSettingsCodexSection = ({
     setContent: setGlobalAgentsContent,
     refresh: refreshGlobalAgents,
     save: saveGlobalAgents,
-  } = useGlobalAgentsMd();
+  } = useGlobalAgentsMd({ enabled });
 
   const {
     content: globalConfigContent,
@@ -129,7 +133,7 @@ export const useSettingsCodexSection = ({
     setContent: setGlobalConfigContent,
     refresh: refreshGlobalConfig,
     save: saveGlobalConfig,
-  } = useGlobalCodexConfigToml();
+  } = useGlobalCodexConfigToml({ enabled });
 
   const globalAgentsEditorMeta = buildEditorContentMeta({
     isLoading: globalAgentsLoading,

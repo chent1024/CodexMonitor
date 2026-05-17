@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const isTauriMock = vi.hoisted(() => vi.fn());
 const getCurrentWindowMock = vi.hoisted(() => vi.fn());
 const performNativeWindowZoomMock = vi.hoisted(() => vi.fn());
+const isLinuxPlatformMock = vi.hoisted(() => vi.fn());
 const isMacPlatformMock = vi.hoisted(() => vi.fn());
 const toggleWindowZoomWithinCurrentDisplayMock = vi.hoisted(() => vi.fn());
 
@@ -21,6 +22,7 @@ vi.mock("@services/tauri", () => ({
 }));
 
 vi.mock("@utils/platformPaths", () => ({
+  isLinuxPlatform: isLinuxPlatformMock,
   isMacPlatform: isMacPlatformMock,
 }));
 
@@ -67,6 +69,7 @@ describe("useWindowDrag", () => {
     vi.clearAllMocks();
     document.body.innerHTML = "";
     isTauriMock.mockReturnValue(true);
+    isLinuxPlatformMock.mockReturnValue(false);
     isMacPlatformMock.mockReturnValue(false);
     getCurrentWindowMock.mockReturnValue({ startDragging });
     performNativeWindowZoomMock.mockResolvedValue(true);
@@ -266,6 +269,71 @@ describe("useWindowDrag", () => {
     );
 
     expect(toggleWindowZoomWithinCurrentDisplayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores Linux topbar double-clicks so only the caption button maximizes", () => {
+    isLinuxPlatformMock.mockReturnValue(true);
+    const topbarLeft = document.createElement("div");
+    topbarLeft.className = "main-topbar-left";
+    document.body.appendChild(topbarLeft);
+    setRect(topbarLeft, { left: 0, top: 0, right: 680, bottom: 44 });
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    topbarLeft.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 200,
+        clientY: 20,
+      }),
+    );
+
+    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks the second Linux topbar mousedown without maximizing", () => {
+    isLinuxPlatformMock.mockReturnValue(true);
+    const app = document.createElement("div");
+    app.className = "app";
+    document.body.appendChild(app);
+    app.style.setProperty("--window-drag-hit-height", "44px");
+
+    renderHook(() => useWindowDrag("titlebar"));
+
+    document.body.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        clientX: 400,
+        clientY: 20,
+      }),
+    );
+    document.body.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    const secondMouseDown = new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: 402,
+      clientY: 21,
+      detail: 2,
+    });
+    const secondMouseDownAllowed = document.body.dispatchEvent(secondMouseDown);
+
+    expect(secondMouseDown.defaultPrevented).toBe(true);
+    expect(secondMouseDownAllowed).toBe(false);
+
+    document.body.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        clientX: 402,
+        clientY: 21,
+      }),
+    );
+
+    expect(toggleWindowZoomWithinCurrentDisplayMock).not.toHaveBeenCalled();
   });
 
   it("toggles safe zoom in the top chrome band when drag zone geometry is unavailable", () => {

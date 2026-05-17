@@ -35,6 +35,15 @@ export function resetWindowZoomStateForTests() {
   customZoomed = false;
 }
 
+export async function toggleNativeWindowMaximize(
+  windowHandle: WindowHandle | null = currentWindowSafe(),
+) {
+  if (!windowHandle) {
+    return;
+  }
+  await windowHandle.toggleMaximize();
+}
+
 function currentWindowSafe() {
   try {
     return getCurrentWindow();

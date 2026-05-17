@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildVirtualScrollLayout,
   getBottomVirtualRange,
@@ -70,6 +70,21 @@ describe("threadScroll", () => {
 
     setScrollDistanceFromBottom(node, 220);
     expect(node.scrollTop).toBe(-220);
+  });
+
+  it("uses native smooth scrolling when a behavior is requested", () => {
+    const node = makeScrollNode({
+      clientHeight: 200,
+      scrollHeight: 900,
+      scrollTop: -340,
+      reverse: true,
+    });
+    const scrollTo = vi.fn();
+    node.scrollTo = scrollTo;
+
+    setScrollDistanceFromBottom(node, 0, "smooth");
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
   });
 
   it("classifies bottom and top thresholds in reverse scroll mode", () => {

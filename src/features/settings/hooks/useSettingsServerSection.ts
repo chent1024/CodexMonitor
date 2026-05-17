@@ -23,6 +23,7 @@ import { DEFAULT_REMOTE_HOST } from "@settings/components/settingsViewConstants"
 
 type UseSettingsServerSectionArgs = {
   appSettings: AppSettings;
+  enabled?: boolean;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
   onMobileConnectSuccess?: () => Promise<void> | void;
 };
@@ -156,6 +157,7 @@ const buildNextRemoteName = (remoteBackends: RemoteBackendTarget[]) => {
 
 export const useSettingsServerSection = ({
   appSettings,
+  enabled = true,
   onUpdateAppSettings,
   onMobileConnectSuccess,
 }: UseSettingsServerSectionArgs): SettingsServerSectionProps => {
@@ -205,6 +207,12 @@ export const useSettingsServerSection = ({
   }, [appSettings]);
 
   const refreshDaemonHealth = useCallback(() => {
+    if (!enabled) {
+      setDaemonHealth(null);
+      setDaemonHealthError(null);
+      setDaemonHealthLoading(false);
+      return;
+    }
     const shouldReadDaemon =
       appSettings.restartSafeSessions || appSettings.backendMode === "remote";
     if (!shouldReadDaemon) {
@@ -226,10 +234,10 @@ export const useSettingsServerSection = ({
         setDaemonHealthLoading(false);
       }
     })();
-  }, [appSettings.backendMode, appSettings.restartSafeSessions]);
+  }, [appSettings.backendMode, appSettings.restartSafeSessions, enabled]);
 
   const refreshRestartSafeSessionStatus = useCallback(() => {
-    if (!appSettings.restartSafeSessions) {
+    if (!enabled || !appSettings.restartSafeSessions) {
       setRestartSafeSessionStatus(null);
       setRestartSafeSessionError(null);
       setRestartSafeSessionLoading(false);
@@ -252,7 +260,7 @@ export const useSettingsServerSection = ({
         setRestartSafeSessionLoading(false);
       }
     })();
-  }, [appSettings.restartSafeSessions]);
+  }, [appSettings.restartSafeSessions, enabled]);
 
   useEffect(() => {
     refreshRestartSafeSessionStatus();
@@ -703,6 +711,17 @@ export const useSettingsServerSection = ({
   }, [runTcpDaemonAction]);
 
   useEffect(() => {
+    if (!enabled) {
+      setTailscaleCommandPreview(null);
+      setTailscaleCommandBusy(false);
+      setTailscaleCommandError(null);
+      setTcpDaemonStatus(null);
+      setTcpDaemonBusyAction(null);
+      setTailscaleStatus(null);
+      setTailscaleStatusBusy(false);
+      setTailscaleStatusError(null);
+      return;
+    }
     if (!mobilePlatform) {
       handleRefreshTailscaleCommandPreview();
       void handleTcpDaemonStatus();
@@ -712,6 +731,7 @@ export const useSettingsServerSection = ({
     }
   }, [
     appSettings.remoteBackendToken,
+    enabled,
     handleRefreshTailscaleCommandPreview,
     handleRefreshTailscaleStatus,
     handleTcpDaemonStatus,

@@ -18,12 +18,14 @@ import { useSettingsAgentsSection } from "./useSettingsAgentsSection";
 import { useSettingsProjectsSection } from "./useSettingsProjectsSection";
 import { useSettingsServerSection } from "./useSettingsServerSection";
 import type { GroupedWorkspaces } from "./settingsSectionTypes";
+import type { CodexSection } from "@settings/components/settingsTypes";
 import {
   COMPOSER_PRESET_CONFIGS,
   COMPOSER_PRESET_LABELS,
 } from "@settings/components/settingsViewConstants";
 
 type UseSettingsViewOrchestrationArgs = {
+  activeSection: CodexSection;
   workspaceGroups: WorkspaceGroup[];
   groupedWorkspaces: GroupedWorkspaces;
   ungroupedLabel: string;
@@ -60,6 +62,7 @@ type UseSettingsViewOrchestrationArgs = {
 };
 
 export function useSettingsViewOrchestration({
+  activeSection,
   workspaceGroups,
   groupedWorkspaces,
   ungroupedLabel,
@@ -82,6 +85,12 @@ export function useSettingsViewOrchestration({
   onDeleteWorkspaceGroup,
   onAssignWorkspaceGroup,
 }: UseSettingsViewOrchestrationArgs) {
+  const needsCodexDefaultModels = activeSection === "codex" || activeSection === "git";
+  const needsAgentDefaultModels = activeSection === "agents";
+  const needsGlobalCodexFiles = activeSection === "codex";
+  const needsAgentsSettings = activeSection === "agents";
+  const needsServerRuntime = activeSection === "server";
+  const needsFeatureRuntime = activeSection === "features";
   const projects = useMemo(
     () => groupedWorkspaces.flatMap((group) => group.workspaces),
     [groupedWorkspaces],
@@ -155,6 +164,7 @@ export function useSettingsViewOrchestration({
 
   const serverSectionProps = useSettingsServerSection({
     appSettings,
+    enabled: needsServerRuntime,
     onUpdateAppSettings,
     onMobileConnectSuccess,
   });
@@ -162,6 +172,8 @@ export function useSettingsViewOrchestration({
   const codexSectionProps = useSettingsCodexSection({
     appSettings,
     projects,
+    enabled: needsGlobalCodexFiles,
+    defaultModelsEnabled: needsCodexDefaultModels,
     onUpdateAppSettings,
     onRunDoctor,
     onRunCodexUpdate,
@@ -175,11 +187,16 @@ export function useSettingsViewOrchestration({
 
   const featuresSectionProps = useSettingsFeaturesSection({
     appSettings,
+    enabled: needsFeatureRuntime,
     featureWorkspaceId,
     onUpdateAppSettings,
   });
 
-  const agentsSectionProps = useSettingsAgentsSection({ projects });
+  const agentsSectionProps = useSettingsAgentsSection({
+    projects,
+    enabled: needsAgentsSettings,
+    defaultModelsEnabled: needsAgentDefaultModels,
+  });
 
   return {
     aboutSectionProps: {},

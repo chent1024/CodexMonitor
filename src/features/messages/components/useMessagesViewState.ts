@@ -70,7 +70,7 @@ export type ThreadScrollController = {
   }) => void;
   getLastScrollDistanceFromBottomPx: () => number;
   getScrollElement: () => HTMLDivElement | null;
-  scrollToBottom: () => void;
+  scrollToBottom: (behavior?: ScrollBehavior) => void;
   scrollToDistanceFromBottomPx: (
     distanceFromBottom: number,
     behavior?: ScrollBehavior,
@@ -261,13 +261,13 @@ export function useMessagesViewState({
     storeScrollSnapshot(getScrollDistanceSnapshot(container, wasPinned));
   }, [isNearBottom, storeScrollSnapshot]);
 
-  const scrollToPinnedBottom = useCallback(() => {
+  const scrollToPinnedBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const container = containerRef.current;
     if (!container) {
-      bottomRef.current?.scrollIntoView({ block: "end" });
+      bottomRef.current?.scrollIntoView({ block: "end", behavior });
       return;
     }
-    setScrollDistanceFromBottom(container, 0);
+    setScrollDistanceFromBottom(container, 0, behavior);
     autoScrollRef.current = true;
     storeScrollSnapshot({
       distanceFromBottom: 0,
@@ -363,7 +363,7 @@ export function useMessagesViewState({
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null;
       if (shouldKeepPinnedToBottom()) {
-        scrollToPinnedBottom();
+        scrollToPinnedBottom("smooth");
       }
     });
   }, [scrollToPinnedBottom, shouldKeepPinnedToBottom]);
@@ -372,7 +372,7 @@ export function useMessagesViewState({
     if (!shouldKeepPinnedToBottom()) {
       return;
     }
-    scrollToPinnedBottom();
+    scrollToPinnedBottom("smooth");
     schedulePinnedScroll();
   }, [schedulePinnedScroll, scrollToPinnedBottom, shouldKeepPinnedToBottom]);
 
