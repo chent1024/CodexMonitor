@@ -217,6 +217,10 @@ rustup target add x86_64-apple-ios
 npm run tauri:build
 ```
 
+桌面端发布构建会先编译并打包 `codex_monitor_daemon` 和
+`codex_monitor_daemonctl` sidecar 二进制，打包后的应用可按远程后端或
+restart-safe session 设置自动启动匹配版本的 daemon。
+
 构建产物位于 `src-tauri/target/release/bundle/`（不同平台位于各自子目录）。
 
 ### Windows（按需启用）

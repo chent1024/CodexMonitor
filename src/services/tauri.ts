@@ -1518,6 +1518,7 @@ export async function sendNotification(
     sound?: string;
     autoCancel?: boolean;
     extra?: Record<string, unknown>;
+    preferFallback?: boolean;
   },
 ): Promise<void> {
   const macosDebugBuild = await invoke<boolean>("is_macos_debug_build").catch(
@@ -1535,9 +1536,17 @@ export async function sendNotification(
 
   // In dev builds on macOS, the notification plugin can silently fail because
   // the process is not a bundled app. Prefer the native AppleScript fallback.
-  if (macosDebugBuild) {
-    await attemptFallback();
-    return;
+  if (macosDebugBuild || options?.preferFallback) {
+    if (!(await attemptFallback())) {
+      if (!options?.preferFallback) {
+        throw new Error("Notification fallback failed.");
+      }
+    } else {
+      return;
+    }
+    if (macosDebugBuild) {
+      throw new Error("Notification fallback failed.");
+    }
   }
 
   try {
@@ -1548,7 +1557,9 @@ export async function sendNotification(
       permissionGranted = permission === "granted";
       if (!permissionGranted) {
         console.warn("Notification permission not granted.", { permission });
-        await attemptFallback();
+        if (!(await attemptFallback())) {
+          throw new Error("Notification permission not granted.");
+        }
         return;
       }
     }
@@ -1579,5 +1590,7 @@ export async function sendNotification(
     console.warn("Notification plugin failed.", { error });
   }
 
-  await attemptFallback();
+  if (!(await attemptFallback())) {
+    throw new Error("Notification plugin and fallback failed.");
+  }
 }

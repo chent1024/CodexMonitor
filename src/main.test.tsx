@@ -34,6 +34,7 @@ describe("main sentry bootstrap", () => {
     createRootMock.mockClear();
     renderMock.mockClear();
     document.body.innerHTML = '<div id="root"></div>';
+    document.documentElement.removeAttribute("style");
   });
 
   it("initializes sentry and records app_open", async () => {
@@ -57,5 +58,13 @@ describe("main sentry bootstrap", () => {
         }),
       }),
     );
+  });
+
+  it("syncs app height from the real viewport on desktop", async () => {
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(713);
+
+    await import("./main");
+
+    expect(document.documentElement.style.getPropertyValue("--app-height")).toBe("713px");
   });
 });

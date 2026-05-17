@@ -28,6 +28,10 @@ export function isWindowsPlatform(): boolean {
   return platformKind() === "windows";
 }
 
+export function isLinuxPlatform(): boolean {
+  return platformKind() === "linux";
+}
+
 export function isMobilePlatform(): boolean {
   if (typeof navigator === "undefined") {
     return false;

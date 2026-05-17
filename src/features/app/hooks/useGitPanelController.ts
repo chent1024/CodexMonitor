@@ -13,6 +13,7 @@ import type { GitDiffSource, GitPanelMode } from "../../git/types";
 import { buildPerFileThreadDiffs } from "../../git/utils/perFileThreadDiffs";
 
 const GIT_DIFF_PRELOAD_FILE_LIMIT = 40;
+const GIT_STATUS_ACTIVITY_REFRESH_THROTTLE_MS = 5_000;
 
 export function useGitPanelController({
   activeWorkspace,
@@ -74,8 +75,14 @@ export function useGitPanelController({
     shouldPollGitStatus,
   );
   const gitStatusRefreshTimeoutRef = useRef<number | null>(null);
+  const lastGitStatusActivityRefreshAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const shouldPollGitStatusRef = useRef(shouldPollGitStatus);
   const activeWorkspaceIdRef = useRef<string | null>(activeWorkspace?.id ?? null);
   const activeWorkspaceRef = useRef(activeWorkspace);
+
+  useEffect(() => {
+    shouldPollGitStatusRef.current = shouldPollGitStatus;
+  }, [shouldPollGitStatus]);
 
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspace?.id ?? null;
@@ -95,9 +102,21 @@ export function useGitPanelController({
 
   const queueGitStatusRefresh = useCallback(() => {
     const workspaceId = activeWorkspaceIdRef.current;
-    if (!workspaceId) {
+    if (!workspaceId || !shouldPollGitStatusRef.current) {
+      if (gitStatusRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(gitStatusRefreshTimeoutRef.current);
+        gitStatusRefreshTimeoutRef.current = null;
+      }
       return;
     }
+    const now = Date.now();
+    if (
+      now - lastGitStatusActivityRefreshAtRef.current <
+      GIT_STATUS_ACTIVITY_REFRESH_THROTTLE_MS
+    ) {
+      return;
+    }
+    lastGitStatusActivityRefreshAtRef.current = now;
     if (gitStatusRefreshTimeoutRef.current !== null) {
       window.clearTimeout(gitStatusRefreshTimeoutRef.current);
     }
@@ -142,7 +161,8 @@ export function useGitPanelController({
     Boolean(activeWorkspace) &&
     (diffSource === "local" ? shouldLoadLocalDiffs : diffUiVisible);
   const shouldLoadGitLog =
-    Boolean(activeWorkspace) && (gitPanelMode === "log" || diffUiVisible);
+    Boolean(activeWorkspace) &&
+    (gitPanelMode === "log" || diffSource === "commit");
 
   const {
     diffs: gitDiffs,

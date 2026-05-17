@@ -1,6 +1,6 @@
 import { useMemo, type CSSProperties } from "react";
 import type { AppSettings } from "@/types";
-import { isWindowsPlatform } from "@utils/platformPaths";
+import { isLinuxPlatform, isWindowsPlatform } from "@utils/platformPaths";
 
 type UseAppShellOrchestrationOptions = {
   isCompact: boolean;
@@ -49,6 +49,8 @@ export function useAppShellOrchestration({
   appSettings,
 }: UseAppShellOrchestrationOptions) {
   const isWindows = isWindowsPlatform();
+  const isLinux = isLinuxPlatform();
+  const usesAppWindowChrome = isWindows || isLinux;
   const showGitDetail = Boolean(selectedDiffPath) && isPhone && centerMode === "diff";
   const isThreadOpen = Boolean(activeThreadId && showComposer);
 
@@ -57,7 +59,7 @@ export function useAppShellOrchestration({
   }${isTablet ? " layout-tablet" : ""}${
     !isCompact && sidebarCollapsed ? " sidebar-collapsed" : ""}${
     !isCompact && rightPanelCollapsed ? " right-panel-collapsed" : ""
-  }${isWindows ? " is-windows" : ""}`;
+  }${isWindows ? " is-windows" : ""}${isLinux ? " is-linux" : ""}`;
 
   const appStyle = useMemo<CSSProperties>(
     () => ({
@@ -80,14 +82,18 @@ export function useAppShellOrchestration({
       "--font-text-rendering": appSettings.fontSmoothingEnabled
         ? "optimizeLegibility"
         : "auto",
-      "--sidebar-top-padding": isWindows ? "10px" : "36px",
+      "--sidebar-top-padding": isLinux
+        ? "calc(var(--main-topbar-height, 44px) + 6px)"
+        : isWindows
+          ? "10px"
+          : "36px",
       "--right-panel-top-padding": isWindows
         ? "calc(var(--main-topbar-height, 44px) + 6px)"
         : "12px",
-      "--home-scroll-offset": isWindows ? "var(--main-topbar-height, 44px)" : "0px",
-      "--window-caption-width": isWindows ? "114px" : "0px",
-      "--window-caption-gap": isWindows ? "5px" : "0px",
-      ...(isWindows
+      "--home-scroll-offset": usesAppWindowChrome ? "var(--main-topbar-height, 44px)" : "0px",
+      "--window-caption-width": usesAppWindowChrome ? "114px" : "0px",
+      "--window-caption-gap": usesAppWindowChrome ? "5px" : "0px",
+      ...(usesAppWindowChrome
         ? {
             "--titlebar-height": "8px",
             "--titlebar-drag-strip-z-index": "5",
@@ -98,7 +104,9 @@ export function useAppShellOrchestration({
             "--titlebar-collapsed-left-extra": "0px",
             "--titlebar-toggle-size": "32px",
             "--titlebar-toggle-side-gap": "7px",
-            "--titlebar-sidebar-toggle-left": "0px",
+            "--titlebar-sidebar-toggle-left": isLinux
+              ? "calc(var(--window-caption-width, 114px) + var(--window-caption-gap, 5px))"
+              : "0px",
             "--titlebar-sidebar-toggle-top": "calc(var(--main-topbar-height, 42px) / 2)",
             "--titlebar-toggle-title-offset": "0px",
             "--titlebar-toggle-offset": "0px",
@@ -114,6 +122,8 @@ export function useAppShellOrchestration({
       chatDiffSplitPositionPercent,
       debugPanelHeight,
       isWindows,
+      isLinux,
+      usesAppWindowChrome,
       isCompact,
       planPanelHeight,
       rightPanelCollapsed,

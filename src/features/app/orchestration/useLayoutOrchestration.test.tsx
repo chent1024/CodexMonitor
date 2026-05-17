@@ -81,6 +81,30 @@ describe("useAppShellOrchestration", () => {
     expect(style["--sidebar-width"]).toBe("0px");
   });
 
+  it("places Linux window controls before the sidebar toggle", () => {
+    const { result } = renderShellOrchestration("Linux x86_64", false);
+    const style = result.current.appStyle as Record<string, string>;
+
+    expect(result.current.appClassName).toContain("is-linux");
+    expect(style["--window-caption-width"]).toBe("114px");
+    expect(style["--sidebar-top-padding"]).toBe(
+      "calc(var(--main-topbar-height, 44px) + 6px)",
+    );
+    expect(style["--right-panel-top-padding"]).toBe("12px");
+    expect(style["--titlebar-sidebar-toggle-left"]).toBe(
+      "calc(var(--window-caption-width, 114px) + var(--window-caption-gap, 5px))",
+    );
+  });
+
+  it("does not use app chrome positioning on macOS", () => {
+    const { result } = renderShellOrchestration("MacIntel", false);
+    const style = result.current.appStyle as Record<string, string>;
+
+    expect(result.current.appClassName).not.toContain("is-linux");
+    expect(result.current.appClassName).not.toContain("is-windows");
+    expect(style["--window-caption-width"]).toBe("0px");
+  });
+
   it("enables font smoothing css variables when requested", () => {
     const { result } = withNavigatorPlatform("Win32", () =>
       renderHook(() =>

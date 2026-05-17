@@ -39,16 +39,17 @@ function disableMobileZoomGestures() {
   document.addEventListener("touchmove", preventPinch, { passive: false });
 }
 
-function syncMobileViewportHeight() {
-  if (!isMobilePlatform() || typeof window === "undefined" || typeof document === "undefined") {
+function syncAppViewportHeight() {
+  if (typeof window === "undefined" || typeof document === "undefined") {
     return;
   }
 
   let rafHandle = 0;
+  const mobilePlatform = isMobilePlatform();
 
   const setViewportHeight = () => {
     const visualViewport = window.visualViewport;
-    const viewportHeight = visualViewport
+    const viewportHeight = mobilePlatform && visualViewport
       ? visualViewport.height + visualViewport.offsetTop
       : window.innerHeight;
     const nextHeight = Math.round(viewportHeight);
@@ -65,6 +66,17 @@ function syncMobileViewportHeight() {
     });
   };
 
+  setViewportHeight();
+  window.addEventListener("resize", scheduleViewportHeight, { passive: true });
+  window.addEventListener("orientationchange", scheduleViewportHeight, { passive: true });
+
+  if (!mobilePlatform) {
+    return;
+  }
+
+  window.visualViewport?.addEventListener("resize", scheduleViewportHeight, { passive: true });
+  window.visualViewport?.addEventListener("scroll", scheduleViewportHeight, { passive: true });
+
   const setComposerFocusState = () => {
     const activeElement = document.activeElement;
     const isComposerTextareaFocused =
@@ -75,12 +87,7 @@ function syncMobileViewportHeight() {
       : "false";
   };
 
-  setViewportHeight();
   setComposerFocusState();
-  window.addEventListener("resize", scheduleViewportHeight, { passive: true });
-  window.addEventListener("orientationchange", scheduleViewportHeight, { passive: true });
-  window.visualViewport?.addEventListener("resize", scheduleViewportHeight, { passive: true });
-  window.visualViewport?.addEventListener("scroll", scheduleViewportHeight, { passive: true });
   document.addEventListener("focusin", setComposerFocusState);
   document.addEventListener("focusout", () => {
     requestAnimationFrame(setComposerFocusState);
@@ -88,7 +95,7 @@ function syncMobileViewportHeight() {
 }
 
 disableMobileZoomGestures();
-syncMobileViewportHeight();
+syncAppViewportHeight();
 
 let appWindowRevealRequested = false;
 

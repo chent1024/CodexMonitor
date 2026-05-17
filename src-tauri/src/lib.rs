@@ -57,6 +57,13 @@ async fn stop_managed_daemons_for_exit(app_handle: tauri::AppHandle) {
     let _ = tailscale::tailscale_daemon_stop(state).await;
 }
 
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn set_main_window_icon(window: &tauri::WebviewWindow) {
+    if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")) {
+        let _ = window.set_icon(icon);
+    }
+}
+
 #[tauri::command]
 fn is_mobile_runtime() -> bool {
     cfg!(any(target_os = "ios", target_os = "android"))
@@ -93,23 +100,30 @@ pub fn run() {
     }
 
     #[cfg(desktop)]
-    let builder = tauri::Builder::default()
-        .manage(menu::MenuItemRegistry::<tauri::Wry>::default())
-        .manage(tray::TrayState::default())
-        .on_menu_event(menu::handle_menu_event)
-        .enable_macos_default_menu(false)
-        .menu(menu::build_menu);
+    let builder = {
+        let builder = tauri::Builder::default()
+            .manage(menu::MenuItemRegistry::<tauri::Wry>::default())
+            .manage(tray::TrayState::default())
+            .on_menu_event(menu::handle_menu_event);
+
+        #[cfg(target_os = "macos")]
+        let builder = builder
+            .enable_macos_default_menu(false)
+            .menu(menu::build_menu);
+
+        builder
+    };
 
     #[cfg(not(desktop))]
     let builder = tauri::Builder::default();
 
     let builder = builder
-        .on_window_event(|window, event| {
+        .on_window_event(|window, _event| {
             if window.label() != "main" {
                 return;
             }
             #[cfg(target_os = "macos")]
-            if let WindowEvent::CloseRequested { api, .. } = event {
+            if let WindowEvent::CloseRequested { api, .. } = _event {
                 api.prevent_close();
                 let _ = window.hide();
             }
@@ -122,10 +136,17 @@ pub fn run() {
                 let tray_state = app.state::<tray::TrayState>();
                 tray::initialize(&app.handle(), tray_state.inner())?;
             }
-            #[cfg(target_os = "windows")]
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            {
+                // Hide the native menu bar by default; app chrome and shortcuts stay in-app.
+                let _ = app.hide_menu();
+            }
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             {
                 if let Some(main_window) = app.get_webview_window("main") {
+                    set_main_window_icon(&main_window);
                     let _ = main_window.set_decorations(false);
+                    #[cfg(target_os = "windows")]
                     let _ = main_window.set_shadow(false);
                     // Keep menu accelerators wired while suppressing a visible native menu bar.
                     let _ = main_window.hide_menu();

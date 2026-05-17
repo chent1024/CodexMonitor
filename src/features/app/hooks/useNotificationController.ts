@@ -60,12 +60,10 @@ export function useNotificationController({
   }, [errorSoundUrl, onDebug, successSoundUrl]);
 
   const handleTestSystemNotification = useCallback(() => {
-    if (!systemNotificationsEnabled) {
-      return;
-    }
     void sendNotification(
       "Test Notification",
       "This is a test notification from CodexMonitor.",
+      { preferFallback: true },
     ).catch((error) => {
       onDebug({
         id: `${Date.now()}-client-notification-test-error`,
@@ -75,7 +73,7 @@ export function useNotificationController({
         payload: error instanceof Error ? error.message : String(error),
       });
     });
-  }, [onDebug, systemNotificationsEnabled]);
+  }, [onDebug]);
 
   return {
     handleTestNotificationSound,

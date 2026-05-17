@@ -1,4 +1,10 @@
 {
+  "bundle": {
+    "externalBin": [
+      "target/sidecars/codex_monitor_daemon",
+      "target/sidecars/codex_monitor_daemonctl"
+    ]
+  },
   "app": {
     "windows": [
       {
@@ -8,8 +14,9 @@
         "minWidth": 360,
         "minHeight": 600,
         "visible": false,
-        "titleBarStyle": "Visible",
-        "hiddenTitle": false,
+        "decorations": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "transparent": false,
         "devtools": true,
         "windowEffects": null

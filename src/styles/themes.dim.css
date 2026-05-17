@@ -1,5 +1,6 @@
 :root[data-theme="dim"] {
   color-scheme: dark;
+  --app-background: #20232a;
   --surface-sidebar: rgba(41, 44, 51, 0.78);
   --surface-sidebar-opaque: rgb(41, 44, 51);
   --surface-topbar: rgba(35, 38, 45, 0.72);

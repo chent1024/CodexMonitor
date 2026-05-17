@@ -1941,7 +1941,7 @@ impl DaemonState {
     }
 
     async fn send_notification_fallback(&self, title: String, body: String) -> Result<(), String> {
-        send_notification_fallback_inner(title, body)
+        shared::notifications_core::send_notification_fallback_core(title, body)
     }
 }
 
@@ -1967,35 +1967,6 @@ fn emit_background_thread_hide(event_sink: &DaemonEventSink, workspace_id: &str,
             }
         }),
     });
-}
-
-fn send_notification_fallback_inner(title: String, body: String) -> Result<(), String> {
-    #[cfg(all(target_os = "macos", debug_assertions))]
-    {
-        let escape = |value: &str| value.replace('\\', "\\\\").replace('"', "\\\"");
-        let script = format!(
-            "display notification \"{}\" with title \"{}\"",
-            escape(&body),
-            escape(&title)
-        );
-
-        let status = std::process::Command::new("/usr/bin/osascript")
-            .arg("-e")
-            .arg(script)
-            .status()
-            .map_err(|error| format!("Failed to run osascript: {error}"))?;
-
-        if status.success() {
-            return Ok(());
-        }
-        return Err(format!("osascript exited with status: {status}"));
-    }
-
-    #[cfg(not(all(target_os = "macos", debug_assertions)))]
-    {
-        let _ = (title, body);
-        Err("Notification fallback is only available on macOS debug builds.".to_string())
-    }
 }
 
 fn list_workspace_files_inner(root: &PathBuf, max_files: usize) -> Vec<String> {

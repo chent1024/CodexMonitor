@@ -17,8 +17,6 @@
   --main-font-size-xs: calc(var(--main-ui-font-size) * 0.77);
   --main-font-size-sm: calc(var(--main-ui-font-size) * 0.85);
   --main-font-size-lg: calc(var(--main-ui-font-size) * 1.08);
-  --surface-messages: #ffffff;
-  --surface-right-panel: var(--surface-messages);
   transition: grid-template-columns 220ms ease;
 }
 

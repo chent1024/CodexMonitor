@@ -61,7 +61,16 @@ function getLastEnabledArg() {
   return calls[calls.length - 1]?.[2];
 }
 
+function getLastGitLogEnabledArg() {
+  const { calls } = useGitLogMock.mock;
+  if (calls.length === 0) {
+    return undefined;
+  }
+  return calls[calls.length - 1]?.[1];
+}
+
 beforeEach(() => {
+  vi.useRealTimers();
   useGitStatusMock.mockReturnValue({
     status: {
       branchName: "main",
@@ -97,6 +106,7 @@ beforeEach(() => {
     error: null,
   });
   useGitDiffsMock.mockClear();
+  useGitLogMock.mockClear();
 });
 
 describe("useGitPanelController preload behavior", () => {
@@ -213,6 +223,91 @@ describe("useGitPanelController preload behavior", () => {
 
     const enabled = getLastEnabledArg();
     expect(enabled).toBe(true);
+  });
+
+  it("does not load git log just because the diff panel is visible", () => {
+    renderHook(() => useGitPanelController(makeProps()));
+
+    expect(getLastGitLogEnabledArg()).toBe(false);
+  });
+
+  it("loads git log when the log panel is selected", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.handleGitPanelModeChange("log");
+    });
+
+    expect(getLastGitLogEnabledArg()).toBe(true);
+  });
+
+  it("throttles git status refreshes triggered by message activity", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(10_000);
+    const refreshGitStatus = vi.fn();
+    useGitStatusMock.mockReturnValue({
+      status: {
+        branchName: "main",
+        files: [],
+        stagedFiles: [],
+        unstagedFiles: [],
+        totalAdditions: 0,
+        totalDeletions: 0,
+      },
+      refresh: refreshGitStatus,
+    });
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.queueGitStatusRefresh();
+      result.current.queueGitStatusRefresh();
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(refreshGitStatus).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.setSystemTime(12_000);
+      result.current.queueGitStatusRefresh();
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(refreshGitStatus).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.setSystemTime(15_001);
+      result.current.queueGitStatusRefresh();
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(refreshGitStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not queue git status refreshes while git polling is paused", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(10_000);
+    const refreshGitStatus = vi.fn();
+    useGitStatusMock.mockReturnValue({
+      status: {
+        branchName: "main",
+        files: [],
+        stagedFiles: [],
+        unstagedFiles: [],
+        totalAdditions: 0,
+        totalDeletions: 0,
+      },
+      refresh: refreshGitStatus,
+    });
+    const { result } = renderHook(() =>
+      useGitPanelController(makeProps({ rightPanelCollapsed: true })),
+    );
+
+    act(() => {
+      result.current.queueGitStatusRefresh();
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(refreshGitStatus).not.toHaveBeenCalled();
   });
 
   it("derives per-file diffs from active thread fileChange items", () => {

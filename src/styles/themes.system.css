@@ -11,6 +11,7 @@
     --text-faint: rgba(17, 20, 28, 0.5);
     --text-fainter: rgba(17, 20, 28, 0.45);
     --text-dim: rgba(17, 20, 28, 0.35);
+    --app-background: #eef1f6;
     --surface-sidebar: rgba(246, 247, 250, 0.82);
     --surface-sidebar-opaque: rgb(246, 247, 250);
     --surface-topbar: rgba(250, 251, 253, 0.9);

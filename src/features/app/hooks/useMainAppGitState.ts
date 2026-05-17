@@ -236,7 +236,6 @@ export function useMainAppGitState({
     resetGitHubPanelState();
   }, [activeWorkspaceId, resetGitHubPanelState]);
 
-  const { remote: gitRemoteUrl, refresh: refreshGitRemote } = useGitRemote(activeWorkspace);
   const {
     repos: gitRootCandidates,
     isLoading: gitRootScanLoading,
@@ -315,6 +314,10 @@ export function useMainAppGitState({
     shouldLoadDiffs,
     diffSource,
   });
+  const { remote: gitRemoteUrl, refresh: refreshGitRemote } = useGitRemote(
+    activeWorkspace,
+    shouldLoadGitHubPanelData,
+  );
 
   const {
     branches,

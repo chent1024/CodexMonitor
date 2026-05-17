@@ -1,4 +1,10 @@
 {
+  "bundle": {
+    "externalBin": [
+      "target/sidecars/codex_monitor_daemon",
+      "target/sidecars/codex_monitor_daemonctl"
+    ]
+  },
   "app": {
     "windows": [
       {

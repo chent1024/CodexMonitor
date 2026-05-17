@@ -7,7 +7,7 @@
 html,
 body {
   margin: 0;
-  background: transparent;
+  background: var(--app-background);
   overflow: hidden;
   width: 100%;
   height: 100%;
@@ -17,6 +17,7 @@ body {
   height: var(--app-height, 100dvh);
   min-height: var(--app-height, 100dvh);
   overflow: hidden;
+  background: var(--app-background);
 }
 
 .app {
@@ -25,7 +26,8 @@ body {
   width: 100vw;
   display: grid;
   grid-template-columns: var(--sidebar-width, 280px) 1fr;
-  background: transparent;
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--app-background);
   border-radius: 0;
   overflow: hidden;
   position: relative;
@@ -137,6 +139,11 @@ body {
   align-items: stretch;
   height: var(--main-topbar-height, 44px);
   -webkit-app-region: no-drag;
+}
+
+.app.is-linux .window-caption-controls {
+  right: auto;
+  left: 0;
 }
 
 .window-caption-control {

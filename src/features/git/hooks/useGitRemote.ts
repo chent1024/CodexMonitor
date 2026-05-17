@@ -12,13 +12,16 @@ const emptyState: GitRemoteState = {
   error: null,
 };
 
-export function useGitRemote(activeWorkspace: WorkspaceInfo | null) {
+export function useGitRemote(activeWorkspace: WorkspaceInfo | null, enabled = true) {
   const [state, setState] = useState<GitRemoteState>(emptyState);
   const requestIdRef = useRef(0);
   const workspaceIdRef = useRef<string | null>(activeWorkspace?.id ?? null);
   const workspaceId = activeWorkspace?.id ?? null;
 
   const refresh = useCallback(() => {
+    if (!enabled) {
+      return;
+    }
     if (!workspaceId) {
       setState(emptyState);
       return;
@@ -49,7 +52,7 @@ export function useGitRemote(activeWorkspace: WorkspaceInfo | null) {
           error: error instanceof Error ? error.message : String(error),
         });
       });
-  }, [workspaceId]);
+  }, [enabled, workspaceId]);
 
   useEffect(() => {
     if (workspaceIdRef.current !== workspaceId) {
@@ -58,13 +61,13 @@ export function useGitRemote(activeWorkspace: WorkspaceInfo | null) {
       setState(emptyState);
     }
 
-    if (!workspaceId) {
+    if (!workspaceId || !enabled) {
       setState(emptyState);
       return;
     }
 
     refresh()?.catch(() => {});
-  }, [refresh, workspaceId]);
+  }, [enabled, refresh, workspaceId]);
 
   return { ...state, refresh };
 }

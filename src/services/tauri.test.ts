@@ -1263,6 +1263,45 @@ describe("tauri invoke wrappers", () => {
     warnSpy.mockRestore();
   });
 
+  it("prefers the fallback when requested", async () => {
+    const isPermissionGrantedMock = vi.mocked(notification.isPermissionGranted);
+    const invokeMock = vi.mocked(invoke);
+
+    await sendNotification("Fallback", "First", { preferFallback: true });
+
+    expect(invokeMock).toHaveBeenCalledWith("send_notification_fallback", {
+      title: "Fallback",
+      body: "First",
+    });
+    expect(isPermissionGrantedMock).not.toHaveBeenCalled();
+  });
+
+  it("throws when the notification plugin and fallback both fail", async () => {
+    const isPermissionGrantedMock = vi.mocked(notification.isPermissionGranted);
+    const invokeMock = vi.mocked(invoke);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    isPermissionGrantedMock.mockRejectedValueOnce(new Error("boom"));
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "is_macos_debug_build") {
+        return false;
+      }
+      if (command === "send_notification_fallback") {
+        throw new Error("fallback failed");
+      }
+      return undefined;
+    });
+
+    await expect(sendNotification("Plugin", "Failed")).rejects.toThrow(
+      "Notification plugin and fallback failed.",
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("send_notification_fallback", {
+      title: "Plugin",
+      body: "Failed",
+    });
+    warnSpy.mockRestore();
+  });
+
   it("prefers the fallback on macOS debug builds", async () => {
     const isPermissionGrantedMock = vi.mocked(notification.isPermissionGranted);
     const invokeMock = vi.mocked(invoke);
