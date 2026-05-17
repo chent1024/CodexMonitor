@@ -91,6 +91,7 @@ export function SidebarThreadsOnlySection({
             onToggleThreadPin={onToggleThreadPin}
             onShowThreadMenu={onShowThreadMenu}
             getWorkspaceLabel={getWorkspaceLabel}
+            showWorkspaceLabels
           />
         </div>
       ))}

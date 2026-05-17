@@ -29,6 +29,7 @@
   --surface-topbar: rgba(24, 24, 24, 0.72);
   --surface-right-panel: rgba(37, 37, 38, 0.92);
   --surface-composer: rgba(37, 37, 38, 0.72);
+  --surface-composer-input: rgb(30, 30, 30);
   --surface-messages: rgba(30, 30, 30, 0.72);
   --surface-card: rgba(37, 37, 38, 0.72);
   --surface-card-strong: rgba(45, 45, 48, 0.84);

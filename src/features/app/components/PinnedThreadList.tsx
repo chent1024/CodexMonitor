@@ -18,6 +18,7 @@ type PinnedThreadListProps = {
   threadStatusById: ThreadStatusById;
   pendingUserInputKeys?: Set<string>;
   getWorkspaceLabel?: (workspaceId: string) => string | null;
+  showWorkspaceLabels?: boolean;
   getThreadTime: (thread: ThreadSummary) => string | null;
   getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
@@ -38,6 +39,7 @@ function PinnedThreadList({
   threadStatusById,
   pendingUserInputKeys,
   getWorkspaceLabel,
+  showWorkspaceLabels = false,
   getThreadTime,
   getThreadArgsBadge,
   isThreadPinned,
@@ -83,7 +85,9 @@ function PinnedThreadList({
             isActive={workspaceId === activeWorkspaceId && thread.id === activeThreadId}
             threadStatus={threadStatusById[thread.id]}
             hasPendingUserInput={pendingUserInputKeys?.has(threadKey)}
-            workspaceLabel={getWorkspaceLabel?.(workspaceId) ?? null}
+            workspaceLabel={
+              showWorkspaceLabels ? (getWorkspaceLabel?.(workspaceId) ?? null) : null
+            }
             getThreadTime={getThreadTime}
             getThreadArgsBadge={getThreadArgsBadge}
             isThreadPinned={isThreadPinned}
@@ -164,6 +168,7 @@ const PinnedThreadListMemo = memo(
     prev.activeWorkspaceId === next.activeWorkspaceId &&
     prev.activeThreadId === next.activeThreadId &&
     prev.getWorkspaceLabel === next.getWorkspaceLabel &&
+    prev.showWorkspaceLabels === next.showWorkspaceLabels &&
     prev.getThreadTime === next.getThreadTime &&
     prev.getThreadArgsBadge === next.getThreadArgsBadge &&
     prev.isThreadPinned === next.isThreadPinned &&

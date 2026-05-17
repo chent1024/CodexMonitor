@@ -66,6 +66,7 @@ describe("PinnedThreadList", () => {
       "reviewing",
     );
     expect(screen.queryByText("Pinned")).toBeNull();
+    expect(row.classList.contains("has-secondary-line")).toBe(false);
 
     fireEvent.click(row);
     expect(onSelectThread).not.toHaveBeenCalled();

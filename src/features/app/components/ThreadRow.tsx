@@ -103,12 +103,9 @@ export const ThreadRow = memo(function ThreadRow({
     threadStatus,
     hasPendingUserInput,
   );
-  const statusLabel =
-    statusClass === "reviewing"
-      ? "Reviewing"
-      : hasPendingUserInput
-        ? "Waiting"
-        : null;
+  const isRuntimeStatus =
+    statusClass === "processing" || statusClass === "reviewing";
+  const statusLabel = hasPendingUserInput ? "Waiting" : null;
   const subagentLabel =
     thread.isSubagent && (thread.subagentNickname || thread.subagentRole)
       ? thread.subagentNickname ?? thread.subagentRole ?? null
@@ -135,7 +132,11 @@ export const ThreadRow = memo(function ThreadRow({
   const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
   const canToggleSubagents = hasSubagentChildren && Boolean(onToggleSubagents);
   const hasDetails = Boolean(
-    effectiveWorkspaceLabel || subagentLabel || contextLabel || statusLabel || isPinned,
+    effectiveWorkspaceLabel ||
+      subagentLabel ||
+      contextLabel ||
+      statusLabel ||
+      (showPinnedLabel && isPinned),
   );
 
   const handleSelect = useCallback(() => {
@@ -188,7 +189,7 @@ export const ThreadRow = memo(function ThreadRow({
             <Pin aria-hidden />
           </button>
         )}
-        <span className={`thread-status ${statusClass}`} aria-hidden />
+        {!isRuntimeStatus && <span className={`thread-status ${statusClass}`} aria-hidden />}
       </div>
       <div className="thread-content">
         <div className="thread-headline">
@@ -240,13 +241,29 @@ export const ThreadRow = memo(function ThreadRow({
             aria-label={subagentsExpanded ? "Hide sub-agents" : "Show sub-agents"}
             aria-expanded={subagentsExpanded}
           >
-            <span className="thread-subagent-time-label">{relativeTime ?? "Now"}</span>
+            {isRuntimeStatus ? (
+              <span
+                className={`thread-status ${statusClass}`}
+                aria-label={statusClass === "reviewing" ? "Reviewing" : "Running"}
+                role="status"
+              />
+            ) : (
+              <span className="thread-subagent-time-label">{relativeTime ?? "Now"}</span>
+            )}
             <span className="thread-subagent-toggle-icon" aria-hidden>
               ›
             </span>
           </button>
         ) : (
-          relativeTime && <span className="thread-time">{relativeTime}</span>
+          isRuntimeStatus ? (
+            <span
+              className={`thread-status ${statusClass}`}
+              aria-label={statusClass === "reviewing" ? "Reviewing" : "Running"}
+              role="status"
+            />
+          ) : (
+            relativeTime && <span className="thread-time">{relativeTime}</span>
+          )
         )}
       </div>
     </div>

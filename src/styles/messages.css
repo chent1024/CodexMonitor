@@ -127,7 +127,8 @@
   width: 100%;
   max-width: none;
   margin: auto 0 0;
-  padding: 0 0 calc(8px + env(safe-area-inset-bottom, 0px));
+  padding: 0 0 env(safe-area-inset-bottom, 0px);
+  background: var(--surface-composer-input, var(--surface-messages));
 }
 
 .messages-footer .composer {

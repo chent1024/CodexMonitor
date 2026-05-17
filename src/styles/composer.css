@@ -5,7 +5,7 @@
   -webkit-app-region: no-drag;
   padding: 8px var(--chat-content-side-padding, 36px) 14px;
   border-top: none;
-  background: var(--surface-messages);
+  background: var(--surface-composer-input, var(--surface-messages));
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   grid-column: 1;
@@ -198,7 +198,7 @@
   position: relative;
   min-width: 0;
   border: 1px solid var(--cm-border-heavy);
-  background: var(--surface-messages);
+  background: var(--surface-composer-input, var(--surface-messages));
   border-radius: 8px;
   padding: 10px 14px 10px 13px;
   box-shadow:
@@ -392,7 +392,7 @@
   resize: none;
   border-radius: 0;
   border: none;
-  background: transparent;
+  background: var(--surface-composer-input, var(--surface-messages));
   color: inherit;
   padding: 6px 4px 4px;
   font-size: 14px;

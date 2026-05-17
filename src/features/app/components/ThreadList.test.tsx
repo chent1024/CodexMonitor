@@ -208,6 +208,42 @@ describe("ThreadList", () => {
     expect(row?.querySelector(".thread-status")?.className).not.toContain("processing");
   });
 
+  it("shows running state in the time slot and hides the relative time", () => {
+    const { container } = render(
+      <ThreadList
+        {...baseProps}
+        activeThreadId="thread-other"
+        threadStatusById={{
+          "thread-1": { isProcessing: true, hasUnread: false, isReviewing: false },
+        }}
+      />,
+    );
+
+    const row = container.querySelector(".thread-row");
+    expect(row).toBeTruthy();
+    const meta = row?.querySelector(".thread-meta");
+    expect(meta?.querySelector(".thread-status")?.className).toContain("processing");
+    expect(row?.querySelector(".thread-leading .thread-status.processing")).toBeNull();
+    expect(meta?.querySelector(".thread-time")).toBeNull();
+    expect(screen.queryByText("2m")).toBeNull();
+  });
+
+  it("shows the relative time when there is no running state", () => {
+    const { container } = render(
+      <ThreadList
+        {...baseProps}
+        activeThreadId="thread-other"
+        threadStatusById={{
+          "thread-1": { isProcessing: false, hasUnread: false, isReviewing: false },
+        }}
+      />,
+    );
+
+    const meta = container.querySelector(".thread-meta");
+    expect(meta?.querySelector(".thread-time")?.textContent).toBe("2m");
+    expect(meta?.querySelector(".thread-status")).toBeNull();
+  });
+
   it("toggles sub-agent descendants for parent rows", () => {
     const { getByText, queryByText, getByRole } = render(
       <ThreadList
