@@ -51,6 +51,8 @@ type TerminalAppearance = {
   };
   fontFamily: string;
   fontSize: number;
+  lineHeight: number;
+  letterSpacing: number;
 };
 
 export type TerminalSessionState = {
@@ -105,7 +107,9 @@ function getTerminalAppearance(container: HTMLElement | null): TerminalAppearanc
         cursor: "#d9dee7",
       },
       fontFamily: "Menlo, Monaco, \"Courier New\", monospace",
-      fontSize: 12,
+      fontSize: 13,
+      lineHeight: 1.36,
+      letterSpacing: 0,
     };
   }
 
@@ -127,10 +131,29 @@ function getTerminalAppearance(container: HTMLElement | null): TerminalAppearanc
     styles.getPropertyValue("--terminal-font-family").trim() ||
     styles.getPropertyValue("--code-font-family").trim() ||
     "Menlo, Monaco, \"Courier New\", monospace";
-  const parsedFontSize = Number.parseFloat(
-    styles.getPropertyValue("--code-font-size").trim() || "12",
+  const terminalFontSize = Number.parseFloat(
+    styles.getPropertyValue("--terminal-font-size").trim(),
   );
-  const fontSize = Number.isFinite(parsedFontSize) ? parsedFontSize : 12;
+  const codeFontSize = Number.parseFloat(
+    styles.getPropertyValue("--code-font-size").trim(),
+  );
+  const fontSize = Number.isFinite(terminalFontSize)
+    ? terminalFontSize
+    : Number.isFinite(codeFontSize)
+      ? codeFontSize
+      : 13;
+  const parsedLineHeight = Number.parseFloat(
+    styles.getPropertyValue("--terminal-line-height").trim(),
+  );
+  const lineHeight = Number.isFinite(parsedLineHeight)
+    ? Math.max(1, parsedLineHeight)
+    : 1.36;
+  const parsedLetterSpacing = Number.parseFloat(
+    styles.getPropertyValue("--terminal-letter-spacing").trim(),
+  );
+  const letterSpacing = Number.isFinite(parsedLetterSpacing)
+    ? parsedLetterSpacing
+    : 0;
 
   return {
     theme: {
@@ -141,6 +164,8 @@ function getTerminalAppearance(container: HTMLElement | null): TerminalAppearanc
     },
     fontFamily,
     fontSize,
+    lineHeight,
+    letterSpacing,
   };
 }
 
@@ -389,6 +414,8 @@ export function useTerminalSession({
         cursorBlink: true,
         fontSize: appearance.fontSize,
         fontFamily: appearance.fontFamily,
+        lineHeight: appearance.lineHeight,
+        letterSpacing: appearance.letterSpacing,
         allowTransparency: true,
         theme: appearance.theme,
         scrollback: 5000,
@@ -428,6 +455,8 @@ export function useTerminalSession({
     const appearance = getTerminalAppearance(containerRef.current);
     terminalRef.current.options.fontFamily = appearance.fontFamily;
     terminalRef.current.options.fontSize = appearance.fontSize;
+    terminalRef.current.options.lineHeight = appearance.lineHeight;
+    terminalRef.current.options.letterSpacing = appearance.letterSpacing;
     terminalRef.current.options.theme = appearance.theme;
     fitAddonRef.current?.fit();
     refreshTerminal();

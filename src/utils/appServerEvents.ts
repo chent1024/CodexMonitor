@@ -33,6 +33,7 @@ export const SUPPORTED_APP_SERVER_METHODS = [
   "thread/archived",
   "thread/closed",
   "thread/name/updated",
+  "thread/realtime/closed",
   "thread/realtime/error",
   "thread/status/changed",
   "thread/started",

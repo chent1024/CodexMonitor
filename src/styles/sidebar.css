@@ -1069,8 +1069,8 @@ button.workspace-add:active:not(:disabled) {
 
 .pinned-section .sidebar-section-title {
   color: var(--text-muted);
-  font-size: var(--sidebar-font-size-xs);
-  font-weight: 400;
+  font-size: var(--sidebar-font-size-sm);
+  font-weight: 500;
   letter-spacing: 0;
 }
 

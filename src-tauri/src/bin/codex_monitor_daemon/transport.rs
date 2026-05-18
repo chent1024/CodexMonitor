@@ -4,7 +4,7 @@ use super::rpc::{
 };
 use super::*;
 
-const DAEMON_CLIENT_OUTBOUND_QUEUE_CAPACITY: usize = 4096;
+const DAEMON_CLIENT_OUTBOUND_QUEUE_CAPACITY: usize = 512;
 const DAEMON_RPC_QUEUE_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub(super) async fn handle_client(

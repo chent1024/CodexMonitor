@@ -74,6 +74,7 @@ type AppServerEventHandlers = {
     message: string,
     options?: { willRetry?: boolean },
   ) => void;
+  onThreadRealtimeClosed?: (workspaceId: string, threadId: string) => void;
   onTurnPlanUpdated?: (
     workspaceId: string,
     threadId: string,
@@ -144,6 +145,7 @@ export const METHODS_ROUTED_IN_USE_APP_SERVER_EVENTS = [
   "thread/archived",
   "thread/closed",
   "thread/name/updated",
+  "thread/realtime/closed",
   "thread/realtime/error",
   "thread/status/changed",
   "thread/started",
@@ -519,6 +521,14 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
           currentHandlers.onThreadStreamError?.(workspace_id, threadId, message, {
             willRetry,
           });
+        }
+        return;
+      }
+
+      if (method === "thread/realtime/closed") {
+        const threadId = String(params.threadId ?? params.thread_id ?? "");
+        if (threadId) {
+          currentHandlers.onThreadRealtimeClosed?.(workspace_id, threadId);
         }
         return;
       }

@@ -17,7 +17,6 @@ import { SidebarThreadsOnlySection } from "./SidebarThreadsOnlySection";
 import { SidebarWorkspaceGroups } from "./SidebarWorkspaceGroups";
 import { PinnedThreadList } from "./PinnedThreadList";
 import {
-  countRootRows,
   splitRowsByRoot,
   threadMatchesQuery,
   workspaceMatchesQuery,
@@ -841,8 +840,6 @@ export const Sidebar = memo(function Sidebar({
     },
     [],
   );
-  const pinnedRootCount = useMemo(() => countRootRows(pinnedThreadRows), [pinnedThreadRows]);
-
   useEffect(() => {
     if (!addMenuAnchor) {
       return;
@@ -933,7 +930,6 @@ export const Sidebar = memo(function Sidebar({
             <div className="pinned-section">
               <div className="sidebar-section-header">
                 <div className="sidebar-section-title">置顶</div>
-                <div className="sidebar-section-count">{pinnedRootCount}</div>
               </div>
               <PinnedThreadList
                 rows={pinnedThreadRows}

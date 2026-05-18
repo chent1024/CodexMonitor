@@ -172,6 +172,8 @@ export function useThreadEventHandlers({
     onTurnCompleted,
     onThreadStatusChanged,
     onThreadClosed,
+    onThreadRealtimeClosed,
+    onThreadStreamError,
     onTurnPlanUpdated,
     onTurnDiffUpdated,
     onThreadTokenUsageUpdated,
@@ -202,31 +204,6 @@ export function useThreadEventHandlers({
       dispatch({ type: "hideThread", workspaceId, threadId });
     },
     [dispatch],
-  );
-
-  const onThreadStreamError = useCallback(
-    (
-      _workspaceId: string,
-      threadId: string,
-      message: string,
-      options?: { willRetry?: boolean },
-    ) => {
-      if (!threadId || !message.trim()) {
-        return;
-      }
-      pushThreadErrorMessage(
-        threadId,
-        options?.willRetry ? `Stream error, retrying: ${message}` : `Stream error: ${message}`,
-        {
-          itemType: "stream-error",
-          title: options?.willRetry ? "Stream error, retrying" : "Stream error",
-          detail: "app-server",
-          status: options?.willRetry ? "retrying" : "failed",
-        },
-      );
-      safeMessageActivity();
-    },
-    [pushThreadErrorMessage, safeMessageActivity],
   );
 
   const onServerRequestResolved = useCallback(
@@ -282,6 +259,7 @@ export function useThreadEventHandlers({
       onTurnCompleted,
       onThreadStatusChanged,
       onThreadClosed,
+      onThreadRealtimeClosed,
       onTurnPlanUpdated,
       onTurnDiffUpdated,
       onThreadTokenUsageUpdated,
@@ -317,6 +295,7 @@ export function useThreadEventHandlers({
       onTurnCompleted,
       onThreadStatusChanged,
       onThreadClosed,
+      onThreadRealtimeClosed,
       onTurnPlanUpdated,
       onTurnDiffUpdated,
       onThreadTokenUsageUpdated,

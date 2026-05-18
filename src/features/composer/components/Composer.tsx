@@ -147,6 +147,8 @@ const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
   continueListOnShiftEnter: false,
 };
 
+const COMPOSER_DRAFT_SYNC_DELAY_MS = 100;
+
 export const Composer = memo(function Composer({
   onSend,
   onStop,
@@ -225,6 +227,11 @@ export const Composer = memo(function Composer({
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [appMentionBindings, setAppMentionBindings] = useState<AppMentionBinding[]>([]);
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
+  const draftSyncTimerRef = useRef<number | null>(null);
+  const pendingDraftChangeRef = useRef<{
+    text: string;
+    onDraftChange: (text: string) => void;
+  } | null>(null);
   const textareaRef = externalTextareaRef ?? internalRef;
   const editorSettings = editorSettingsProp ?? DEFAULT_EDITOR_SETTINGS;
   const canSend = text.trim().length > 0 || attachedImages.length > 0;
@@ -257,16 +264,54 @@ export const Composer = memo(function Composer({
     continueListOnShiftEnter,
   } = editorSettings;
 
-  const setComposerText = useCallback(
-    (next: string) => {
-      setText(next);
-      onDraftChange?.(next);
+  const flushPendingDraftChange = useCallback(() => {
+    if (draftSyncTimerRef.current !== null) {
+      window.clearTimeout(draftSyncTimerRef.current);
+      draftSyncTimerRef.current = null;
+    }
+    const pending = pendingDraftChangeRef.current;
+    pendingDraftChangeRef.current = null;
+    pending?.onDraftChange(pending.text);
+  }, []);
+  const scheduleDraftChange = useCallback(
+    (next: string, options?: { immediate?: boolean }) => {
+      if (!onDraftChange) {
+        return;
+      }
+      pendingDraftChangeRef.current = {
+        text: next,
+        onDraftChange,
+      };
+      if (options?.immediate) {
+        flushPendingDraftChange();
+        return;
+      }
+      if (draftSyncTimerRef.current !== null) {
+        window.clearTimeout(draftSyncTimerRef.current);
+      }
+      draftSyncTimerRef.current = window.setTimeout(
+        flushPendingDraftChange,
+        COMPOSER_DRAFT_SYNC_DELAY_MS,
+      );
     },
-    [onDraftChange],
+    [flushPendingDraftChange, onDraftChange],
+  );
+  const setComposerText = useCallback(
+    (next: string, options?: { immediateDraftSync?: boolean }) => {
+      setText(next);
+      scheduleDraftChange(next, { immediate: options?.immediateDraftSync });
+    },
+    [scheduleDraftChange],
   );
   const syncDraftText = useCallback((next: string) => {
     setText((prev) => (prev === next ? prev : next));
   }, []);
+  const getComposerText = useCallback(
+    () => textareaRef.current?.value ?? text,
+    [text, textareaRef],
+  );
+
+  useEffect(() => flushPendingDraftChange, [flushPendingDraftChange]);
 
   const bindingsFromMentions = useCallback(
     (mentions?: AppMention[]) =>
@@ -369,7 +414,8 @@ export const Composer = memo(function Composer({
     if (disabled) {
       return;
     }
-    const trimmed = text.trim();
+    const currentText = getComposerText();
+    const trimmed = currentText.trim();
     if (!trimmed && attachedImages.length === 0) {
       return;
     }
@@ -383,17 +429,17 @@ export const Composer = memo(function Composer({
       onSend(trimmed, attachedImages, undefined, submitIntent);
     }
     resetHistoryNavigation();
-    setComposerText("");
+    setComposerText("", { immediateDraftSync: true });
     setAppMentionBindings([]);
   }, [
     appMentionBindings,
     attachedImages,
     disabled,
+    getComposerText,
     onSend,
     recordHistory,
     resetHistoryNavigation,
     setComposerText,
-    text,
   ]);
 
   useComposerDraftEffects({
@@ -525,6 +571,7 @@ export const Composer = memo(function Composer({
   const handleKeyDown = useComposerKeyDown({
     applyTextInsertion,
     canSend,
+    canStop,
     continueListOnShiftEnter,
     defaultSubmitIntent,
     expandFenceOnEnter,
@@ -533,6 +580,7 @@ export const Composer = memo(function Composer({
     handleInputKeyDown,
     handleSend,
     isMac,
+    onStop,
     onReviewPromptKeyDown,
     oppositeSubmitIntent,
     reviewPromptOpen,

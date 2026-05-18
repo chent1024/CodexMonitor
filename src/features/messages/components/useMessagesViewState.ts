@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { WheelEvent as ReactWheelEvent } from "react";
 import type { ConversationItem } from "../../../types";
 import { COMPOSER_OVERLAY_HEIGHT_CHANGE_EVENT } from "../../layout/utils/composerOverlayEvents";
 import { isPlanReadyTaggedMessage } from "../../../utils/internalPlanReadyMessages";
@@ -18,6 +19,7 @@ import {
   scrollKeyForItems,
 } from "../utils/messageRenderUtils";
 import {
+  getMaxScrollDistanceFromBottom,
   getScrollDistanceFromBottom,
   isNearScrollBottom,
   setScrollDistanceFromBottom,
@@ -212,6 +214,9 @@ export function useMessagesViewState({
     distanceFromBottom: initialScrollDistanceFromBottom,
     wasPinned: initialScrollDistanceFromBottom <= SCROLL_THRESHOLD_PX,
   });
+  const [showScrollToBottom, setShowScrollToBottom] = useState(
+    initialScrollDistanceFromBottom > SCROLL_THRESHOLD_PX,
+  );
 
   useEffect(() => {
     manuallyToggledExpandedRef.current.clear();
@@ -258,8 +263,36 @@ export function useMessagesViewState({
     pendingRestoreRef.current = null;
     const wasPinned = isNearBottom(container);
     autoScrollRef.current = wasPinned;
+    setShowScrollToBottom(!wasPinned);
     storeScrollSnapshot(getScrollDistanceSnapshot(container, wasPinned));
   }, [isNearBottom, storeScrollSnapshot]);
+
+  const pauseAutoScrollForUser = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || isRestoringScrollRef.current) {
+      return;
+    }
+    if (getMaxScrollDistanceFromBottom(container) <= SCROLL_THRESHOLD_PX) {
+      return;
+    }
+    pendingRestoreRef.current = null;
+    autoScrollRef.current = false;
+    setShowScrollToBottom(true);
+    storeScrollSnapshot({
+      distanceFromBottom: getScrollDistanceFromBottom(container),
+      wasPinned: false,
+    });
+  }, [storeScrollSnapshot]);
+
+  const handleWheelCapture = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>) => {
+      if (event.defaultPrevented || event.deltaY >= -1) {
+        return;
+      }
+      pauseAutoScrollForUser();
+    },
+    [pauseAutoScrollForUser],
+  );
 
   const scrollToPinnedBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const container = containerRef.current;
@@ -269,6 +302,7 @@ export function useMessagesViewState({
     }
     setScrollDistanceFromBottom(container, 0, behavior);
     autoScrollRef.current = true;
+    setShowScrollToBottom(false);
     storeScrollSnapshot({
       distanceFromBottom: 0,
       wasPinned: true,
@@ -285,6 +319,7 @@ export function useMessagesViewState({
       setScrollDistanceFromBottom(container, nextDistance, behavior);
       const wasPinned = nextDistance <= SCROLL_THRESHOLD_PX;
       autoScrollRef.current = wasPinned;
+      setShowScrollToBottom(!wasPinned);
       storeScrollSnapshot({
         distanceFromBottom: nextDistance,
         wasPinned,
@@ -304,6 +339,7 @@ export function useMessagesViewState({
       } else {
         setScrollDistanceFromBottom(container, snapshot.distanceFromBottom);
         restoreScrollAnchor(container, snapshot);
+        setShowScrollToBottom(snapshot.distanceFromBottom > SCROLL_THRESHOLD_PX);
         storeScrollSnapshot(snapshot);
       }
     },
@@ -542,6 +578,11 @@ export function useMessagesViewState({
     };
   }, []);
 
+  const scrollToBottom = useCallback(() => {
+    scrollToPinnedBottom("smooth");
+    schedulePinnedScroll();
+  }, [schedulePinnedScroll, scrollToPinnedBottom]);
+
   const toggleExpanded = useCallback((id: string) => {
     manuallyToggledExpandedRef.current.add(id);
     setExpandedItems((prev) => {
@@ -711,8 +752,11 @@ export function useMessagesViewState({
   return {
     bottomRef,
     containerRef,
+    handleWheelCapture,
     updateAutoScroll,
     requestAutoScroll,
+    scrollToBottom,
+    showScrollToBottom,
     initialScrollDistanceFromBottom,
     threadScrollController,
     expandedItems,

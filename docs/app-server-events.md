@@ -84,6 +84,7 @@ subscriptions.
 - `thread/archived`
 - `thread/closed`
 - `thread/name/updated`
+- `thread/realtime/closed`
 - `thread/realtime/error`
 - `thread/started`
 - `thread/status/changed`
@@ -143,7 +144,6 @@ events are currently not routed:
 - `rawResponseItem/completed`
 - `skills/changed`
 - `thread/compacted` (deprecated; intentionally not routed)
-- `thread/realtime/closed`
 - `thread/realtime/itemAdded`
 - `thread/realtime/outputAudio/delta`
 - `thread/realtime/started`

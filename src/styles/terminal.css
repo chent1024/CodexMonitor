@@ -11,7 +11,10 @@
   --terminal-foreground: var(--text-stronger);
   --terminal-cursor: var(--text-stronger);
   --terminal-selection: rgba(100, 200, 255, 0.25);
-  --terminal-font-family: var(--code-font-family);
+  --terminal-font-family: "SF Mono", "Cascadia Mono", "JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --terminal-font-size: 13px;
+  --terminal-line-height: 1.36;
+  --terminal-letter-spacing: 0px;
 }
 
 .main:has(.terminal-panel.is-fullscreen) .content,
@@ -59,6 +62,7 @@
   min-height: 36px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-debug);
+  font-family: var(--ui-font-family);
 }
 
 .terminal-tabs {
@@ -94,6 +98,7 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
+  line-height: 1.2;
   text-transform: none;
   cursor: pointer;
   white-space: nowrap;
@@ -250,7 +255,7 @@
   border-radius: 0;
   overflow: hidden;
   background: var(--terminal-background);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid color-mix(in srgb, var(--terminal-foreground) 10%, transparent);
   box-sizing: border-box;
 }
 
@@ -264,7 +269,17 @@
   height: 100%;
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 12px 8px;
+  padding: 10px 14px 12px;
+  font-feature-settings: "liga" 0, "calt" 0, "zero" 1;
+  text-rendering: geometricPrecision;
+}
+
+.terminal-surface .xterm-rows {
+  letter-spacing: var(--terminal-letter-spacing);
+}
+
+.terminal-surface .xterm-char-measure-element {
+  letter-spacing: var(--terminal-letter-spacing);
 }
 
 .terminal-surface .xterm-viewport {

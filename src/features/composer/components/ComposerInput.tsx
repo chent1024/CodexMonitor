@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -110,6 +110,13 @@ export function ComposerInput({
 }: ComposerInputProps) {
   const suggestionListRef = useRef<HTMLDivElement | null>(null);
   const suggestionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const lastKnownTextRef = useRef(text);
+  const onTextChangeRef = useRef(onTextChange);
+  const deferredTextChangeTimerRef = useRef<number | null>(null);
+  const pendingTextChangeRef = useRef<{
+    text: string;
+    selectionStart: number | null;
+  } | null>(null);
   const { isPhoneLayout, isPhoneTallInput } = useComposerInputLayout({
     isExpanded,
     text,
@@ -138,10 +145,57 @@ export function ComposerInput({
   }, [canStop, onSend, onStop]);
   const handleTextareaChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
-      onTextChange(event.target.value, event.target.selectionStart);
+      const next = event.target.value;
+      lastKnownTextRef.current = next;
+      pendingTextChangeRef.current = {
+        text: next,
+        selectionStart: event.target.selectionStart,
+      };
+      if (deferredTextChangeTimerRef.current !== null) {
+        window.clearTimeout(deferredTextChangeTimerRef.current);
+      }
+      deferredTextChangeTimerRef.current = window.setTimeout(() => {
+        deferredTextChangeTimerRef.current = null;
+        const pending = pendingTextChangeRef.current;
+        pendingTextChangeRef.current = null;
+        if (!pending) {
+          return;
+        }
+        onTextChangeRef.current(pending.text, pending.selectionStart);
+      }, 0);
     },
-    [onTextChange],
+    [],
   );
+
+  useEffect(() => {
+    onTextChangeRef.current = onTextChange;
+  }, [onTextChange]);
+
+  useEffect(
+    () => () => {
+      if (deferredTextChangeTimerRef.current !== null) {
+        window.clearTimeout(deferredTextChangeTimerRef.current);
+        deferredTextChangeTimerRef.current = null;
+      }
+      pendingTextChangeRef.current = null;
+    },
+    [],
+  );
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      lastKnownTextRef.current = text;
+      return;
+    }
+    if (lastKnownTextRef.current === text) {
+      return;
+    }
+    if (textarea.value !== text) {
+      textarea.value = text;
+    }
+    lastKnownTextRef.current = text;
+  }, [text, textareaRef]);
 
   const handleTextareaSelect = useCallback(
     (event: SyntheticEvent<HTMLTextAreaElement>) => {
@@ -209,7 +263,7 @@ export function ComposerInput({
                 ? "Review in progress. Chat will re-enable when it completes."
                 : "输入任务或问题..."
             }
-            value={text}
+            defaultValue={text}
             onChange={handleTextareaChange}
             onSelect={handleTextareaSelect}
             disabled={disabled}

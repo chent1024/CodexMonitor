@@ -5,9 +5,9 @@ use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub(crate) const RESTART_SAFE_SESSION_PROTOCOL_VERSION: u32 = 1;
-pub(crate) const DEFAULT_EVENT_RETENTION_COUNT: usize = 4096;
+pub(crate) const DEFAULT_EVENT_RETENTION_COUNT: usize = 2048;
 pub(crate) const DEFAULT_EVENT_RETENTION_AGE_MS: i64 = 6 * 60 * 60 * 1000;
-pub(crate) const DEFAULT_EVENT_RETENTION_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const DEFAULT_EVENT_RETENTION_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

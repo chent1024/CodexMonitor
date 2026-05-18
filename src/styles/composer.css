@@ -446,8 +446,9 @@
 }
 
 .composer-action.is-stop {
-  border-color: rgba(255, 107, 107, 0.6);
-  background: rgba(255, 107, 107, 0.12);
+  border-color: var(--cm-border-emphasis);
+  background: var(--cm-surface-panel-strong);
+  color: var(--text-strong);
 }
 
 .composer-action:hover {
@@ -456,7 +457,8 @@
 }
 
 .composer-action.is-stop:hover {
-  background: rgba(255, 107, 107, 0.2);
+  background: var(--cm-surface-panel-solid);
+  color: var(--text-strong);
 }
 
 .composer-action svg {
@@ -476,8 +478,8 @@
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  border: 2px solid rgba(255, 120, 120, 0.35);
-  border-top-color: rgba(255, 120, 120, 0.9);
+  border: 2px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
+  border-top-color: var(--text-muted);
   animation: composer-action-spin var(--ds-spinner-dur) linear infinite;
 }
 
@@ -511,8 +513,9 @@
 .composer-action.is-stop:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-  background: rgba(255, 107, 107, 0.08);
-  color: rgba(255, 196, 196, 0.4);
+  background: var(--surface-control-disabled);
+  color: var(--text-fainter);
+  border-color: var(--border-subtle);
 }
 
 @keyframes composer-action-spin {
@@ -643,12 +646,12 @@
   align-items: center;
   padding-top: 5px;
   border-top: 1px solid var(--cm-border-strong);
-  gap: 8px;
+  gap: 10px;
 }
 
 .composer-meta {
   display: flex;
-  gap: 6px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -658,14 +661,14 @@
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
 .composer-context-value {
   min-width: 76px;
-  min-height: 22px;
-  padding: 3px 9px;
+  min-height: 28px;
+  padding: 5px 11px;
   border: 1px solid transparent;
   border-radius: 999px;
   background: var(--cm-surface-panel-strong);
@@ -674,7 +677,7 @@
   justify-content: center;
   gap: 1px;
   font-weight: 500;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
@@ -688,7 +691,7 @@
 }
 
 .composer-context-percent-sign {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 500;
   line-height: 1;
   transform: translateY(0.2px);
@@ -705,9 +708,9 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 6px;
-  min-height: 22px;
+  gap: 8px;
+  padding: 4px 10px;
+  min-height: 30px;
   box-sizing: border-box;
   border-radius: 999px;
   background: var(--cm-surface-panel-strong);
@@ -717,19 +720,19 @@
 .composer-select-wrap:has(.composer-select)::after {
   content: "";
   position: absolute;
-  right: 9px;
+  right: 12px;
   top: 50%;
-  width: 6px;
-  height: 6px;
-  border-right: 1.25px solid var(--select-caret);
-  border-bottom: 1.25px solid var(--select-caret);
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--select-caret);
+  border-bottom: 1.5px solid var(--select-caret);
   transform: translateY(-58%) rotate(45deg);
   pointer-events: none;
   opacity: 0.72;
 }
 
 .composer-select-wrap--model:has(.composer-fast-indicator)::after {
-  right: 30px;
+  right: 34px;
 }
 
 .composer-select-wrap:has(.composer-select:focus)::after {
@@ -738,40 +741,40 @@
 }
 
 .composer-plan-toggle-wrap {
-  padding: 2px 6px;
+  padding: 4px 10px;
 }
 
 .composer-plan-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   cursor: pointer;
   user-select: none;
 }
 
 .composer-plan-toggle-input {
   margin: 0;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   accent-color: var(--message-link-color);
   cursor: pointer;
 }
 
 .composer-plan-toggle-icon {
   display: inline-flex;
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
   color: var(--text-muted);
   opacity: 0.82;
 }
 
 .composer-plan-toggle-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
 }
 
 .composer-plan-toggle-label {
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-muted);
   line-height: 1;
@@ -793,26 +796,26 @@
 
 .composer-icon {
   display: inline-flex;
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
   color: var(--text-muted);
   opacity: 0.82;
   transform: translateY(0.5px);
 }
 
 .composer-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
 }
 
 .composer-icon--model {
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
 }
 
 .composer-icon--model svg {
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
 }
 
 .composer-fast-indicator {
@@ -832,10 +835,10 @@
   background: transparent;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1;
-  padding: 0 18px 0 0;
+  padding: 0 22px 0 0;
   cursor: pointer;
   width: auto;
   min-width: 0;
@@ -851,18 +854,18 @@
 }
 
 .composer-select--collab {
-  width: 78px;
-  max-width: 78px;
+  width: 92px;
+  max-width: 92px;
 }
 
 .composer-select--effort {
-  width: 68px;
-  max-width: 68px;
+  width: 88px;
+  max-width: 88px;
 }
 
 .composer-select--approval {
-  width: 78px;
-  max-width: 78px;
+  width: 116px;
+  max-width: 116px;
 }
 
 .composer-select:focus {
@@ -953,7 +956,7 @@
   .app.layout-phone .composer-meta {
     flex-wrap: nowrap;
     overflow-x: auto;
-    gap: 6px;
+    gap: 8px;
     padding-bottom: 2px;
     scrollbar-width: thin;
   }
@@ -967,11 +970,11 @@
   }
 
   .app.layout-phone .composer-select-wrap {
-    gap: 4px;
-    padding: 2px 5px;
+    gap: 6px;
+    padding: 4px 8px;
   }
 
   .app.layout-phone .composer-select {
-    font-size: 10px;
+    font-size: 12px;
   }
 }

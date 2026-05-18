@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import { act, useRef, useState } from "react";
+import { fireEvent } from "@testing-library/react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { useComposerImages } from "../hooks/useComposerImages";
@@ -17,12 +18,16 @@ type HarnessProps = {
   activeThreadId: string | null;
   activeWorkspaceId: string | null;
   disabled?: boolean;
+  syncText?: boolean;
+  onTextChangeSpy?: (next: string, selectionStart: number | null) => void;
 };
 
 function ComposerHarness({
   activeThreadId,
   activeWorkspaceId,
   disabled = false,
+  syncText = true,
+  onTextChangeSpy,
 }: HarnessProps) {
   const { activeImages, attachImages, removeImage, clearActiveImages } =
     useComposerImages({ activeThreadId, activeWorkspaceId });
@@ -46,7 +51,10 @@ function ComposerHarness({
         onAttachImages={attachImages}
         onRemoveAttachment={removeImage}
         onTextChange={(next, nextSelection) => {
-          setText(next);
+          onTextChangeSpy?.(next, nextSelection);
+          if (syncText) {
+            setText(next);
+          }
           setSelectionStart(nextSelection);
         }}
         onSelectionChange={setSelectionStart}
@@ -163,6 +171,59 @@ function setMockFileReader() {
 }
 
 describe("Composer attachments integration", () => {
+  it("defers text-change synchronization out of the input event", () => {
+    vi.useFakeTimers();
+    const onTextChangeSpy = vi.fn();
+    const harness = renderComposerHarness({
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "ws-1",
+      onTextChangeSpy,
+    });
+    const textarea = getTextarea(harness.container);
+
+    fireEvent.change(textarea, {
+      target: { value: "paint first", selectionStart: 11 },
+    });
+
+    expect(textarea.value).toBe("paint first");
+    expect(onTextChangeSpy).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+
+    expect(onTextChangeSpy).toHaveBeenCalledWith("paint first", 11);
+
+    harness.unmount();
+    vi.useRealTimers();
+  });
+
+  it("preserves immediate textarea input when parent text state has not caught up", () => {
+    const harness = renderComposerHarness({
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "ws-1",
+      syncText: false,
+    });
+    const textarea = getTextarea(harness.container);
+
+    fireEvent.change(textarea, {
+      target: { value: "instant input", selectionStart: 13 },
+    });
+
+    expect(textarea.value).toBe("instant input");
+
+    harness.rerender({
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "ws-1",
+      disabled: true,
+      syncText: false,
+    });
+
+    expect(getTextarea(harness.container).value).toBe("instant input");
+
+    harness.unmount();
+  });
+
   it("attaches dropped image files, filters non-images, and dedupes paths", async () => {
     const harness = renderComposerHarness({
       activeThreadId: "thread-1",

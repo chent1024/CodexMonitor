@@ -8,14 +8,52 @@ import {
 import { asString } from "@threads/utils/threadNormalize";
 
 export function normalizeThreadStatusType(status: Record<string, unknown>): string {
-  const typeRaw = status.type ?? status.statusType ?? status.status_type;
+  const typeRaw =
+    status.type ??
+    status.statusType ??
+    status.status_type ??
+    status.status ??
+    status.state ??
+    status.phase;
   if (typeof typeRaw !== "string") {
     return "";
   }
-  return typeRaw
+  const normalized = typeRaw
     .trim()
     .toLowerCase()
     .replace(/[\s_-]/g, "");
+  if (
+    normalized === "running" ||
+    normalized === "processing" ||
+    normalized === "inprogress" ||
+    normalized === "started" ||
+    normalized === "queued"
+  ) {
+    return "active";
+  }
+  if (
+    normalized === "ready" ||
+    normalized === "inactive" ||
+    normalized === "completed" ||
+    normalized === "complete" ||
+    normalized === "done" ||
+    normalized === "finished" ||
+    normalized === "stopped" ||
+    normalized === "canceled" ||
+    normalized === "cancelled" ||
+    normalized === "aborted" ||
+    normalized === "interrupted"
+  ) {
+    return "idle";
+  }
+  if (
+    normalized === "error" ||
+    normalized === "failed" ||
+    normalized === "failure"
+  ) {
+    return "systemerror";
+  }
+  return normalized;
 }
 
 export function getLiveThreadSubagentSummaryPatch(thread: Record<string, unknown>) {

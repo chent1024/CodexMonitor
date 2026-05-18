@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isMobilePlatform } from "../../../utils/platformPaths";
@@ -41,6 +41,10 @@ type HarnessProps = {
   followUpMessageBehavior?: FollowUpMessageBehavior;
   steerAvailable?: boolean;
   selectedServiceTier?: "fast" | "flex" | null;
+  draftText?: string;
+  onDraftChange?: (text: string) => void;
+  onStop?: () => void;
+  canStop?: boolean;
 };
 
 function ComposerHarness({
@@ -50,6 +54,10 @@ function ComposerHarness({
   followUpMessageBehavior = "queue",
   steerAvailable = false,
   selectedServiceTier = null,
+  draftText: draftTextProp,
+  onDraftChange,
+  onStop,
+  canStop = false,
 }: HarnessProps) {
   const [draftText, setDraftText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -57,8 +65,8 @@ function ComposerHarness({
   return (
     <Composer
       onSend={onSend}
-      onStop={() => {}}
-      canStop={false}
+      onStop={onStop ?? (() => {})}
+      canStop={canStop}
       isProcessing={isProcessing}
       appsEnabled={true}
       steerAvailable={steerAvailable}
@@ -81,8 +89,8 @@ function ComposerHarness({
       apps={apps}
       prompts={[]}
       files={[]}
-      draftText={draftText}
-      onDraftChange={setDraftText}
+      draftText={draftTextProp ?? draftText}
+      onDraftChange={onDraftChange ?? setDraftText}
       textareaRef={textareaRef}
     />
   );
@@ -91,8 +99,31 @@ function ComposerHarness({
 describe("Composer send triggers", () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.mocked(isMobilePlatform).mockReturnValue(false);
     vi.restoreAllMocks();
+  });
+
+  it("renders typed text immediately while deferring draft persistence", () => {
+    vi.useFakeTimers();
+    const onSend = vi.fn();
+    const onDraftChange = vi.fn();
+    render(<ComposerHarness onSend={onSend} onDraftChange={onDraftChange} />);
+
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: "hello", selectionStart: 5 },
+    });
+
+    expect(textarea.value).toBe("hello");
+    expect(onDraftChange).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(onDraftChange).toHaveBeenCalledTimes(1);
+    expect(onDraftChange).toHaveBeenCalledWith("hello");
   });
 
   it("sends once on Enter", () => {
@@ -107,12 +138,15 @@ describe("Composer send triggers", () => {
     expect(onSend).toHaveBeenCalledWith("hello world", [], undefined, "default");
   });
 
-  it("sends once on send-button click", () => {
+  it("sends once on send-button click", async () => {
     const onSend = vi.fn();
     render(<ComposerHarness onSend={onSend} />);
 
     const textarea = screen.getByRole("textbox");
     fireEvent.change(textarea, { target: { value: "from button" } });
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
     fireEvent.click(screen.getByLabelText("Send"));
 
     expect(onSend).toHaveBeenCalledTimes(1);
@@ -146,7 +180,56 @@ describe("Composer send triggers", () => {
     expect(blurSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("sends explicit app mentions when an app autocomplete item is selected", () => {
+  it("stops the running turn on Escape when stop is available", () => {
+    const onSend = vi.fn();
+    const onStop = vi.fn();
+    render(
+      <ComposerHarness
+        onSend={onSend}
+        onStop={onStop}
+        canStop={true}
+        isProcessing={true}
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox");
+    fireEvent.keyDown(textarea, { key: "Escape" });
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("uses Escape to close autocomplete before stopping the running turn", async () => {
+    const onSend = vi.fn();
+    const onStop = vi.fn();
+    render(
+      <ComposerHarness
+        onSend={onSend}
+        onStop={onStop}
+        canStop={true}
+        isProcessing={true}
+        apps={[
+          {
+            id: "connector_calendar",
+            name: "Calendar App",
+            description: "Calendar integration",
+            isAccessible: true,
+          },
+        ]}
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox");
+    fireEvent.change(textarea, { target: { value: "$cal" } });
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    fireEvent.keyDown(textarea, { key: "Escape" });
+
+    expect(onStop).not.toHaveBeenCalled();
+  });
+
+  it("sends explicit app mentions when an app autocomplete item is selected", async () => {
     const onSend = vi.fn();
     render(
       <ComposerHarness
@@ -164,6 +247,9 @@ describe("Composer send triggers", () => {
 
     const textarea = screen.getByRole("textbox");
     fireEvent.change(textarea, { target: { value: "$cal" } });
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
     fireEvent.keyDown(textarea, { key: "Tab" });
     fireEvent.keyDown(textarea, { key: "Enter" });
 

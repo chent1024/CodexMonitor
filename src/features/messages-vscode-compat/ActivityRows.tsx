@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent } from "react";
+import type { MouseEvent, WheelEvent } from "react";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import Check from "lucide-react/dist/esm/icons/check";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
@@ -44,6 +44,11 @@ import {
   nextReasoningState,
   type VscodeDisclosureState,
 } from "./behavior";
+import {
+  getMaxScrollDistanceFromBottom,
+  getScrollDistanceFromBottom,
+  setScrollDistanceFromBottom,
+} from "../messages/utils/threadScroll";
 
 type MarkdownFileLinkProps = {
   showMessageFilePath?: boolean;
@@ -55,6 +60,7 @@ type MarkdownFileLinkProps = {
 
 type ActivityItemRowProps = MarkdownFileLinkProps & {
   item: Exclude<ConversationItem, Extract<ConversationItem, { kind: "message" }>>;
+  hideSummary?: boolean;
   isExpanded: boolean;
   onToggle: (id: string) => void;
   onRequestAutoScroll?: () => void;
@@ -68,6 +74,7 @@ const DIFF_STATS_CACHE_LIMIT = 500;
 const diffStatsCache = new Map<string, DiffStats>();
 const VSCODE_COMMAND_OUTPUT_RENDER_LINE_LIMIT = 300;
 const VSCODE_COMMAND_OUTPUT_RENDER_CHAR_LIMIT = 80_000;
+const NESTED_OUTPUT_WHEEL_EPSILON_PX = 1;
 
 function isRunningStatus(status?: string | null) {
   return /in[_\s-]*progress|running|started/.test((status ?? "").toLowerCase());
@@ -412,6 +419,35 @@ function buildCommandOutputWindow(output: string, expanded: boolean) {
   };
 }
 
+function getTranscriptScrollNode(target: HTMLElement | null) {
+  return target?.closest<HTMLElement>("[data-thread-reverse-scroll='true']") ?? null;
+}
+
+function scrollTranscriptFromNestedWheel(event: WheelEvent<HTMLElement>) {
+  if (event.defaultPrevented || Math.abs(event.deltaY) < NESTED_OUTPUT_WHEEL_EPSILON_PX) {
+    return;
+  }
+  const transcript = getTranscriptScrollNode(event.currentTarget);
+  if (!transcript) {
+    return;
+  }
+  const maxDistance = getMaxScrollDistanceFromBottom(transcript);
+  if (maxDistance <= 0) {
+    return;
+  }
+  const currentDistance = getScrollDistanceFromBottom(transcript);
+  const nextDistance = Math.min(
+    maxDistance,
+    Math.max(0, currentDistance - event.deltaY),
+  );
+  if (Math.abs(nextDistance - currentDistance) < NESTED_OUTPUT_WHEEL_EPSILON_PX) {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  setScrollDistanceFromBottom(transcript, nextDistance);
+}
+
 const VscodeCommandOutput = memo(function VscodeCommandOutput({
   output,
   command,
@@ -444,6 +480,7 @@ const VscodeCommandOutput = memo(function VscodeCommandOutput({
       ? `${outputWindow.hiddenCharCount} earlier chars hidden`
       : null,
   ].filter(Boolean).join(" / ");
+  const isLiveOutput = isRunningStatus(status) && !outputExpanded;
 
   const handleScroll = useCallback(() => {
     const node = containerRef.current;
@@ -542,6 +579,7 @@ const VscodeCommandOutput = memo(function VscodeCommandOutput({
           data-vscode-command-output-lines
           ref={containerRef}
           onScroll={handleScroll}
+          onWheel={isLiveOutput ? scrollTranscriptFromNestedWheel : undefined}
           style={{
             justifyContent: "flex-start",
             maxHeight: `${VSCODE_COMMAND_OUTPUT_MAX_HEIGHT_PX}px`,
@@ -975,6 +1013,7 @@ function CommandFooter({ status }: { status?: string | null }) {
 
 function VscodeToolRow({
   item,
+  hideSummary = false,
   isExpanded,
   onToggle,
   showMessageFilePath,
@@ -985,6 +1024,7 @@ function VscodeToolRow({
   onRequestAutoScroll,
 }: MarkdownFileLinkProps & {
   item: ToolItem;
+  hideSummary?: boolean;
   isExpanded: boolean;
   onToggle: (id: string) => void;
   onRequestAutoScroll?: () => void;
@@ -1149,49 +1189,51 @@ function VscodeToolRow({
       data-mcp-app-expanded={isMcpApp && mcpAppExpanded ? "true" : undefined}
       data-mcp-app-fullscreen={isMcpApp && mcpAppFullscreen ? "true" : undefined}
     >
-      <button
-        type="button"
-        className={`oai-vscode-activity-summary${isCommand ? " oai-vscode-exec-summary" : ""}`}
-        onClick={() => onToggle(item.id)}
-        aria-expanded={isExpanded}
-        aria-label={summaryAriaLabel}
-        data-oai-activity-detail-summary
-        data-oai-activity-detail-content
-        data-vscode-exec-summary={isCommand ? "true" : undefined}
-      >
-        {isCommand ? null : (
-          <ToolIcon className={`oai-vscode-activity-icon ${tone}`} size={13} aria-hidden />
-        )}
-        {summaryLabel ? <span className="oai-vscode-activity-label">{summaryLabel}:</span> : null}
-        {summaryValue ? (
-          <span className={`oai-vscode-activity-title${isCommand ? " oai-vscode-command-text" : ""}`}>
-            {isFileChange ? (
-              <FileChangeSummaryText changes={fileChanges} />
-            ) : isCommand ? (
-              <CommandActivitySummaryText item={item} command={String(summaryValue)} />
-            ) : (
-              summaryValue
-            )}
-          </span>
-        ) : null}
-        {isCommand ? (
-          <span
-            className={`oai-vscode-command-chevron${isExpanded ? " is-expanded" : ""}`}
-            data-vscode-command-chevron
-            aria-hidden
-          >
-            <ChevronRight size={12} />
-          </span>
-        ) : null}
-        {inlineStatus && !isFileChange && !isCommand ? (
-          <span className="oai-vscode-activity-status">{inlineStatus}</span>
-        ) : null}
-        {openAIItemTypeLabel ? (
-          <span className="oai-vscode-activity-status oai-activity-detail-openai-type">
-            {openAIItemTypeLabel}
-          </span>
-        ) : null}
-      </button>
+      {!hideSummary ? (
+        <button
+          type="button"
+          className={`oai-vscode-activity-summary${isCommand ? " oai-vscode-exec-summary" : ""}`}
+          onClick={() => onToggle(item.id)}
+          aria-expanded={isExpanded}
+          aria-label={summaryAriaLabel}
+          data-oai-activity-detail-summary
+          data-oai-activity-detail-content
+          data-vscode-exec-summary={isCommand ? "true" : undefined}
+        >
+          {isCommand ? null : (
+            <ToolIcon className={`oai-vscode-activity-icon ${tone}`} size={13} aria-hidden />
+          )}
+          {summaryLabel ? <span className="oai-vscode-activity-label">{summaryLabel}:</span> : null}
+          {summaryValue ? (
+            <span className={`oai-vscode-activity-title${isCommand ? " oai-vscode-command-text" : ""}`}>
+              {isFileChange ? (
+                <FileChangeSummaryText changes={fileChanges} />
+              ) : isCommand ? (
+                <CommandActivitySummaryText item={item} command={String(summaryValue)} />
+              ) : (
+                summaryValue
+              )}
+            </span>
+          ) : null}
+          {isCommand ? (
+            <span
+              className={`oai-vscode-command-chevron${isExpanded ? " is-expanded" : ""}`}
+              data-vscode-command-chevron
+              aria-hidden
+            >
+              <ChevronRight size={12} />
+            </span>
+          ) : null}
+          {inlineStatus && !isFileChange && !isCommand ? (
+            <span className="oai-vscode-activity-status">{inlineStatus}</span>
+          ) : null}
+          {openAIItemTypeLabel ? (
+            <span className="oai-vscode-activity-status oai-activity-detail-openai-type">
+              {openAIItemTypeLabel}
+            </span>
+          ) : null}
+        </button>
+      ) : null}
       <AnimatedDisclosureBody
           isExpanded={hasBody && isExpanded}
           className={`oai-vscode-activity-body${isMcpApp ? " pending-mcp-tool-calls-body" : ""}`}
@@ -1381,6 +1423,7 @@ function VscodeToolRow({
 
 export const ActivityItemRow = memo(function ActivityItemRow({
   item,
+  hideSummary,
   isExpanded,
   onToggle,
   showMessageFilePath,
@@ -1432,6 +1475,7 @@ export const ActivityItemRow = memo(function ActivityItemRow({
   return (
     <VscodeToolRow
       item={item}
+      hideSummary={hideSummary}
       isExpanded={isExpanded}
       onToggle={onToggle}
       showMessageFilePath={showMessageFilePath}

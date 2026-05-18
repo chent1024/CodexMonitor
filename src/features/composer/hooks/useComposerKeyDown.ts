@@ -13,6 +13,7 @@ type ReviewPromptKeyEvent = {
 type UseComposerKeyDownArgs = {
   applyTextInsertion: (nextText: string, nextCursor: number) => void;
   canSend: boolean;
+  canStop: boolean;
   continueListOnShiftEnter: boolean;
   defaultSubmitIntent: ComposerSendIntent;
   expandFenceOnEnter: boolean;
@@ -20,6 +21,7 @@ type UseComposerKeyDownArgs = {
   handleHistoryKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   handleInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   handleSend: (submitIntent?: ComposerSendIntent) => void;
+  onStop: () => void;
   isMac: boolean;
   onReviewPromptKeyDown?: (event: ReviewPromptKeyEvent) => boolean;
   oppositeSubmitIntent: ComposerSendIntent;
@@ -33,6 +35,7 @@ type UseComposerKeyDownArgs = {
 export function useComposerKeyDown({
   applyTextInsertion,
   canSend,
+  canStop,
   continueListOnShiftEnter,
   defaultSubmitIntent,
   expandFenceOnEnter,
@@ -40,6 +43,7 @@ export function useComposerKeyDown({
   handleHistoryKeyDown,
   handleInputKeyDown,
   handleSend,
+  onStop,
   isMac,
   onReviewPromptKeyDown,
   oppositeSubmitIntent,
@@ -54,6 +58,9 @@ export function useComposerKeyDown({
       if (isComposingEvent(event)) {
         return;
       }
+      const currentTextarea = textareaRef.current;
+      const currentText = currentTextarea?.value ?? text;
+      const currentCanSend = canSend || currentText.trim().length > 0;
       handleHistoryKeyDown(event);
       if (event.defaultPrevented) {
         return;
@@ -64,7 +71,7 @@ export function useComposerKeyDown({
         (isMac ? event.metaKey : event.ctrlKey);
       if (isOppositeFollowUpShortcut && !suggestionsOpen) {
         event.preventDefault();
-        const dismissKeyboardAfterSend = canSend && isMobilePlatform();
+        const dismissKeyboardAfterSend = currentCanSend && isMobilePlatform();
         handleSend(oppositeSubmitIntent);
         if (dismissKeyboardAfterSend) {
           textareaRef.current?.blur();
@@ -83,7 +90,7 @@ export function useComposerKeyDown({
         if (!textarea) {
           return;
         }
-        const start = textarea.selectionStart ?? text.length;
+        const start = textarea.selectionStart ?? currentText.length;
         const end = textarea.selectionEnd ?? start;
         if (tryExpandFence(start, end)) {
           event.preventDefault();
@@ -100,14 +107,14 @@ export function useComposerKeyDown({
         if (continueListOnShiftEnter && !suggestionsOpen) {
           const textarea = textareaRef.current;
           if (textarea) {
-            const start = textarea.selectionStart ?? text.length;
+            const start = textarea.selectionStart ?? currentText.length;
             const end = textarea.selectionEnd ?? start;
             if (start === end) {
-              const marker = getListContinuation(text, start);
+              const marker = getListContinuation(currentText, start);
               if (marker) {
                 event.preventDefault();
-                const before = text.slice(0, start);
-                const after = text.slice(end);
+                const before = currentText.slice(0, start);
+                const after = currentText.slice(end);
                 const nextText = `${before}\n${marker}${after}`;
                 const nextCursor = before.length + 1 + marker.length;
                 applyTextInsertion(nextText, nextCursor);
@@ -121,9 +128,9 @@ export function useComposerKeyDown({
         if (!textarea) {
           return;
         }
-        const start = textarea.selectionStart ?? text.length;
+        const start = textarea.selectionStart ?? currentText.length;
         const end = textarea.selectionEnd ?? start;
-        const nextText = `${text.slice(0, start)}\n${text.slice(end)}`;
+        const nextText = `${currentText.slice(0, start)}\n${currentText.slice(end)}`;
         const nextCursor = start + 1;
         applyTextInsertion(nextText, nextCursor);
         return;
@@ -138,11 +145,17 @@ export function useComposerKeyDown({
       if (event.defaultPrevented) {
         return;
       }
+      if (event.key === "Escape" && canStop) {
+        event.preventDefault();
+        event.stopPropagation();
+        onStop();
+        return;
+      }
       if (event.key === "Enter" && !event.shiftKey) {
         if (expandFenceOnEnter) {
           const textarea = textareaRef.current;
           if (textarea) {
-            const start = textarea.selectionStart ?? text.length;
+            const start = textarea.selectionStart ?? currentText.length;
             const end = textarea.selectionEnd ?? start;
             if (tryExpandFence(start, end)) {
               event.preventDefault();
@@ -151,7 +164,7 @@ export function useComposerKeyDown({
           }
         }
         event.preventDefault();
-        const dismissKeyboardAfterSend = canSend && isMobilePlatform();
+        const dismissKeyboardAfterSend = currentCanSend && isMobilePlatform();
         handleSend(defaultSubmitIntent);
         if (dismissKeyboardAfterSend) {
           textareaRef.current?.blur();
@@ -161,6 +174,7 @@ export function useComposerKeyDown({
     [
       applyTextInsertion,
       canSend,
+      canStop,
       continueListOnShiftEnter,
       defaultSubmitIntent,
       expandFenceOnEnter,
@@ -169,6 +183,7 @@ export function useComposerKeyDown({
       handleInputKeyDown,
       handleSend,
       isMac,
+      onStop,
       onReviewPromptKeyDown,
       oppositeSubmitIntent,
       reviewPromptOpen,

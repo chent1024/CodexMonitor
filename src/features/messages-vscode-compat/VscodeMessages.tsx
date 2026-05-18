@@ -8,7 +8,9 @@ import {
   useState,
   type ReactNode,
   type RefObject,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
+import ArrowDown from "lucide-react/dist/esm/icons/arrow-down";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
@@ -31,6 +33,7 @@ import {
   type ToolGroupItem,
 } from "../messages/utils/messageRenderUtils";
 import {
+  countDiffStats,
   FileChangeSummaryCard,
   MemoryCitationPanel,
   type FileChangeEntry,
@@ -49,6 +52,7 @@ import {
   getScrollDistanceFromBottom,
   isNearScrollBottom,
   isNearScrollTop,
+  setScrollDistanceFromBottom,
   type VirtualScrollLayout,
 } from "../messages/utils/threadScroll";
 import { ActivityItemRow } from "./ActivityRows";
@@ -123,6 +127,55 @@ function collectTurnFileChanges(turn: AssistantTurn): FileChangeEntry[] {
       return item.changes ?? [];
     });
   });
+}
+
+function basename(path: string) {
+  const normalized = path.replace(/\\/g, "/");
+  return normalized.split("/").filter(Boolean).pop() ?? normalized;
+}
+
+function isRunningActivityStatus(status?: string | null) {
+  return /in[_\s-]*progress|running|started/.test((status ?? "").toLowerCase());
+}
+
+function getSingleFileChangeActivitySummary(items: ToolGroupItem[]) {
+  const fileChangeItems = items.filter(
+    (item): item is Extract<ToolGroupItem, { kind: "tool" }> =>
+      item.kind === "tool" && item.toolType === "fileChange",
+  );
+  const fileChanges = fileChangeItems.flatMap((item) => {
+    if (item.kind !== "tool" || item.toolType !== "fileChange") {
+      return [];
+    }
+    return item.changes ?? [];
+  });
+
+  if (fileChanges.length !== 1) {
+    return null;
+  }
+
+  const change = fileChanges[0];
+  const { additions, deletions } = countDiffStats(change.diff, change.kind);
+  return {
+    additions,
+    deletions,
+    fileName: basename(change.path),
+    label: fileChangeItems.some((item) => isRunningActivityStatus(item.status))
+      ? "正在编辑"
+      : "已编辑",
+  };
+}
+
+function shouldFlattenSingleCompletedFileChange(
+  summary: ReturnType<typeof getSingleFileChangeActivitySummary>,
+  items: ToolGroupItem[],
+) {
+  return (
+    summary?.label === "已编辑" &&
+    items.length === 1 &&
+    items[0]?.kind === "tool" &&
+    items[0].toolType === "fileChange"
+  );
 }
 
 function collectTurnMemoryCitation(turn: AssistantTurn): MemoryCitationInfo | null {
@@ -203,7 +256,42 @@ const TURN_VIRTUALIZATION_GAP = 12;
 const TURN_VIRTUALIZATION_OVERSCAN = 2;
 const TURN_VIRTUALIZATION_INITIAL_VIEWPORT_HEIGHT = 800;
 const MAX_VIRTUAL_TURN_HEIGHT_CACHE_ENTRIES = 100;
+const WHEEL_SCROLL_EPSILON_PX = 1;
 const virtualTurnHeightCache = new Map<string, Record<string, number>>();
+
+function canConsumeVerticalWheel(
+  target: EventTarget | null,
+  boundary: HTMLElement,
+  deltaY: number,
+) {
+  if (!(target instanceof HTMLElement) || Math.abs(deltaY) < WHEEL_SCROLL_EPSILON_PX) {
+    return false;
+  }
+
+  let node: HTMLElement | null = target;
+  while (node && node !== boundary) {
+    const style = window.getComputedStyle(node);
+    const overflowY = style.overflowY;
+    const canScrollY =
+      (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+      node.scrollHeight > node.clientHeight + WHEEL_SCROLL_EPSILON_PX;
+    if (canScrollY) {
+      if (deltaY < 0 && node.scrollTop > WHEEL_SCROLL_EPSILON_PX) {
+        return true;
+      }
+      if (
+        deltaY > 0 &&
+        node.scrollTop + node.clientHeight <
+          node.scrollHeight - WHEEL_SCROLL_EPSILON_PX
+      ) {
+        return true;
+      }
+    }
+    node = node.parentElement;
+  }
+
+  return false;
+}
 
 function rememberVirtualTurnHeights(
   cacheKey: string,
@@ -553,8 +641,11 @@ export const Messages = memo(function Messages({
   const {
     bottomRef,
     containerRef,
+    handleWheelCapture,
     updateAutoScroll,
     requestAutoScroll,
+    scrollToBottom,
+    showScrollToBottom,
     initialScrollDistanceFromBottom,
     threadScrollController,
     expandedItems,
@@ -820,6 +911,48 @@ export const Messages = memo(function Messages({
     loadOlderTurns();
   }, [containerRef, loadOlderTurns, updateAutoScroll]);
 
+  const handleFooterWheel = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>) => {
+      const container = containerRef.current;
+      if (
+        !container ||
+        event.defaultPrevented ||
+        Math.abs(event.deltaY) < WHEEL_SCROLL_EPSILON_PX ||
+        canConsumeVerticalWheel(event.target, event.currentTarget, event.deltaY)
+      ) {
+        return;
+      }
+
+      const maxDistance = getMaxScrollDistanceFromBottom(container);
+      if (maxDistance <= 0) {
+        if (event.deltaY < 0) {
+          loadOlderTurns();
+        }
+        return;
+      }
+
+      const currentDistance = getScrollDistanceFromBottom(container);
+      const nextDistance = Math.min(
+        maxDistance,
+        Math.max(0, currentDistance - event.deltaY),
+      );
+      if (Math.abs(nextDistance - currentDistance) < WHEEL_SCROLL_EPSILON_PX) {
+        if (event.deltaY < 0 && isNearScrollTop(container)) {
+          loadOlderTurns();
+        }
+        return;
+      }
+
+      event.preventDefault();
+      setScrollDistanceFromBottom(container, nextDistance);
+      updateAutoScroll();
+      if (event.deltaY < 0 && isNearScrollTop(container)) {
+        loadOlderTurns();
+      }
+    },
+    [containerRef, loadOlderTurns, updateAutoScroll],
+  );
+
   const planFollowupNode =
     planFollowup.shouldShow && onPlanAccept && onPlanSubmitChanges ? (
       <PlanReadyFollowupMessage
@@ -833,6 +966,22 @@ export const Messages = memo(function Messages({
         }}
       />
     ) : null;
+  const scrollToBottomButton = showScrollToBottom ? (
+    <div
+      className="messages-scroll-to-bottom-rail"
+      data-thread-scroll-to-bottom-rail="true"
+    >
+      <button
+        type="button"
+        className="messages-scroll-to-bottom"
+        aria-label="Scroll to bottom"
+        data-thread-scroll-to-bottom="true"
+        onClick={scrollToBottom}
+      >
+        <ArrowDown aria-hidden size={22} strokeWidth={2.1} />
+      </button>
+    </div>
+  ) : null;
 
   const renderAssistantTurnActivity = (
     turn: AssistantTurn,
@@ -940,6 +1089,14 @@ export const Messages = memo(function Messages({
       const ActivityIcon = activityBlockHasFileChange(groupBlock) ? Pencil : SquareTerminal;
       const activityKind = group.kind;
       const openAIItemTypes = getOpenAIActivityItemTypes(group.items);
+      const singleFileChangeSummary = getSingleFileChangeActivitySummary(group.items);
+      const flattenSingleFileChange = shouldFlattenSingleCompletedFileChange(
+        singleFileChangeSummary,
+        group.items,
+      );
+      const singleFileChangeAriaLabel = singleFileChangeSummary
+        ? `${singleFileChangeSummary.label} ${singleFileChangeSummary.fileName} +${singleFileChangeSummary.additions} -${singleFileChangeSummary.deletions}`
+        : undefined;
       if (activityKind === "context-compaction") {
         return (
           <div
@@ -971,15 +1128,33 @@ export const Messages = memo(function Messages({
             <div className="flex w-full min-w-0 flex-col oai-tool-activity-stack-shell">
               <button
                 type="button"
-                className="group/section-toggle inline-flex w-fit max-w-full items-center self-start text-left oai-section-toggle oai-tool-activity-summary"
+                className={`group/section-toggle inline-flex w-fit max-w-full items-center self-start text-left oai-section-toggle oai-tool-activity-summary${singleFileChangeSummary ? " oai-tool-activity-file-change-summary" : ""}`}
                 onClick={() => toggleExpanded(group.id)}
                 aria-expanded={isExpanded}
                 aria-controls={activityBodyId}
+                aria-label={singleFileChangeAriaLabel}
                 data-oai-section-toggle
                 data-oai-tool-activity-summary
               >
                 <ActivityIcon className="oai-tool-activity-icon" size={13} aria-hidden />
-                <span className="oai-tool-activity-text">{group.summary}</span>
+                {singleFileChangeSummary ? (
+                  <span className="oai-tool-activity-text oai-tool-activity-file-change-text">
+                    <span className="oai-tool-activity-file-change-label">
+                      {singleFileChangeSummary.label}
+                    </span>
+                    <span className="oai-tool-activity-file-change-name">
+                      {singleFileChangeSummary.fileName}
+                    </span>
+                    <span className="oai-inline-diff-stat oai-inline-diff-stat-add">
+                      +{singleFileChangeSummary.additions}
+                    </span>
+                    <span className="oai-inline-diff-stat oai-inline-diff-stat-del">
+                      -{singleFileChangeSummary.deletions}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="oai-tool-activity-text">{group.summary}</span>
+                )}
                 {openAIItemTypes.map((itemType) => (
                   <span
                     key={itemType}
@@ -1013,7 +1188,13 @@ export const Messages = memo(function Messages({
                     className="oai-tool-activity-body-stack oai-tool-activity-stack"
                     data-oai-tool-activity-stack
                   >
-                    {group.items.map((item) => renderItem(item, !isFileContentItem(item)))}
+                    {group.items.map((item) =>
+                      renderItem(
+                        item,
+                        flattenSingleFileChange || !isFileContentItem(item),
+                        { hideSummary: flattenSingleFileChange },
+                      ),
+                    )}
                     <div className="group/end-resource relative oai-end-resource" data-end-resource>
                       <button
                         type="button"
@@ -1303,6 +1484,11 @@ export const Messages = memo(function Messages({
       const groupBodyId = `tool-group-${group.id}`;
       const ChevronIcon = isCollapsed ? ChevronDown : ChevronUp;
       const openAIItemTypes = getOpenAIActivityItemTypes(group.items);
+      const singleFileChangeSummary = getSingleFileChangeActivitySummary(group.items);
+      const flattenSingleFileChange = shouldFlattenSingleCompletedFileChange(
+        singleFileChangeSummary,
+        group.items,
+      );
       return (
         <div
           key={`tool-group-${group.id}`}
@@ -1356,7 +1542,13 @@ export const Messages = memo(function Messages({
           >
             {!isCollapsed ? (
               <>
-                {group.items.map((item) => renderItem(item, !isFileContentItem(item)))}
+                {group.items.map((item) =>
+                  renderItem(
+                    item,
+                    flattenSingleFileChange || !isFileContentItem(item),
+                    { hideSummary: flattenSingleFileChange },
+                  ),
+                )}
                 <div className="group/end-resource relative oai-end-resource" data-end-resource>
                   <button
                     type="button"
@@ -1510,7 +1702,11 @@ export const Messages = memo(function Messages({
     );
   };
 
-  const renderItem = (item: ConversationItem, defaultExpanded = false) => {
+  const renderItem = (
+    item: ConversationItem,
+    defaultExpanded = false,
+    options: { hideSummary?: boolean } = {},
+  ) => {
     if (item.kind === "message") {
       const isCopied = copiedMessageId === item.id;
       return (
@@ -1538,6 +1734,7 @@ export const Messages = memo(function Messages({
       <ActivityItemRow
         key={item.id}
         item={item}
+        hideSummary={options.hideSummary}
         isExpanded={isExpanded}
         onToggle={toggleExpanded}
         showMessageFilePath={showMessageFilePath}
@@ -1555,6 +1752,7 @@ export const Messages = memo(function Messages({
       className="messages messages-full"
       ref={containerRef}
       onScroll={handleScroll}
+      onWheelCapture={handleWheelCapture}
       data-thread-reverse-scroll="true"
       data-thread-scroll-scope={`${workspaceId ?? "no-workspace"}:${threadId ?? "draft"}`}
     >
@@ -1609,12 +1807,15 @@ export const Messages = memo(function Messages({
           <div
             className="messages-footer"
             data-thread-scroll-footer="true"
+            onWheel={handleFooterWheel}
             ref={footerRef}
           >
+            {scrollToBottomButton}
             {footerNode}
           </div>
         ) : null}
       </div>
+      {!footerNode ? scrollToBottomButton : null}
       {fileLinkMenu}
       {fileLinkPreview}
     </div>

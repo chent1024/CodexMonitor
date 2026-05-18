@@ -129,6 +129,7 @@
   margin: auto 0 0;
   padding: 0 0 env(safe-area-inset-bottom, 0px);
   background: var(--surface-composer-input, var(--surface-messages));
+  overflow: visible;
 }
 
 .messages-footer .composer {
@@ -139,6 +140,61 @@
 .messages-footer .chat-pane-composer-status {
   padding-left: 0;
   padding-right: 0;
+}
+
+.messages-scroll-to-bottom-rail {
+  position: absolute;
+  top: -58px;
+  inset-inline: 0;
+  z-index: 12;
+  display: flex;
+  justify-content: center;
+  height: 42px;
+  pointer-events: none;
+}
+
+.messages-scroll-to-bottom {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-messages) 92%, transparent);
+  color: var(--text-primary);
+  box-shadow:
+    0 14px 34px color-mix(in srgb, #000 16%, transparent),
+    0 1px 2px color-mix(in srgb, #000 10%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  pointer-events: auto;
+  contain: layout paint;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.messages-scroll-to-bottom:hover {
+  background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--border-strong) 65%, transparent);
+}
+
+.messages-scroll-to-bottom:focus-visible {
+  outline: 2px solid var(--border-focus, var(--border-strong));
+  outline-offset: 3px;
+}
+
+.messages-scroll-to-bottom svg {
+  pointer-events: none;
 }
 
 /* OpenAI message compatibility layer. Keep this block as the source of truth for
@@ -454,6 +510,39 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.oai-tool-activity-file-change-summary {
+  gap: 7px;
+  color: var(--codex-foreground-tertiary);
+  font-size: var(--message-ui-font-size-lg);
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.oai-tool-activity-file-change-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.oai-tool-activity-file-change-label {
+  flex: 0 0 auto;
+  color: var(--codex-foreground-tertiary);
+}
+
+.oai-tool-activity-file-change-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-token-link-foreground, #0969da);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oai-tool-activity-file-change-summary .oai-inline-diff-stat {
+  flex: 0 0 auto;
+  font-weight: 600;
 }
 
 .oai-tool-activity-icon {

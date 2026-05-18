@@ -101,6 +101,7 @@ use workspace_settings::apply_workspace_settings_update;
 
 const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:4732";
 const MAX_IN_FLIGHT_RPC_PER_CONNECTION: usize = 32;
+const DAEMON_EVENT_BROADCAST_CAPACITY: usize = 512;
 const DAEMON_NAME: &str = "codex-monitor-daemon";
 const RESTART_SAFE_IDLE_SHUTDOWN_CHECK_SECS: u64 = 30;
 const RESTART_SAFE_IDLE_SHUTDOWN_GRACE_SECS: u64 = 15 * 60;
@@ -2533,7 +2534,7 @@ fn main() {
         .expect("failed to build tokio runtime");
 
     runtime.block_on(async move {
-        let (events_tx, _) = broadcast::channel::<DaemonEvent>(2048);
+        let (events_tx, _) = broadcast::channel::<DaemonEvent>(DAEMON_EVENT_BROADCAST_CAPACITY);
         let restart_safe_sessions = Arc::new(RestartSafeSessionStore::new());
         let event_sink = DaemonEventSink {
             tx: events_tx.clone(),

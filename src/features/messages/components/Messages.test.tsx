@@ -2088,18 +2088,31 @@ describe("Messages", () => {
     expect(container.querySelector('[data-diffs-header="summary"]')?.classList.contains("group/custom-section-header")).toBe(true);
     expect(screen.getByRole("button", { name: /1 个文件已更改/i })).toBeTruthy();
     expect(container.querySelector(".oai-file-change-detail")).toBeNull();
-    const fileChangeGroupButton = screen.getByRole("button", { name: /已编辑 1 个文件/i });
+    const fileChangeGroupButton = screen.getByRole("button", {
+      name: /已编辑 Messages\.tsx \+2 -1/i,
+    });
+    expect(fileChangeGroupButton.classList.contains("oai-tool-activity-file-change-summary")).toBe(true);
+    expect(
+      fileChangeGroupButton.querySelector(".oai-tool-activity-file-change-label")?.textContent,
+    ).toBe("已编辑");
+    expect(
+      fileChangeGroupButton.querySelector(".oai-tool-activity-file-change-name")?.textContent,
+    ).toBe("Messages.tsx");
     expect(fileChangeGroupButton.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(fileChangeGroupButton);
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: /Messages\.tsx \+2 -1/i }).length).toBeGreaterThan(0);
+      expect(container.querySelector(".oai-file-diff-card")).toBeTruthy();
     });
     expect(
       container
         .querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)
         ?.getAttribute("data-oai-activity-detail-expanded"),
-    ).toBe("false");
-    expect(container.querySelector(".oai-file-diff-card")).toBeNull();
+    ).toBe("true");
+    expect(
+      container.querySelector(
+        '.oai-vscode-activity-summary[aria-label="Messages.tsx +2 -1"]',
+      ),
+    ).toBeNull();
     expect(container.querySelector("[data-collapsed-tool-activity-item].oai-tool-activity-row")).toBeTruthy();
     expect(
       container
@@ -2113,41 +2126,14 @@ describe("Messages", () => {
     ).toBe("STEPS_PROSE");
     expect(container.querySelector("[data-oai-tool-activity-offset]")).toBeTruthy();
     expect(container.querySelector("[data-oai-tool-activity-summary]")).toBeTruthy();
-    expect(
-      container
-        .querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)
-        ?.getAttribute("data-oai-activity-detail-expanded"),
-    ).toBe("false");
     expect(screen.queryByRole("button", { name: "Toggle tool details" })).toBeNull();
-    expect(container.querySelector(".oai-file-diff-card")).toBeNull();
-
-    let fileChangeSummaryButton: HTMLButtonElement | null = null;
-    await waitFor(() => {
-      fileChangeSummaryButton = container.querySelector(
-        '.oai-vscode-activity-summary[aria-label="Messages.tsx +2 -1"]',
-      );
-      expect(fileChangeSummaryButton).toBeTruthy();
-    });
     expect(container.querySelector("[data-collapsed-tool-activity-body]")).toBeTruthy();
     expect(container.querySelector("[data-oai-tool-activity-body]")).toBeTruthy();
     expect(container.querySelector(".oai-tool-activity-body-stack")).toBeTruthy();
-    expect(
-      container
-        .querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)
-        ?.getAttribute("data-oai-activity-detail-expanded"),
-    ).toBe("false");
     expect(container.querySelector("[data-oai-activity-detail-offset]")).toBeTruthy();
     expect(container.querySelector("[data-oai-activity-detail-stack]")).toBeTruthy();
-    expect(container.querySelector("[data-oai-activity-detail-content]")).toBeTruthy();
+    expect(container.querySelector("[data-oai-activity-detail-content]")).toBeNull();
     expect(container.querySelector(".tool-inline")).toBeNull();
-
-    if (!fileChangeSummaryButton) {
-      throw new Error("Missing file change summary button");
-    }
-    fireEvent.click(fileChangeSummaryButton);
-    await waitFor(() => {
-      expect(container.querySelector(".oai-file-diff-card")).toBeTruthy();
-    });
     expect(container.querySelector("[data-oai-activity-detail-body]")).toBeTruthy();
     expect(container.querySelector(".codex-review-diff-card")).toBeTruthy();
     expect(container.querySelector("[data-codex-review-diff-card]")).toBeTruthy();
@@ -2191,15 +2177,64 @@ describe("Messages", () => {
     expect(container.querySelector(".message-file-diff-card")).toBeNull();
     expect(container.querySelector(".message-file-diff-header")).toBeNull();
 
-    fireEvent.click(fileChangeSummaryButton);
+    fireEvent.click(fileChangeGroupButton);
     await waitFor(() => {
-      expect(
-        container
-          .querySelector(`[data-oai-tool-detail][data-tool-type="fileChange"]`)
-          ?.getAttribute("data-oai-activity-detail-expanded"),
-      ).toBe("false");
+      expect(container.querySelector(".oai-file-diff-card")).toBeNull();
       expect(container.querySelector("[data-collapsed-tool-activity-item]")).toBeTruthy();
     });
+  });
+
+  it("shows active file-change summaries as editing until they finish", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-running-file-change",
+        kind: "message",
+        role: "user",
+        text: "Patch the scroll behavior",
+      },
+      {
+        id: "tool-running-file-change",
+        kind: "tool",
+        toolType: "fileChange",
+        title: "File changes",
+        detail: "",
+        status: "running",
+        changes: [
+          {
+            path: "src/features/messages/components/useMessagesViewState.ts",
+            diff: [
+              "diff --git a/src/features/messages/components/useMessagesViewState.ts b/src/features/messages/components/useMessagesViewState.ts",
+              "@@ -1,1 +1,2 @@",
+              "+new line",
+            ].join("\n"),
+          },
+        ],
+      },
+      {
+        id: "assistant-running-file-change",
+        kind: "message",
+        role: "assistant",
+        text: "Updating scroll state.",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-running-file-change"
+        workspaceId="ws-1"
+        isThinking
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const fileChangeGroupButton = screen.getByRole("button", {
+      name: /正在编辑 useMessagesViewState\.ts \+1 -0/i,
+    });
+    expect(
+      fileChangeGroupButton.querySelector(".oai-tool-activity-file-change-label")?.textContent,
+    ).toBe("正在编辑");
   });
 
   it("deduplicates repeated file-change entries in the footer review summary", async () => {
@@ -3243,6 +3278,232 @@ describe("Messages", () => {
 
     expect(scrollNode.scrollTop).toBe(-300);
     requestAnimationFrameSpy.mockRestore();
+  });
+
+  it("scrolls transcript history when the wheel starts over the sticky footer", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-footer-wheel",
+        kind: "message",
+        role: "assistant",
+        text: "Scrollable transcript",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-footer-wheel"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        footerNode={<textarea aria-label="Composer footer" />}
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 900,
+    });
+    scrollNode.scrollTop = 0;
+
+    fireEvent.wheel(screen.getByLabelText("Composer footer"), { deltaY: -120 });
+
+    expect(scrollNode.scrollTop).toBe(-120);
+  });
+
+  it("shows a scroll-to-bottom affordance after scrolling up and returns to bottom on click", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-scroll-affordance",
+        kind: "message",
+        role: "assistant",
+        text: "Scrollable transcript",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-scroll-affordance"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        footerNode={<textarea aria-label="Composer footer affordance" />}
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 900,
+    });
+
+    expect(screen.queryByLabelText("Scroll to bottom")).toBeNull();
+
+    scrollNode.scrollTop = -180;
+    fireEvent.scroll(scrollNode);
+
+    const button = await screen.findByLabelText("Scroll to bottom");
+    const rail = button.closest("[data-thread-scroll-to-bottom-rail]");
+    expect(rail).not.toBeNull();
+    fireEvent.mouseEnter(button);
+    expect(screen.getByLabelText("Scroll to bottom")).toBe(button);
+    expect(button.closest("[data-thread-scroll-to-bottom-rail]")).toBe(rail);
+
+    fireEvent.click(button);
+
+    expect(scrollNode.scrollTop).toBe(0);
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Scroll to bottom")).toBeNull();
+    });
+  });
+
+  it("scrolls transcript history when the wheel starts over live command output", () => {
+    vi.useFakeTimers();
+    try {
+      const userItem: ConversationItem = {
+        id: "msg-live-wheel-user",
+        kind: "message",
+        role: "user",
+        text: "Build the app",
+      };
+      const commandItem: ConversationItem = {
+        id: "msg-live-wheel-command",
+        kind: "tool",
+        toolType: "commandExecution",
+        itemType: "exec",
+        title: "Command: npm run tauri:build",
+        detail: "/repo",
+        output: "line 1\nline 2",
+        status: "running",
+      };
+      const items: ConversationItem[] = [
+        userItem,
+        commandItem,
+      ];
+
+      const { container, rerender } = render(
+        <Messages
+          items={items}
+          threadId="thread-live-output-wheel"
+          workspaceId="ws-1"
+          isThinking
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+      let scrollTop = 0;
+      Object.defineProperty(scrollNode, "clientHeight", {
+        configurable: true,
+        get: () => 200,
+      });
+      Object.defineProperty(scrollNode, "scrollHeight", {
+        configurable: true,
+        get: () => 900,
+      });
+      Object.defineProperty(scrollNode, "scrollTop", {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value: number) => {
+          scrollTop = value;
+        },
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(700);
+      });
+
+      const outputLines = container.querySelector(
+        "[data-vscode-command-output-lines]",
+      ) as HTMLElement;
+      expect(outputLines).toBeTruthy();
+
+      fireEvent.wheel(outputLines, { deltaY: -120 });
+
+      expect(scrollNode.scrollTop).toBe(-120);
+      expect(screen.getByLabelText("Scroll to bottom")).toBeTruthy();
+
+      rerender(
+        <Messages
+          items={[
+            userItem,
+            {
+              ...commandItem,
+              output: "line 1\nline 2\nline 3",
+            },
+          ]}
+          threadId="thread-live-output-wheel"
+          workspaceId="ws-1"
+          isThinking
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      expect(scrollNode.scrollTop).toBe(-120);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("loads older turns when footer wheel reaches transcript top", async () => {
+    const onLoadOlderTurns = vi.fn(async () => {});
+    const items: ConversationItem[] = [
+      {
+        id: "msg-footer-wheel-older",
+        kind: "message",
+        role: "assistant",
+        text: "Current tail",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-footer-wheel-older"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        hasOlderTurns
+        onLoadOlderTurns={onLoadOlderTurns}
+        footerNode={<textarea aria-label="Composer footer older" />}
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      value: 900,
+    });
+    scrollNode.scrollTop = -620;
+
+    fireEvent.wheel(screen.getByLabelText("Composer footer older"), {
+      deltaY: -120,
+    });
+
+    await waitFor(() => {
+      expect(onLoadOlderTurns).toHaveBeenCalledTimes(1);
+    });
+    expect(scrollNode.scrollTop).toBe(-700);
   });
 
   it("restores non-bottom position when browser scrolls the focused footer input into view", () => {

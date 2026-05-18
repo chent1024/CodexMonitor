@@ -114,6 +114,25 @@ export function useThreadTurnEvents({
     [planByThreadRef],
   );
 
+  const clearThreadRuntimeState = useCallback(
+    (threadId: string, options?: { clearReviewing?: boolean }) => {
+      markProcessing(threadId, false);
+      if (options?.clearReviewing) {
+        markReviewing(threadId, false);
+      }
+      resetThreadTurnState(
+        {
+          hasOptimisticActiveTurnByThreadRef,
+          immediateActiveTurnIdByThreadRef,
+          pendingInterruptsRef,
+        },
+        threadId,
+      );
+      setActiveTurnId(threadId, null);
+    },
+    [markProcessing, markReviewing, pendingInterruptsRef, setActiveTurnId],
+  );
+
   const onThreadStarted = useCallback(
     (workspaceId: string, thread: Record<string, unknown>) => {
       const threadId = asString(thread.id);
@@ -275,26 +294,15 @@ export function useThreadTurnEvents({
       if (turnId && activeTurnId && turnId !== activeTurnId) {
         return;
       }
-      markProcessing(threadId, false);
-      resetThreadTurnState(
-        {
-          hasOptimisticActiveTurnByThreadRef,
-          immediateActiveTurnIdByThreadRef,
-          pendingInterruptsRef,
-        },
-        threadId,
-      );
-      setActiveTurnId(threadId, null);
+      clearThreadRuntimeState(threadId);
       if (shouldClearCompletedPlan(threadId, turnId)) {
         dispatch({ type: "clearThreadPlan", threadId });
       }
     },
     [
+      clearThreadRuntimeState,
       dispatch,
       getLatestKnownActiveTurnId,
-      markProcessing,
-      pendingInterruptsRef,
-      setActiveTurnId,
       shouldClearCompletedPlan,
     ],
   );
@@ -314,27 +322,17 @@ export function useThreadTurnEvents({
         statusType === "notloaded" ||
         statusType === "systemerror"
       ) {
-        markProcessing(threadId, false);
+        clearThreadRuntimeState(threadId);
         if (statusType === "notloaded") {
           setThreadLoaded(threadId, false);
           markReviewing(threadId, false);
         }
-        resetThreadTurnState(
-          {
-            hasOptimisticActiveTurnByThreadRef,
-            immediateActiveTurnIdByThreadRef,
-            pendingInterruptsRef,
-          },
-          threadId,
-        );
-        setActiveTurnId(threadId, null);
       }
     },
     [
+      clearThreadRuntimeState,
       markProcessing,
       markReviewing,
-      pendingInterruptsRef,
-      setActiveTurnId,
       setThreadLoaded,
     ],
   );
@@ -342,25 +340,44 @@ export function useThreadTurnEvents({
   const onThreadClosed = useCallback(
     (_workspaceId: string, threadId: string) => {
       setThreadLoaded(threadId, false);
-      markProcessing(threadId, false);
-      markReviewing(threadId, false);
-      resetThreadTurnState(
-        {
-          hasOptimisticActiveTurnByThreadRef,
-          immediateActiveTurnIdByThreadRef,
-          pendingInterruptsRef,
-        },
-        threadId,
-      );
-      setActiveTurnId(threadId, null);
+      clearThreadRuntimeState(threadId, { clearReviewing: true });
     },
-    [
-      markProcessing,
-      markReviewing,
-      pendingInterruptsRef,
-      setActiveTurnId,
-      setThreadLoaded,
-    ],
+    [clearThreadRuntimeState, setThreadLoaded],
+  );
+
+  const onThreadRealtimeClosed = useCallback(
+    (_workspaceId: string, threadId: string) => {
+      clearThreadRuntimeState(threadId, { clearReviewing: true });
+    },
+    [clearThreadRuntimeState],
+  );
+
+  const onThreadStreamError = useCallback(
+    (
+      _workspaceId: string,
+      threadId: string,
+      message: string,
+      options?: { willRetry?: boolean },
+    ) => {
+      if (!threadId || !message.trim()) {
+        return;
+      }
+      if (!options?.willRetry) {
+        clearThreadRuntimeState(threadId, { clearReviewing: true });
+      }
+      pushThreadErrorMessage(
+        threadId,
+        options?.willRetry ? `Stream error, retrying: ${message}` : `Stream error: ${message}`,
+        {
+          itemType: "stream-error",
+          title: options?.willRetry ? "Stream error, retrying" : "Stream error",
+          detail: "app-server",
+          status: options?.willRetry ? "retrying" : "failed",
+        },
+      );
+      safeMessageActivity();
+    },
+    [clearThreadRuntimeState, pushThreadErrorMessage, safeMessageActivity],
   );
 
   const onTurnPlanUpdated = useCallback(
@@ -442,17 +459,7 @@ export function useThreadTurnEvents({
         return;
       }
       dispatch({ type: "ensureThread", workspaceId, threadId });
-      markProcessing(threadId, false);
-      markReviewing(threadId, false);
-      resetThreadTurnState(
-        {
-          hasOptimisticActiveTurnByThreadRef,
-          immediateActiveTurnIdByThreadRef,
-          pendingInterruptsRef,
-        },
-        threadId,
-      );
-      setActiveTurnId(threadId, null);
+      clearThreadRuntimeState(threadId, { clearReviewing: true });
       const message = payload.message
         ? `Turn failed: ${payload.message}`
         : "Turn failed.";
@@ -465,13 +472,11 @@ export function useThreadTurnEvents({
       safeMessageActivity();
     },
     [
+      clearThreadRuntimeState,
       dispatch,
       getLatestKnownActiveTurnId,
-      markProcessing,
-      markReviewing,
       pushThreadErrorMessage,
       safeMessageActivity,
-      setActiveTurnId,
     ],
   );
 
@@ -484,6 +489,8 @@ export function useThreadTurnEvents({
     onTurnCompleted,
     onThreadStatusChanged,
     onThreadClosed,
+    onThreadRealtimeClosed,
+    onThreadStreamError,
     onTurnPlanUpdated,
     onTurnDiffUpdated,
     onThreadTokenUsageUpdated,

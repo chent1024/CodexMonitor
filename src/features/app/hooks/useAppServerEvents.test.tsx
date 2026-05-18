@@ -57,6 +57,7 @@ describe("useAppServerEvents", () => {
       onThreadUnarchived: vi.fn(),
       onBackgroundThreadAction: vi.fn(),
       onThreadStreamError: vi.fn(),
+      onThreadRealtimeClosed: vi.fn(),
       onAgentMessageDelta: vi.fn(),
       onReasoningSummaryBoundary: vi.fn(),
       onPlanDelta: vi.fn(),
@@ -158,6 +159,20 @@ describe("useAppServerEvents", () => {
       "thread-1",
       "socket closed",
       { willRetry: true },
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "thread/realtime/closed",
+          params: { threadId: "thread-1" },
+        },
+      });
+    });
+    expect(handlers.onThreadRealtimeClosed).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
     );
 
     act(() => {

@@ -540,6 +540,32 @@ describe("useThreadTurnEvents", () => {
     expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
   });
 
+  it("clears processing when thread status uses status field", () => {
+    const { result, markProcessing, setActiveTurnId } = makeOptions();
+
+    act(() => {
+      result.current.onThreadStatusChanged("ws-1", "thread-1", {
+        status: "completed",
+      });
+    });
+
+    expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+  });
+
+  it("normalizes running-like thread statuses as active", () => {
+    const { result, markProcessing, setActiveTurnId } = makeOptions();
+
+    act(() => {
+      result.current.onThreadStatusChanged("ws-1", "thread-1", {
+        state: "in_progress",
+      });
+    });
+
+    expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
+    expect(setActiveTurnId).not.toHaveBeenCalled();
+  });
+
   it("marks thread as unloaded when status changes to notLoaded", () => {
     const { result, setThreadLoaded, markReviewing } = makeOptions();
 
@@ -570,6 +596,81 @@ describe("useThreadTurnEvents", () => {
     expect(markReviewing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
+  });
+
+  it("clears runtime state when realtime stream closes", () => {
+    const {
+      result,
+      markProcessing,
+      markReviewing,
+      setActiveTurnId,
+      pendingInterruptsRef,
+    } = makeOptions({ pendingInterrupts: ["thread-1"] });
+
+    act(() => {
+      result.current.onThreadRealtimeClosed("ws-1", "thread-1");
+    });
+
+    expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(markReviewing).toHaveBeenCalledWith("thread-1", false);
+    expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
+  });
+
+  it("clears working state on non-retry realtime stream errors", () => {
+    const {
+      result,
+      markProcessing,
+      markReviewing,
+      setActiveTurnId,
+      pushThreadErrorMessage,
+      safeMessageActivity,
+    } = makeOptions();
+
+    act(() => {
+      result.current.onThreadStreamError("ws-1", "thread-1", "socket closed", {
+        willRetry: false,
+      });
+    });
+
+    expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(markReviewing).toHaveBeenCalledWith("thread-1", false);
+    expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "Stream error: socket closed",
+      {
+        itemType: "stream-error",
+        title: "Stream error",
+        detail: "app-server",
+        status: "failed",
+      },
+    );
+    expect(safeMessageActivity).toHaveBeenCalled();
+  });
+
+  it("keeps working state on retryable realtime stream errors", () => {
+    const { result, markProcessing, setActiveTurnId, pushThreadErrorMessage } =
+      makeOptions();
+
+    act(() => {
+      result.current.onThreadStreamError("ws-1", "thread-1", "socket closed", {
+        willRetry: true,
+      });
+    });
+
+    expect(markProcessing).not.toHaveBeenCalled();
+    expect(setActiveTurnId).not.toHaveBeenCalled();
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "Stream error, retrying: socket closed",
+      {
+        itemType: "stream-error",
+        title: "Stream error, retrying",
+        detail: "app-server",
+        status: "retrying",
+      },
+    );
   });
 
   it("clears the active plan when all plan steps are completed", () => {
