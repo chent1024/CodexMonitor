@@ -1,5 +1,5 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
-import ImagePlus from "lucide-react/dist/esm/icons/image-plus";
+import Paperclip from "lucide-react/dist/esm/icons/paperclip";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import {
   PopoverMenuItem,
@@ -45,9 +45,9 @@ export function ComposerMobileActionsMenu({
           <PopoverMenuItem
             onClick={handleMobileAttachClick}
             disabled={disabled || !onAddAttachment}
-            icon={<ImagePlus size={14} />}
+            icon={<Paperclip size={14} />}
           >
-            Add image
+            Add file
           </PopoverMenuItem>
         </PopoverSurface>
       )}

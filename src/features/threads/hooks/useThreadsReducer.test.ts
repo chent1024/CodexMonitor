@@ -48,6 +48,48 @@ describe("threadReducer", () => {
     }
   });
 
+  it("replaces an optimistic local user message when the server item arrives", () => {
+    const localMessage: ConversationItem = {
+      id: "local-user-message:thread-1:100",
+      kind: "message",
+      role: "user",
+      text: "Hello there",
+      itemType: "user-message",
+      images: ["local-image.png"],
+      attachments: [{ path: "/tmp/report.md", kind: "file" }],
+      sentAtMs: 100,
+    };
+    const next = threadReducer(
+      {
+        ...initialState,
+        itemsByThread: { "thread-1": [localMessage] },
+      },
+      {
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        item: {
+          id: "server-user-1",
+          kind: "message",
+          role: "user",
+          text: "Hello there",
+          itemType: "user-message",
+        },
+      },
+    );
+    const items = next.itemsByThread["thread-1"] ?? [];
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "server-user-1",
+      kind: "message",
+      role: "user",
+      text: "Hello there",
+      images: ["local-image.png"],
+      attachments: [{ path: "/tmp/report.md", kind: "file" }],
+      sentAtMs: 100,
+    });
+  });
+
   it("renames auto-generated thread from assistant output when no user message", () => {
     const threads: ThreadSummary[] = [
       { id: "thread-1", name: "New Agent", updatedAt: 1 },

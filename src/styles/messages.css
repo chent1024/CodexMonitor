@@ -132,6 +132,11 @@
   overflow: visible;
 }
 
+.messages-footer:has(.composer-attachment:hover),
+.messages-footer:has(.composer-attachment:focus-within) {
+  z-index: calc(var(--ds-layer-modal, 10000) - 20);
+}
+
 .messages-footer .composer {
   padding-left: 0;
   padding-right: 0;

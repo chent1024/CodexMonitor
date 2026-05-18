@@ -22,6 +22,7 @@ use crate::types::WorkspaceEntry;
 const LOGIN_START_TIMEOUT: Duration = Duration::from_secs(30);
 #[allow(dead_code)]
 const MAX_INLINE_IMAGE_BYTES: u64 = 50 * 1024 * 1024;
+const MAX_FILE_ATTACHMENT_BYTES: u64 = 512 * 1024 * 1024;
 const THREAD_LIST_SOURCE_KINDS: &[&str] = &[
     "cli",
     "vscode",
@@ -61,6 +62,35 @@ fn should_inline_image_path_for_codex(path: &str) -> bool {
         image_extension_for_path(path).as_deref(),
         Some("heic") | Some("heif")
     )
+}
+
+fn attachment_label_for_path(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| path.to_string())
+}
+
+fn file_attachment_path_reference(path: &str) -> Result<String, String> {
+    let normalized = normalize_file_path(path);
+    let label = attachment_label_for_path(&normalized);
+    let metadata = std::fs::symlink_metadata(&normalized)
+        .map_err(|err| format!("Failed to stat attached file at {normalized}: {err}"))?;
+    if metadata.file_type().is_symlink() {
+        return Err(format!("Attached file must not be a symlink: {normalized}"));
+    }
+    if !metadata.is_file() {
+        return Err(format!("Attached path is not a file: {normalized}"));
+    }
+    if metadata.len() > MAX_FILE_ATTACHMENT_BYTES {
+        return Err(format!(
+            "Attached file exceeds maximum size of {MAX_FILE_ATTACHMENT_BYTES} bytes: {normalized}"
+        ));
+    }
+    Ok(format!(
+        "Attached file: {label}\nPath: {normalized}\n\nRead this local file from the path when needed."
+    ))
 }
 
 #[cfg(target_os = "macos")]
@@ -316,7 +346,11 @@ pub(crate) async fn list_thread_turns_core(
         .await
 }
 
-fn list_thread_turns_params(thread_id: String, cursor: Option<String>, limit: Option<u32>) -> Value {
+fn list_thread_turns_params(
+    thread_id: String,
+    cursor: Option<String>,
+    limit: Option<u32>,
+) -> Value {
     json!({
         "threadId": thread_id,
         "cursor": cursor,
@@ -455,11 +489,15 @@ pub(crate) async fn set_thread_name_core(
         .await
 }
 
+struct TurnInputItems {
+    input: Vec<Value>,
+}
+
 fn build_turn_input_items(
     text: String,
     images: Option<Vec<String>>,
     app_mentions: Option<Vec<Value>>,
-) -> Result<Vec<Value>, String> {
+) -> Result<TurnInputItems, String> {
     let trimmed_text = text.trim();
     let mut input: Vec<Value> = Vec::new();
     if !trimmed_text.is_empty() {
@@ -481,8 +519,13 @@ fn build_turn_input_items(
                     "type": "image",
                     "url": read_image_as_data_url_core(trimmed)?,
                 }));
-            } else {
+            } else if image_mime_type_for_path(trimmed).is_some() {
                 input.push(json!({ "type": "localImage", "path": trimmed }));
+            } else {
+                input.push(json!({
+                    "type": "text",
+                    "text": file_attachment_path_reference(trimmed)?,
+                }));
             }
         }
     }
@@ -516,7 +559,7 @@ fn build_turn_input_items(
     if input.is_empty() {
         return Err("empty user message".to_string());
     }
-    Ok(input)
+    Ok(TurnInputItems { input })
 }
 
 pub(crate) fn insert_optional_nullable_string(
@@ -585,11 +628,11 @@ pub(crate) async fn send_user_message_core(
         &workspace_path,
         &thread_id,
     );
-    let input = build_turn_input_items(memory_turn.text, images, app_mentions)?;
+    let turn_input = build_turn_input_items(memory_turn.text, images, app_mentions)?;
 
     let mut params = Map::new();
     params.insert("threadId".to_string(), json!(thread_id));
-    params.insert("input".to_string(), json!(input));
+    params.insert("input".to_string(), json!(turn_input.input));
     params.insert("cwd".to_string(), json!(workspace_path));
     params.insert("approvalPolicy".to_string(), json!(approval_policy));
     params.insert("sandboxPolicy".to_string(), json!(sandbox_policy));
@@ -635,12 +678,12 @@ pub(crate) async fn turn_steer_core(
         &workspace_path,
         &thread_id,
     );
-    let input = build_turn_input_items(memory_turn.text, images, app_mentions)?;
-    let params = json!({
-        "threadId": thread_id,
-        "expectedTurnId": turn_id,
-        "input": input
-    });
+    let turn_input = build_turn_input_items(memory_turn.text, images, app_mentions)?;
+    let mut params = Map::new();
+    params.insert("threadId".to_string(), json!(thread_id));
+    params.insert("expectedTurnId".to_string(), json!(turn_id));
+    params.insert("input".to_string(), json!(turn_input.input));
+    let params = Value::Object(params);
     let response = session
         .send_request_for_workspace(&workspace_id, "turn/steer", params)
         .await?;
@@ -1112,6 +1155,76 @@ mod tests {
         assert!(should_inline_image_path_for_codex("/tmp/photo.heic"));
         assert!(should_inline_image_path_for_codex("/tmp/photo.HEIF"));
         assert!(!should_inline_image_path_for_codex("/tmp/photo.png"));
+    }
+
+    #[test]
+    fn build_turn_input_items_splits_images_and_file_attachments() {
+        let dir = std::env::temp_dir().join("codex_monitor_attachment_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let report_path = dir.join("report.srt");
+        std::fs::write(&report_path, "1\n00:00:00,000 --> 00:00:01,000\nhello\n").unwrap();
+        let report = report_path.display().to_string();
+
+        let turn_input = build_turn_input_items(
+            "see attached".to_string(),
+            Some(vec!["/tmp/photo.png".to_string(), report.clone()]),
+            None,
+        )
+        .expect("build input");
+
+        assert_eq!(
+            turn_input.input,
+            vec![
+                json!({ "type": "text", "text": "see attached" }),
+                json!({ "type": "localImage", "path": "/tmp/photo.png" }),
+                json!({
+                    "type": "text",
+                    "text": format!(
+                        "Attached file: report.srt\nPath: {report}\n\nRead this local file from the path when needed."
+                    ),
+                }),
+            ]
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn file_attachment_uses_path_reference_without_inlining_content() {
+        let dir = std::env::temp_dir().join("codex_monitor_attachment_path_reference_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("small.srt");
+        std::fs::write(&path, "secret subtitle content").unwrap();
+
+        let text = file_attachment_path_reference(path.to_str().unwrap()).unwrap();
+
+        assert!(text.contains("Attached file: small.srt"));
+        assert!(text.contains("Read this local file from the path when needed."));
+        assert!(text.contains(path.to_str().unwrap()));
+        assert!(!text.contains("secret subtitle content"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_file_attachment_rejects_files_over_codex_limit() {
+        let dir = std::env::temp_dir().join("codex_monitor_attachment_limit_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("too-large.srt");
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&path)
+            .unwrap();
+        file.set_len(MAX_FILE_ATTACHMENT_BYTES + 1).unwrap();
+
+        let err = file_attachment_path_reference(path.to_str().unwrap()).unwrap_err();
+
+        assert!(err.contains("Attached file exceeds maximum size"));
+        assert!(err.contains(&MAX_FILE_ATTACHMENT_BYTES.to_string()));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

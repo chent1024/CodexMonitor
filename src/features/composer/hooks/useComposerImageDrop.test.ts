@@ -155,6 +155,7 @@ describe("useComposerImageDrop", () => {
 
     const file = new File(["data"], "paste.png", { type: "image/png" });
     const item = {
+      kind: "file",
       type: "image/png",
       getAsFile: () => file,
     };
@@ -219,7 +220,7 @@ describe("useComposerImageDrop", () => {
       });
     });
 
-    expect(onAttachImages).toHaveBeenCalledWith(["/tmp/photo.png"]);
+    expect(onAttachImages).toHaveBeenCalledWith(["/tmp/photo.png", "/tmp/note.txt"]);
 
     hook.unmount();
   });

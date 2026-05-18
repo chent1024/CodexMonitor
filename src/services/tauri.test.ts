@@ -974,6 +974,62 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("rejects non-image local files before send_user_message in remote mode", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "is_macos_debug_build") {
+        return false;
+      }
+      if (command === "get_app_settings") {
+        return { backendMode: "remote" };
+      }
+      if (command === "is_mobile_runtime") {
+        return false;
+      }
+      return undefined;
+    });
+
+    await expect(
+      sendUserMessage("ws-4", "thread-1", "hello", {
+        images: ["/tmp/report.md"],
+      }),
+    ).rejects.toThrow("Local file attachments are not supported");
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "send_user_message",
+      expect.anything(),
+    );
+  });
+
+  it("keeps non-image local files in local backend mode", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "is_macos_debug_build") {
+        return false;
+      }
+      if (command === "get_app_settings") {
+        return { backendMode: "local" };
+      }
+      if (command === "is_mobile_runtime") {
+        return false;
+      }
+      return undefined;
+    });
+
+    await sendUserMessage("ws-4", "thread-1", "hello", {
+      images: ["/tmp/report.md"],
+    });
+
+    expect(invokeMock).toHaveBeenLastCalledWith("send_user_message", {
+      workspaceId: "ws-4",
+      threadId: "thread-1",
+      text: "hello",
+      model: null,
+      effort: null,
+      accessMode: null,
+      images: ["/tmp/report.md"],
+    });
+  });
+
   it("includes app mentions when sending a message", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({});

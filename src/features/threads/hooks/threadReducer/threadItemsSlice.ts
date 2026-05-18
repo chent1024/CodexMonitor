@@ -19,6 +19,8 @@ import {
   prefersUpdatedSort,
 } from "./common";
 
+const LOCAL_USER_MESSAGE_ID_PREFIX = "local-user-message:";
+
 const preparedThreadItems = (state: ThreadState, items: ConversationItem[]) =>
   prepareThreadItems(items, { maxItemsPerThread: state.maxItemsPerThread });
 
@@ -30,6 +32,39 @@ const replaceThreadItem = (
   const next = [...items];
   next[index] = item;
   return next;
+};
+
+const replaceMatchingLocalUserMessage = (
+  list: ConversationItem[],
+  item: ConversationItem,
+) => {
+  if (item.kind !== "message" || item.role !== "user") {
+    return null;
+  }
+  if (item.id.startsWith(LOCAL_USER_MESSAGE_ID_PREFIX)) {
+    return null;
+  }
+  const index = list.findIndex(
+    (entry) =>
+      entry.kind === "message" &&
+      entry.role === "user" &&
+      entry.id.startsWith(LOCAL_USER_MESSAGE_ID_PREFIX) &&
+      entry.text === item.text,
+  );
+  if (index < 0) {
+    return null;
+  }
+  const existing = list[index];
+  if (existing.kind !== "message") {
+    return null;
+  }
+  return replaceThreadItem(list, index, {
+    ...existing,
+    ...item,
+    images: item.images?.length ? item.images : existing.images,
+    attachments: item.attachments?.length ? item.attachments : existing.attachments,
+    sentAtMs: item.sentAtMs ?? existing.sentAtMs,
+  });
 };
 
 type StreamDeltaBatchContext = {
@@ -459,7 +494,10 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         }
       }
       const nextItem = ensureUniqueReviewId(list, item);
-      const updatedItems = preparedThreadItems(state, upsertItem(list, nextItem));
+      const updatedItems = preparedThreadItems(
+        state,
+        replaceMatchingLocalUserMessage(list, nextItem) ?? upsertItem(list, nextItem),
+      );
       let nextThreadsByWorkspace = state.threadsByWorkspace;
       if (isUserMessage) {
         const threads = state.threadsByWorkspace[action.workspaceId] ?? [];

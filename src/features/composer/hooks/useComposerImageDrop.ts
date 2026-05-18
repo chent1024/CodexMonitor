@@ -1,23 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { subscribeWindowDragDrop } from "../../../services/dragDrop";
-
-const imageExtensions = [
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".webp",
-  ".bmp",
-  ".tiff",
-  ".tif",
-  ".heic",
-  ".heif",
-];
-
-function isImagePath(path: string) {
-  const lower = path.toLowerCase();
-  return imageExtensions.some((ext) => lower.endsWith(ext));
-}
+import { isImageAttachmentPath } from "../utils/attachmentPaths";
 
 function isDragFileTransfer(types: readonly string[] | undefined) {
   if (!types || types.length === 0) {
@@ -74,6 +57,10 @@ type UseComposerImageDropArgs = {
   onAttachImages?: (paths: string[]) => void;
 };
 
+function filePath(file: File) {
+  return ((file as File & { path?: string }).path ?? "").trim();
+}
+
 export function useComposerImageDrop({
   disabled,
   onAttachImages,
@@ -114,12 +101,11 @@ export function useComposerImageDrop({
         if (!isInside) {
           return;
         }
-        const imagePaths = (event.payload.paths ?? [])
+        const filePaths = (event.payload.paths ?? [])
           .map((path) => path.trim())
-          .filter(Boolean)
-          .filter(isImagePath);
-        if (imagePaths.length > 0) {
-          onAttachImages?.(imagePaths);
+          .filter(Boolean);
+        if (filePaths.length > 0) {
+          onAttachImages?.(filePaths);
         }
       }
     });
@@ -165,12 +151,9 @@ export function useComposerImageDrop({
       .filter((item) => item.kind === "file")
       .map((item) => item.getAsFile())
       .filter((file): file is File => Boolean(file));
-    const filePaths = [...files, ...itemFiles]
-      .map((file) => (file as File & { path?: string }).path ?? "")
-      .filter(Boolean);
-    const imagePaths = filePaths.filter(isImagePath);
-    if (imagePaths.length > 0) {
-      onAttachImages?.(imagePaths);
+    const filePaths = [...files, ...itemFiles].map(filePath).filter(Boolean);
+    if (filePaths.length > 0) {
+      onAttachImages?.(filePaths);
       return;
     }
     const fileImages = [...files, ...itemFiles].filter((file) =>
@@ -190,19 +173,21 @@ export function useComposerImageDrop({
       return;
     }
     const items = Array.from(event.clipboardData?.items ?? []);
-    const imageItems = items.filter((item) => item.type.startsWith("image/"));
-    if (imageItems.length === 0) {
+    const fileItems = items
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    const filePaths = fileItems.map(filePath).filter(Boolean);
+    const imageFiles = fileItems.filter((file) =>
+      file.type.startsWith("image/") || isImageAttachmentPath(file.name),
+    );
+    if (filePaths.length === 0 && imageFiles.length === 0) {
       return;
     }
     event.preventDefault();
-    const files = imageItems
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => Boolean(file));
-    if (!files.length) {
-      return;
-    }
+    const dataUrlFiles = imageFiles.filter((file) => !filePath(file));
     const dataUrls = await Promise.all(
-      files.map(
+      dataUrlFiles.map(
         (file) =>
           new Promise<string>((resolve) => {
             const reader = new FileReader();
@@ -213,7 +198,7 @@ export function useComposerImageDrop({
           }),
       ),
     );
-    const valid = dataUrls.filter(Boolean);
+    const valid = [...filePaths, ...dataUrls.filter(Boolean)];
     if (valid.length > 0) {
       onAttachImages?.(valid);
     }

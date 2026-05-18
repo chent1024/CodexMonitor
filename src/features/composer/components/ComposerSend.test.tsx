@@ -60,7 +60,14 @@ function ComposerHarness({
   canStop = false,
 }: HarnessProps) {
   const [draftText, setDraftText] = useState("");
+  const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const handleAttachImages = (paths: string[]) => {
+    setAttachedImages((prev) => [
+      ...prev,
+      ...paths.filter((path) => !prev.includes(path)),
+    ]);
+  };
 
   return (
     <Composer
@@ -91,9 +98,29 @@ function ComposerHarness({
       files={[]}
       draftText={draftTextProp ?? draftText}
       onDraftChange={onDraftChange ?? setDraftText}
+      attachedImages={attachedImages}
+      onAttachImages={handleAttachImages}
+      onRemoveImage={(path) =>
+        setAttachedImages((prev) => prev.filter((item) => item !== path))
+      }
       textareaRef={textareaRef}
     />
   );
+}
+
+function dispatchDrop(
+  element: HTMLElement,
+  files: File[],
+  items: Array<{ kind: string; getAsFile: () => File | null }> = [],
+) {
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", {
+    value: {
+      files,
+      items,
+    },
+  });
+  element.dispatchEvent(event);
 }
 
 describe("Composer send triggers", () => {
@@ -151,6 +178,28 @@ describe("Composer send triggers", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith("from button", [], undefined, "default");
+  });
+
+  it("passes attached images through on send", async () => {
+    const onSend = vi.fn();
+    render(<ComposerHarness onSend={onSend} />);
+
+    const textarea = screen.getByRole("textbox");
+    const image = new File(["data"], "photo.png", { type: "image/png" });
+    (image as File & { path?: string }).path = "/tmp/photo.png";
+
+    await act(async () => {
+      dispatchDrop(textarea, [image]);
+    });
+    fireEvent.click(screen.getByLabelText("Send"));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith(
+      "",
+      ["/tmp/photo.png"],
+      undefined,
+      "default",
+    );
   });
 
   it("shows the fast-mode indicator when enabled", () => {

@@ -116,6 +116,12 @@ function getAttachmentNames(container: HTMLElement) {
   ).map((node) => node.textContent ?? "");
 }
 
+function getImageAttachmentButtons(container: HTMLElement) {
+  return Array.from(
+    container.querySelectorAll(".composer-attachment-open"),
+  );
+}
+
 function getTextarea(container: HTMLElement) {
   const textarea = container.querySelector("textarea");
   if (!textarea) {
@@ -141,7 +147,7 @@ function dispatchDrop(
 
 function dispatchPaste(
   element: HTMLElement,
-  items: Array<{ type: string; getAsFile: () => File | null }>,
+  items: Array<{ kind?: string; type: string; getAsFile: () => File | null }>,
 ) {
   const event = new Event("paste", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "clipboardData", {
@@ -224,7 +230,7 @@ describe("Composer attachments integration", () => {
     harness.unmount();
   });
 
-  it("attaches dropped image files, filters non-images, and dedupes paths", async () => {
+  it("attaches dropped files and dedupes paths", async () => {
     const harness = renderComposerHarness({
       activeThreadId: "thread-1",
       activeWorkspaceId: "ws-1",
@@ -240,7 +246,8 @@ describe("Composer attachments integration", () => {
       dispatchDrop(textarea, [image, nonImage]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["photo.png"]);
+    expect(getAttachmentNames(harness.container)).toEqual(["notes.txt"]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(1);
 
     const imageTwo = new File(["data"], "second.jpg", { type: "image/jpeg" });
     (imageTwo as File & { path?: string }).path = "/tmp/second.jpg";
@@ -249,10 +256,8 @@ describe("Composer attachments integration", () => {
       dispatchDrop(textarea, [image, imageTwo]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual([
-      "photo.png",
-      "second.jpg",
-    ]);
+    expect(getAttachmentNames(harness.container)).toEqual(["notes.txt"]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(2);
 
     harness.unmount();
   });
@@ -266,17 +271,63 @@ describe("Composer attachments integration", () => {
     const textarea = getTextarea(harness.container);
 
     const image = new File(["data"], "paste.png", { type: "image/png" });
-    const imageItem = { type: "image/png", getAsFile: () => image };
-    const textItem = { type: "text/plain", getAsFile: () => null };
+    const imageItem = { kind: "file", type: "image/png", getAsFile: () => image };
+    const textItem = { kind: "string", type: "text/plain", getAsFile: () => null };
 
     await act(async () => {
       dispatchPaste(textarea, [textItem, imageItem]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["Pasted image"]);
+    expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(1);
 
     harness.unmount();
     restoreFileReader();
+  });
+
+  it("opens image attachments in the fullscreen preview", async () => {
+    const harness = renderComposerHarness({
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "ws-1",
+    });
+    const textarea = getTextarea(harness.container);
+    const image = new File(["data"], "photo.png", { type: "image/png" });
+    (image as File & { path?: string }).path = "/tmp/photo.png";
+
+    await act(async () => {
+      dispatchDrop(textarea, [image]);
+    });
+
+    const openButton = harness.container.querySelector(
+      ".composer-attachment-open",
+    );
+    if (!openButton) {
+      throw new Error("Attachment open button missing");
+    }
+
+    act(() => {
+      (openButton as HTMLButtonElement).click();
+    });
+
+    expect(document.body.querySelector(".oai-message-image-lightbox")).not.toBeNull();
+    expect(
+      document.body.querySelector(".oai-message-image-lightbox img")?.getAttribute("src"),
+    ).toBe("tauri:///tmp/photo.png");
+
+    const closeButton = document.body.querySelector(
+      ".oai-message-image-lightbox-close",
+    );
+    if (!closeButton) {
+      throw new Error("Lightbox close button missing");
+    }
+
+    act(() => {
+      (closeButton as HTMLButtonElement).click();
+    });
+
+    expect(document.body.querySelector(".oai-message-image-lightbox")).toBeNull();
+
+    harness.unmount();
   });
 
   it("removes attachments and clears drafts", async () => {
@@ -295,10 +346,8 @@ describe("Composer attachments integration", () => {
       dispatchDrop(textarea, [first, second]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual([
-      "first.png",
-      "second.png",
-    ]);
+    expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(2);
 
     const removeButtons = harness.container.querySelectorAll(
       ".composer-attachment-remove",
@@ -309,7 +358,8 @@ describe("Composer attachments integration", () => {
       (removeButtons[0] as HTMLButtonElement).click();
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["second.png"]);
+    expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(1);
 
     const clearButton = harness.container.querySelector(
       "[data-testid='clear-images']",
@@ -323,6 +373,7 @@ describe("Composer attachments integration", () => {
     });
 
     expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(0);
 
     harness.unmount();
   });
@@ -343,7 +394,8 @@ describe("Composer attachments integration", () => {
       dispatchDrop(textarea, [threadOneImage]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["thread-one.png"]);
+    expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(1);
 
     harness.rerender({
       activeThreadId: "thread-2",
@@ -351,6 +403,7 @@ describe("Composer attachments integration", () => {
     });
 
     expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(0);
 
     const threadTwoImage = new File(["data"], "thread-two.png", {
       type: "image/png",
@@ -361,14 +414,16 @@ describe("Composer attachments integration", () => {
       dispatchDrop(getTextarea(harness.container), [threadTwoImage]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["thread-two.png"]);
+    expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(1);
 
     harness.rerender({
       activeThreadId: "thread-1",
       activeWorkspaceId: "ws-1",
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["thread-one.png"]);
+    expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(1);
 
     harness.unmount();
   });
@@ -389,7 +444,8 @@ describe("Composer attachments integration", () => {
       dispatchDrop(textarea, [draftImage]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["draft-one.png"]);
+    expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(1);
 
     harness.rerender({
       activeThreadId: null,
@@ -397,13 +453,15 @@ describe("Composer attachments integration", () => {
     });
 
     expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(0);
 
     harness.rerender({
       activeThreadId: null,
       activeWorkspaceId: "ws-1",
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["draft-one.png"]);
+    expect(getAttachmentNames(harness.container)).toEqual([]);
+    expect(getImageAttachmentButtons(harness.container)).toHaveLength(1);
 
     harness.unmount();
   });

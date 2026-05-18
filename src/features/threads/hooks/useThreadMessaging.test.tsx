@@ -158,6 +158,76 @@ describe("useThreadMessaging telemetry", () => {
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", "thread-1");
   });
 
+  it("optimistically inserts the user message before runtime preflight completes", async () => {
+    let resolvePreflight: () => void = () => undefined;
+    const ensureWorkspaceRuntimeCodexArgs = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePreflight = resolve;
+        }),
+    );
+    const dispatch = vi.fn();
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        ensureWorkspaceRuntimeCodexArgs,
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    const sendPromise = result.current.sendUserMessageToThread(
+      workspace,
+      "thread-1",
+      "hello",
+      [],
+    );
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: expect.objectContaining({
+        id: expect.stringMatching(/^local-user-message:thread-1:/),
+        kind: "message",
+        role: "user",
+        text: "hello",
+        itemType: "user-message",
+      }),
+      hasCustomName: false,
+    });
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+
+    resolvePreflight();
+    await act(async () => {
+      await sendPromise;
+    });
+  });
+
   it("forwards explicit app mentions to turn/start", async () => {
     const { result } = renderHook(() =>
       useThreadMessaging({

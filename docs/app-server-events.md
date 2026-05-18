@@ -182,6 +182,7 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
 
 Notes:
 - `turn/start` now forwards the optional `serviceTier` override (`"fast"` for `/fast`, `null` for default/off) alongside `model`, `effort`, and `collaborationMode`.
+- Codex app-server v2 `turn/start` / `turn/steer` does not expose a generic file `attachments` field. CodexMonitor sends image paths as `localImage` inputs. Non-image local files are passed as model-visible local path references up to Codex's 512 MiB local file limit so the agent can read them from disk when needed.
 - `thread/turns/list` requests `itemsView: "items"` so paged history can render persisted tools, file edits, reasoning, and other non-text items instead of only summary user/assistant text.
 - CodexMonitor does not use a real `thread/live/subscribe` app-server method.
   It follows the VS Code extension pattern: `thread/resume` owns the active

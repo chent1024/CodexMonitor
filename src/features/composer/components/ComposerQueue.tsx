@@ -44,12 +44,12 @@ export function ComposerQueue({
 function getQueuedMessageLabel(item: QueuedMessage) {
   const fallback = item.images?.length
     ? item.images.length === 1
-      ? "Image"
-      : "Images"
+      ? "Attachment"
+      : "Attachments"
     : "";
   const text = item.text || fallback;
   const imageSuffix = item.images?.length
-    ? ` · ${item.images.length} image${item.images.length === 1 ? "" : "s"}`
+    ? ` · ${item.images.length} attachment${item.images.length === 1 ? "" : "s"}`
     : "";
   return `${text}${imageSuffix}`;
 }

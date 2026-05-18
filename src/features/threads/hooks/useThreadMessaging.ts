@@ -41,6 +41,9 @@ import {
   resolveSendMessageOptions,
   type SendMessageOptions,
 } from "./threadMessagingHelpers";
+import { splitAttachmentPaths } from "@/features/composer/utils/attachmentPaths";
+
+const LOCAL_USER_MESSAGE_ID_PREFIX = "local-user-message:";
 
 type UseThreadMessagingOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -193,6 +196,8 @@ export function useThreadMessaging({
       });
       const timestamp = Date.now();
       const customThreadName = getCustomName(workspace.id, threadId) ?? null;
+      const { images: optimisticImages, files: optimisticFiles } =
+        splitAttachmentPaths(images);
       recordThreadActivity(workspace.id, threadId, timestamp);
       dispatch({
         type: "setThreadTimestamp",
@@ -200,6 +205,24 @@ export function useThreadMessaging({
         threadId,
         timestamp,
       });
+      if (!shouldSteer) {
+        dispatch({
+          type: "upsertItem",
+          workspaceId: workspace.id,
+          threadId,
+          item: {
+            id: `${LOCAL_USER_MESSAGE_ID_PREFIX}${threadId}:${timestamp}`,
+            kind: "message",
+            role: "user",
+            text: finalText,
+            itemType: "user-message",
+            images: optimisticImages.length > 0 ? optimisticImages : undefined,
+            attachments: optimisticFiles.map((path) => ({ path, kind: "file" })),
+            sentAtMs: timestamp,
+          },
+          hasCustomName: Boolean(customThreadName),
+        });
+      }
       markProcessing(threadId, true);
       safeMessageActivity();
       onDebug?.({

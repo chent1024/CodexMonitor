@@ -79,6 +79,14 @@ export async function pickImageFiles(): Promise<string[]> {
   return Array.isArray(selection) ? selection : [selection];
 }
 
+export async function pickAttachmentFiles(): Promise<string[]> {
+  const selection = await open({ multiple: true });
+  if (!selection) {
+    return [];
+  }
+  return Array.isArray(selection) ? selection : [selection];
+}
+
 export async function exportMarkdownFile(
   content: string,
   defaultFileName = "plan.md",
@@ -410,6 +418,22 @@ function isInlineImageUrl(image: string) {
   );
 }
 
+function isLocalImagePath(path: string) {
+  const lower = path.toLowerCase();
+  return [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".tiff",
+    ".tif",
+    ".heic",
+    ".heif",
+  ].some((ext) => lower.endsWith(ext));
+}
+
 async function convertImagesToDataUrls(images: string[]): Promise<string[]> {
   return Promise.all(
     images.map(async (image) => {
@@ -444,6 +468,12 @@ async function normalizeImagesForRpc(images?: string[]): Promise<string[] | null
   }
   if (settings.backendMode !== "remote" && !mobileRuntime) {
     return images;
+  }
+  const unsupportedLocalFiles = images.filter(
+    (image) => !isInlineImageUrl(image) && !isLocalImagePath(image),
+  );
+  if (unsupportedLocalFiles.length > 0) {
+    throw new Error("Local file attachments are not supported in remote backend mode.");
   }
   return convertImagesToDataUrls(images);
 }
