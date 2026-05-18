@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { ModelOption, WorkspaceInfo } from "../../../types";
 import type { WorkspaceRunMode } from "../hooks/useWorkspaceHome";
 import Laptop from "lucide-react/dist/esm/icons/laptop";
@@ -58,6 +58,9 @@ export function WorkspaceHomeRunControls({
 }: WorkspaceHomeRunControlsProps) {
   const runModeMenu = useMenuController();
   const modelsMenu = useMenuController();
+  const [activeModelSubmenuId, setActiveModelSubmenuId] = useState<string | null>(
+    null,
+  );
   const {
     isOpen: runModeOpen,
     containerRef: runModeRef,
@@ -82,11 +85,19 @@ export function WorkspaceHomeRunControls({
   const toggleRunModeMenu = useCallback(() => {
     toggleRunModeOpen();
     closeModels();
+    setActiveModelSubmenuId(null);
   }, [closeModels, toggleRunModeOpen]);
   const toggleModelsMenu = useCallback(() => {
+    if (modelsOpen) {
+      setActiveModelSubmenuId(null);
+    }
     toggleModelsOpen();
     closeRunMode();
-  }, [closeRunMode, toggleModelsOpen]);
+  }, [closeRunMode, modelsOpen, toggleModelsOpen]);
+  const closeModelsMenu = useCallback(() => {
+    closeModels();
+    setActiveModelSubmenuId(null);
+  }, [closeModels]);
 
   return (
     <div className="workspace-home-controls">
@@ -180,17 +191,32 @@ export function WorkspaceHomeRunControls({
               ? model.id === selectedModelId
               : Boolean(modelSelections[model.id]);
           const count = modelSelections[model.id] ?? 1;
+          const isSubmenuOpen = activeModelSubmenuId === model.id;
           return (
             <div
               key={model.id}
-              className={`workspace-home-model-option${isSelected ? " is-active" : ""}`}
+              className={`workspace-home-model-option${
+                isSelected ? " is-active" : ""
+              }${isSubmenuOpen ? " is-submenu-open" : ""}`}
+              onMouseEnter={() => setActiveModelSubmenuId(model.id)}
+              onMouseLeave={() => setActiveModelSubmenuId(null)}
+              onFocus={() => setActiveModelSubmenuId(model.id)}
+              onBlur={(event) => {
+                const nextFocus = event.relatedTarget;
+                if (
+                  !(nextFocus instanceof Node) ||
+                  !event.currentTarget.contains(nextFocus)
+                ) {
+                  setActiveModelSubmenuId(null);
+                }
+              }}
             >
               <PopoverMenuItem
                 className="open-app-option workspace-home-model-toggle"
                 onClick={() => {
                   if (runMode === "local") {
                     onSelectModel(model.id);
-                    closeModels();
+                    closeModelsMenu();
                     return;
                   }
                   onToggleModel(model.id);
@@ -206,23 +232,25 @@ export function WorkspaceHomeRunControls({
                     <span>{count}x</span>
                     <ChevronRight size={14} />
                   </div>
-                  <div className="workspace-home-model-submenu ds-popover">
-                    {INSTANCE_OPTIONS.map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        className={`workspace-home-model-submenu-item${
-                          option === count ? " is-active" : ""
-                        }`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onModelCountChange(model.id, option);
-                        }}
-                      >
-                        {option}x
-                      </button>
-                    ))}
-                  </div>
+                  {isSubmenuOpen && (
+                    <div className="workspace-home-model-submenu ds-popover">
+                      {INSTANCE_OPTIONS.map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          className={`workspace-home-model-submenu-item${
+                            option === count ? " is-active" : ""
+                          }`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onModelCountChange(model.id, option);
+                          }}
+                        >
+                          {option}x
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </div>

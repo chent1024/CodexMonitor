@@ -291,11 +291,12 @@
   left: calc(100% + 6px);
   min-width: 80px;
   padding: 6px;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateX(-4px);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
   transition: opacity 120ms ease, transform 120ms ease;
+  animation: none;
   z-index: 6;
 }
 
@@ -306,14 +307,6 @@
   top: 0;
   width: 8px;
   height: 100%;
-}
-
-.workspace-home-model-option:hover .workspace-home-model-submenu,
-.workspace-home-model-option:focus-within .workspace-home-model-submenu {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: translateX(0);
 }
 
 .workspace-home-model-submenu-item {
