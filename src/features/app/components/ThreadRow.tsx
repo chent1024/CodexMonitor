@@ -41,6 +41,19 @@ function formatSubagentRoleLabel(role: string | null | undefined) {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+function searchMatchKindLabel(kind: ThreadSummary["searchMatchKind"]) {
+  switch (kind) {
+    case "title":
+      return "标题";
+    case "content":
+      return "内容";
+    case "token":
+      return "索引";
+    default:
+      return "命中";
+  }
+}
+
 type ThreadRowProps = {
   thread: ThreadSummary;
   depth: number;
@@ -128,12 +141,17 @@ export const ThreadRow = memo(function ThreadRow({
     : undefined;
   const effectiveWorkspaceLabel = depth > 0 ? null : workspaceLabel;
   const contextLabel = badge ?? modelBadge;
+  const searchSnippet = thread.searchSnippet?.trim() || null;
+  const searchMatchLabel = searchSnippet
+    ? searchMatchKindLabel(thread.searchMatchKind)
+    : null;
   const canPin = depth === 0;
   const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
   const canToggleSubagents = hasSubagentChildren && Boolean(onToggleSubagents);
   const hasDetails = Boolean(
     effectiveWorkspaceLabel ||
       subagentLabel ||
+      searchSnippet ||
       contextLabel ||
       statusLabel ||
       (showPinnedLabel && isPinned),
@@ -225,6 +243,14 @@ export const ThreadRow = memo(function ThreadRow({
               </span>
             )}
             {showPinnedLabel && isPinned && <span className="thread-pinned-label">Pinned</span>}
+          </div>
+        )}
+        {searchSnippet && (
+          <div className="thread-search-match" title={searchSnippet}>
+            {searchMatchLabel && (
+              <span className="thread-search-match-kind">{searchMatchLabel}</span>
+            )}
+            <span className="thread-search-snippet">{searchSnippet}</span>
           </div>
         )}
       </div>

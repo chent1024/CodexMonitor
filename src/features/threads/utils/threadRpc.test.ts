@@ -68,6 +68,53 @@ describe("threadRpc", () => {
     });
   });
 
+  it("marks summary snapshots with completed latest turn status as confidently idle", () => {
+    const state = getResumedTurnState({
+      id: "thread-1",
+      resumeState: "resumed",
+      turnCount: 2,
+      latestTurnStatus: "completed",
+    });
+
+    expect(state).toEqual({
+      activeTurnId: null,
+      activeTurnStartedAtMs: null,
+      confidentNoActiveTurn: true,
+    });
+  });
+
+  it("honors VS Code sidebar resume-state semantics for needs-resume threads", () => {
+    const state = getResumedTurnState({
+      id: "thread-1",
+      resumeState: "needs_resume",
+      turnCount: 2,
+      latestTurnStatus: "inProgress",
+    });
+
+    expect(state).toEqual({
+      activeTurnId: null,
+      activeTurnStartedAtMs: null,
+      confidentNoActiveTurn: true,
+    });
+  });
+
+  it("reads nested latest-turn status display snapshots", () => {
+    const state = getResumedTurnState({
+      id: "thread-1",
+      task_status_display: {
+        latest_turn_status_display: {
+          turn_status: "in_progress",
+        },
+      },
+    });
+
+    expect(state).toEqual({
+      activeTurnId: null,
+      activeTurnStartedAtMs: null,
+      confidentNoActiveTurn: false,
+    });
+  });
+
   it("keeps confidence low when turn statuses are unknown", () => {
     const state = getResumedTurnState({
       id: "thread-1",

@@ -288,6 +288,140 @@ function classifyTurnStatus(status: string): TurnStatusKind {
   return "unknown";
 }
 
+function hasOwn(value: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function nestedRecord(
+  value: Record<string, unknown>,
+  ...keys: string[]
+): Record<string, unknown> | null {
+  for (const key of keys) {
+    const candidate = value[key];
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+      return candidate as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function optionalString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function optionalNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function getLatestTurnStatus(thread: Record<string, unknown>): string | null {
+  const direct = optionalString(
+    thread.latestTurnStatus ??
+      thread.latest_turn_status ??
+      thread.turnStatus ??
+      thread.turn_status,
+  );
+  if (direct) {
+    return direct;
+  }
+  const latestDisplay = nestedRecord(
+    thread,
+    "latestTurnStatusDisplay",
+    "latest_turn_status_display",
+  );
+  const displayStatus = optionalString(
+    latestDisplay?.turnStatus ??
+      latestDisplay?.turn_status ??
+      latestDisplay?.status,
+  );
+  if (displayStatus) {
+    return displayStatus;
+  }
+  const taskStatusDisplay = nestedRecord(thread, "taskStatusDisplay", "task_status_display");
+  const nestedDisplay =
+    taskStatusDisplay &&
+    nestedRecord(taskStatusDisplay, "latestTurnStatusDisplay", "latest_turn_status_display");
+  return optionalString(
+    nestedDisplay?.turnStatus ??
+      nestedDisplay?.turn_status ??
+      nestedDisplay?.status,
+  );
+}
+
+function getResumeState(thread: Record<string, unknown>): {
+  present: boolean;
+  value: string | null;
+} {
+  const present = hasOwn(thread, "resumeState") || hasOwn(thread, "resume_state");
+  if (!present) {
+    return { present: false, value: null };
+  }
+  return {
+    present: true,
+    value: optionalString(thread.resumeState ?? thread.resume_state),
+  };
+}
+
+function getTurnCount(thread: Record<string, unknown>): number | null {
+  return optionalNumber(thread.turnCount ?? thread.turn_count);
+}
+
+function getResumedTurnStateFromSummaryFields(
+  thread: Record<string, unknown>,
+): ResumedTurnState | null {
+  const latestTurnStatus = getLatestTurnStatus(thread);
+  const resumeState = getResumeState(thread);
+  const turnCount = getTurnCount(thread);
+  if (!latestTurnStatus && !resumeState.present && turnCount === null) {
+    return null;
+  }
+
+  const normalizedResumeState = resumeState.value
+    ? resumeState.value.replace(/[\s_-]/g, "").toLowerCase()
+    : null;
+  if (resumeState.present && (!normalizedResumeState || normalizedResumeState === "needsresume")) {
+    return {
+      activeTurnId: null,
+      activeTurnStartedAtMs: null,
+      confidentNoActiveTurn: true,
+    };
+  }
+  if (turnCount === 0 && normalizedResumeState === "resuming") {
+    return {
+      activeTurnId: null,
+      activeTurnStartedAtMs: null,
+      confidentNoActiveTurn: false,
+    };
+  }
+
+  const latestStatus = classifyTurnStatus(normalizeTurnStatus(latestTurnStatus));
+  if (latestStatus === "active") {
+    return {
+      activeTurnId: null,
+      activeTurnStartedAtMs: null,
+      confidentNoActiveTurn: false,
+    };
+  }
+  if (latestStatus === "terminal") {
+    return {
+      activeTurnId: null,
+      activeTurnStartedAtMs: null,
+      confidentNoActiveTurn: true,
+    };
+  }
+  return null;
+}
+
 function getExplicitActiveTurnState(
   thread: Record<string, unknown>,
 ): {
@@ -344,6 +478,11 @@ export function getResumedTurnState(
       activeTurnStartedAtMs: explicitState.activeTurnStartedAtMs,
       confidentNoActiveTurn: !explicitState.activeTurnId,
     };
+  }
+
+  const summaryState = getResumedTurnStateFromSummaryFields(thread);
+  if (summaryState) {
+    return summaryState;
   }
 
   const turns = Array.isArray(thread.turns)

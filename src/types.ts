@@ -267,6 +267,9 @@ export type ThreadSummary = {
   isSubagent?: boolean;
   subagentNickname?: string | null;
   subagentRole?: string | null;
+  searchSnippet?: string | null;
+  searchMatchKind?: "title" | "content" | "token" | null;
+  searchSource?: string | null;
 };
 
 export type ThreadListSortKey = "created_at" | "updated_at";
@@ -274,6 +277,64 @@ export type ThreadListOrganizeMode =
   | "by_project"
   | "by_project_activity"
   | "threads_only";
+
+export type ThreadSearchResult = {
+  workspaceId: string;
+  workspaceName: string;
+  workspacePath: string;
+  threadId: string;
+  title: string;
+  updatedAt: number;
+  matchKind: "title" | "content" | "token";
+  snippet: string;
+  source: string;
+  score: number;
+};
+
+export type SearchThreadsInput = {
+  query: string;
+  workspaceIds?: string[];
+  limit?: number;
+};
+
+export type RebuildThreadSearchIndexInput = {
+  source?: "codex_sessions" | "app_server";
+  workspaceIds?: string[];
+  reset?: boolean;
+  codexHome?: string | null;
+  maxThreads?: number;
+  maxPages?: number;
+};
+
+export type ThreadSearchIndexStats = {
+  source: string;
+  indexedThreads: number;
+  scannedFiles: number;
+  scannedThreads: number;
+  skipped: number;
+  errorCount: number;
+};
+
+export type ThreadSearchIndexSourceCount = {
+  source: string;
+  count: number;
+};
+
+export type ThreadSearchIndexStatus = {
+  dbPath: string;
+  exists: boolean;
+  dbBytes: number;
+  walBytes: number;
+  shmBytes: number;
+  totalBytes: number;
+  indexedThreads: number;
+  indexedWorkspaces: number;
+  ftsRows: number;
+  titleBytes: number;
+  contentBytes: number;
+  lastIndexedAt?: number | null;
+  sourceCounts: ThreadSearchIndexSourceCount[];
+};
 
 export type ReviewTarget =
   | { type: "uncommittedChanges" }

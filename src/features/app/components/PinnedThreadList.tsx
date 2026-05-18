@@ -113,7 +113,9 @@ function arePinnedRowsEqual(prevRows: PinnedThreadRow[], nextRows: PinnedThreadR
     (row, index) =>
       row.workspaceId === nextRows[index].workspaceId &&
       row.thread.id === nextRows[index].thread.id &&
-      row.depth === nextRows[index].depth,
+      row.depth === nextRows[index].depth &&
+      row.thread.searchSnippet === nextRows[index].thread.searchSnippet &&
+      row.thread.searchMatchKind === nextRows[index].thread.searchMatchKind,
   );
 }
 

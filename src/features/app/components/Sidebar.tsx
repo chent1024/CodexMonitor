@@ -4,6 +4,7 @@ import type {
   RateLimitSnapshot,
   ThreadListOrganizeMode,
   ThreadListSortKey,
+  ThreadSearchResult,
   ThreadSummary,
   WorkspaceInfo,
 } from "../../../types";
@@ -35,6 +36,11 @@ import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+import {
+  getThreadSearchIndexStatus,
+  rebuildThreadSearchIndex,
+  searchThreads,
+} from "../../../services/tauri";
 import { getUsageLabels } from "../utils/usageLabels";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
@@ -221,6 +227,11 @@ export const Sidebar = memo(function Sidebar({
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [threadSearchResults, setThreadSearchResults] = useState<ThreadSearchResult[]>([]);
+  const [threadSearchLoading, setThreadSearchLoading] = useState(false);
+  const [threadSearchError, setThreadSearchError] = useState<string | null>(null);
+  const [threadSearchNotice, setThreadSearchNotice] = useState<string | null>(null);
+  const [threadSearchIndexing, setThreadSearchIndexing] = useState(false);
   const [addMenuAnchor, setAddMenuAnchor] =
     useState<SidebarWorkspaceAddMenuAnchor | null>(null);
   const [allThreadsAddMenuAnchor, setAllThreadsAddMenuAnchor] =
@@ -265,6 +276,35 @@ export const Sidebar = memo(function Sidebar({
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const isSearchActive = Boolean(normalizedQuery);
+  const searchStatusText = useMemo(() => {
+    if (!isSearchOpen || !isSearchActive) {
+      return null;
+    }
+    if (threadSearchIndexing) {
+      return "正在建立索引...";
+    }
+    if (threadSearchLoading) {
+      return "正在搜索索引...";
+    }
+    if (threadSearchError) {
+      return threadSearchError;
+    }
+    if (threadSearchNotice) {
+      return threadSearchNotice;
+    }
+    if (threadSearchResults.length > 0) {
+      return `找到 ${threadSearchResults.length} 个索引结果`;
+    }
+    return "没有匹配的索引结果";
+  }, [
+    isSearchActive,
+    isSearchOpen,
+    threadSearchError,
+    threadSearchIndexing,
+    threadSearchLoading,
+    threadSearchNotice,
+    threadSearchResults.length,
+  ]);
   const pendingUserInputKeys = useMemo(
     () =>
       new Set(
@@ -278,6 +318,140 @@ export const Sidebar = memo(function Sidebar({
       ),
     [userInputRequests],
   );
+  const workspaceIds = useMemo(
+    () => workspaces.map((workspace) => workspace.id).filter(Boolean),
+    [workspaces],
+  );
+  useEffect(() => {
+    if (!isSearchOpen || normalizedQuery.length < 2) {
+      setThreadSearchResults([]);
+      setThreadSearchError(null);
+      setThreadSearchNotice(null);
+      setThreadSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setThreadSearchLoading(true);
+    setThreadSearchError(null);
+    setThreadSearchNotice(null);
+    searchThreads({
+      query: normalizedQuery,
+      workspaceIds,
+      limit: 80,
+    })
+      .then(async (results) => {
+        if (cancelled) {
+          return;
+        }
+        if (results.length === 0) {
+          const status = await getThreadSearchIndexStatus();
+          if (!cancelled && status.indexedThreads === 0) {
+            setThreadSearchNotice("索引为空，先在设置 > 索引里重建索引。");
+          }
+        }
+        if (!cancelled) {
+          setThreadSearchResults(results);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setThreadSearchResults([]);
+          setThreadSearchError(error instanceof Error ? error.message : String(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setThreadSearchLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSearchOpen, normalizedQuery, workspaceIds]);
+
+  const rebuildSearchIndex = useCallback((source: "codex_sessions" | "app_server") => {
+    if (threadSearchIndexing) {
+      return;
+    }
+    setThreadSearchIndexing(true);
+    setThreadSearchError(null);
+    setThreadSearchNotice(null);
+    rebuildThreadSearchIndex({
+      source,
+      workspaceIds,
+      reset: true,
+      maxThreads: source === "codex_sessions" ? 1000 : 250,
+    })
+      .then(async (stats) => {
+        if (stats.indexedThreads === 0) {
+          setThreadSearchNotice("没有索引到会话，请确认当前项目有历史会话。");
+        }
+        return normalizedQuery.length >= 2
+          ? searchThreads({ query: normalizedQuery, workspaceIds, limit: 80 })
+          : [];
+      })
+      .then(async (results) => {
+        if (results.length === 0 && normalizedQuery.length >= 2) {
+          const status = await getThreadSearchIndexStatus();
+          if (status.indexedThreads === 0) {
+            setThreadSearchNotice("索引为空，先在设置 > 索引里重建索引。");
+          }
+        }
+        setThreadSearchResults(results);
+      })
+      .catch((error) => {
+        setThreadSearchError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        setThreadSearchIndexing(false);
+      });
+  }, [normalizedQuery, threadSearchIndexing, workspaceIds]);
+  const handleRebuildSearchIndexFromCodexSessions = useCallback(() => {
+    rebuildSearchIndex("codex_sessions");
+  }, [rebuildSearchIndex]);
+  const handleRebuildSearchIndexFromAppServer = useCallback(() => {
+    rebuildSearchIndex("app_server");
+  }, [rebuildSearchIndex]);
+
+  const displayThreadsByWorkspace = useMemo(() => {
+    if (threadSearchResults.length === 0) {
+      return threadsByWorkspace;
+    }
+    const next: Record<string, ThreadSummary[]> = {};
+    Object.entries(threadsByWorkspace).forEach(([workspaceId, threads]) => {
+      next[workspaceId] = threads.map((thread) => ({ ...thread }));
+    });
+    const byKey = new Map<string, ThreadSearchResult>();
+    threadSearchResults.forEach((result) => {
+      byKey.set(`${result.workspaceId}:${result.threadId}`, result);
+    });
+    byKey.forEach((result) => {
+      const list = next[result.workspaceId] ?? [];
+      const index = list.findIndex((thread) => thread.id === result.threadId);
+      const patch = {
+        searchSnippet: result.snippet,
+        searchMatchKind: result.matchKind,
+        searchSource: result.source,
+      };
+      if (index >= 0) {
+        list[index] = {
+          ...list[index],
+          ...patch,
+          name: list[index].name || result.title,
+          updatedAt: list[index].updatedAt || result.updatedAt,
+        };
+      } else {
+        list.push({
+          id: result.threadId,
+          name: result.title || result.threadId,
+          updatedAt: result.updatedAt,
+          ...patch,
+        });
+      }
+      next[result.workspaceId] = list;
+    });
+    return next;
+  }, [threadSearchResults, threadsByWorkspace]);
 
   const isWorkspaceMatch = useCallback(
     (workspace: WorkspaceInfo) => {
@@ -292,14 +466,14 @@ export const Sidebar = memo(function Sidebar({
 
     const result = new Map<string, boolean>();
     workspaces.forEach((workspace) => {
-      const threads = threadsByWorkspace[workspace.id] ?? [];
+      const threads = displayThreadsByWorkspace[workspace.id] ?? [];
       result.set(
         workspace.id,
         threads.some((thread) => threadMatchesQuery(thread, workspace.name, normalizedQuery)),
       );
     });
     return result;
-  }, [isSearchActive, normalizedQuery, threadsByWorkspace, workspaces]);
+  }, [displayThreadsByWorkspace, isSearchActive, normalizedQuery, workspaces]);
   const workspaceVisibleDuringSearchById = useMemo(() => {
     if (!isSearchActive) {
       return new Map<string, boolean>();
@@ -387,7 +561,7 @@ export const Sidebar = memo(function Sidebar({
       ) {
         return;
       }
-      const threads = threadsByWorkspace[workspace.id] ?? [];
+      const threads = displayThreadsByWorkspace[workspace.id] ?? [];
       if (!threads.length) {
         return;
       }
@@ -432,7 +606,7 @@ export const Sidebar = memo(function Sidebar({
       );
   }, [
     workspaces,
-    threadsByWorkspace,
+    displayThreadsByWorkspace,
     getThreadRows,
     getPinTimestamp,
     pinnedThreadsVersion,
@@ -538,7 +712,7 @@ export const Sidebar = memo(function Sidebar({
 
     filteredGroupedWorkspaces.forEach((group) => {
       group.workspaces.forEach((workspace) => {
-        const rootThreads = threadsByWorkspace[workspace.id] ?? [];
+        const rootThreads = displayThreadsByWorkspace[workspace.id] ?? [];
         const visibleClones =
           normalizedQuery && !isWorkspaceMatch(workspace)
             ? (cloneWorkspacesBySourceId.get(workspace.id) ?? []).filter((clone) =>
@@ -549,7 +723,7 @@ export const Sidebar = memo(function Sidebar({
         let timestamp = getSortTimestamp(rootThreads[0]);
 
         visibleClones.forEach((clone) => {
-          const cloneThreads = threadsByWorkspace[clone.id] ?? [];
+          const cloneThreads = displayThreadsByWorkspace[clone.id] ?? [];
           if (!cloneThreads.length) {
             return;
           }
@@ -569,7 +743,7 @@ export const Sidebar = memo(function Sidebar({
     getSortTimestamp,
     isWorkspaceMatch,
     normalizedQuery,
-    threadsByWorkspace,
+    displayThreadsByWorkspace,
     workspaceVisibleDuringSearchById,
     workspaces,
   ]);
@@ -610,7 +784,7 @@ export const Sidebar = memo(function Sidebar({
 
     filteredGroupedWorkspaces.forEach((group) => {
       group.workspaces.forEach((workspace) => {
-        const threads = threadsByWorkspace[workspace.id] ?? [];
+        const threads = displayThreadsByWorkspace[workspace.id] ?? [];
         if (!threads.length) {
           return;
         }
@@ -668,7 +842,7 @@ export const Sidebar = memo(function Sidebar({
     normalizedQuery,
     pinnedThreadsVersion,
     threadListOrganizeMode,
-    threadsByWorkspace,
+    displayThreadsByWorkspace,
   ]);
   const flatThreadRows = useMemo(
     () => flatThreadRootGroups.flatMap((group) => group.rows),
@@ -683,7 +857,7 @@ export const Sidebar = memo(function Sidebar({
     () => [
       sortedGroupedWorkspaces,
       flatThreadRows,
-      threadsByWorkspace,
+      displayThreadsByWorkspace,
       expandedWorkspaces,
       normalizedQuery,
       threadListOrganizeMode,
@@ -691,7 +865,7 @@ export const Sidebar = memo(function Sidebar({
     [
       sortedGroupedWorkspaces,
       flatThreadRows,
-      threadsByWorkspace,
+      displayThreadsByWorkspace,
       expandedWorkspaces,
       normalizedQuery,
       threadListOrganizeMode,
@@ -900,6 +1074,9 @@ export const Sidebar = memo(function Sidebar({
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         onClearSearch={() => setSearchQuery("")}
+        onRebuildIndexFromCodexSessions={handleRebuildSearchIndexFromCodexSessions}
+        onRebuildIndexFromAppServer={handleRebuildSearchIndexFromAppServer}
+        indexRebuildInProgress={threadSearchIndexing}
       />
       <div
         className={`workspace-drop-overlay${
@@ -925,6 +1102,15 @@ export const Sidebar = memo(function Sidebar({
         onScroll={updateScrollFade}
         ref={sidebarBodyRef}
       >
+        {searchStatusText && (
+          <div
+            className={`sidebar-search-status${
+              threadSearchError ? " is-error" : ""
+            }${threadSearchResults.length > 0 ? " has-results" : ""}`}
+          >
+            {searchStatusText}
+          </div>
+        )}
         <div className="workspace-list">
           {pinnedThreadRows.length > 0 && (
             <div className="pinned-section">
@@ -986,7 +1172,7 @@ export const Sidebar = memo(function Sidebar({
                   renderHighlightedName={renderHighlightedName}
                   isWorkspaceMatch={isWorkspaceMatch}
                   deletingWorktreeIds={deletingWorktreeIds}
-                  threadsByWorkspace={threadsByWorkspace}
+                  threadsByWorkspace={displayThreadsByWorkspace}
                   threadStatusById={threadStatusById}
                   threadListLoadingByWorkspace={threadListLoadingByWorkspace}
                   threadListPagingByWorkspace={threadListPagingByWorkspace}

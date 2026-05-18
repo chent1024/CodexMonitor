@@ -1102,6 +1102,58 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("clears stale processing state from completed thread-list snapshots", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-1",
+            cwd: "/tmp/codex",
+            preview: "Done",
+            updated_at: 5000,
+            resumeState: "resumed",
+            turnCount: 2,
+            latestTurnStatus: "completed",
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions({
+      activeTurnIdByThread: { "thread-1": "turn-stale" },
+      threadStatusById: {
+        "thread-1": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 10,
+          lastDurationMs: null,
+        },
+      },
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: false,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setActiveTurnId",
+      threadId: "thread-1",
+      turnId: null,
+    });
+  });
+
   it("uses fresh fetched data for active anchors outside top thread target", async () => {
     const data = Array.from({ length: 21 }, (_, index) => ({
       id: `thread-${index + 1}`,

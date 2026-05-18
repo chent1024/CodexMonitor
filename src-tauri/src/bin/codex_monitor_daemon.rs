@@ -1236,6 +1236,50 @@ impl DaemonState {
         codex_core::list_threads_core(&self.sessions, workspace_id, cursor, limit, sort_key).await
     }
 
+    async fn search_threads(
+        &self,
+        input: shared::thread_search_core::SearchThreadsInput,
+    ) -> Result<Vec<shared::thread_search_core::ThreadSearchResult>, String> {
+        shared::thread_search_core::search_threads(&self.data_dir, input)
+    }
+
+    async fn get_thread_search_index_status(
+        &self,
+    ) -> Result<shared::thread_search_core::ThreadSearchIndexStatus, String> {
+        shared::thread_search_core::get_thread_search_index_status(&self.data_dir)
+    }
+
+    async fn clear_thread_search_index(
+        &self,
+    ) -> Result<shared::thread_search_core::ThreadSearchIndexStatus, String> {
+        shared::thread_search_core::clear_thread_search_index(&self.data_dir)
+    }
+
+    async fn rebuild_thread_search_index(
+        &self,
+        input: shared::thread_search_core::RebuildThreadSearchIndexInput,
+    ) -> Result<shared::thread_search_core::ThreadSearchIndexStats, String> {
+        match input.source.trim() {
+            "app_server" | "appServer" => {
+                shared::thread_search_core::rebuild_thread_search_index_from_app_server(
+                    &self.data_dir,
+                    &self.sessions,
+                    &self.workspaces,
+                    input,
+                )
+                .await
+            }
+            _ => {
+                shared::thread_search_core::rebuild_thread_search_index_from_codex_sessions(
+                    &self.data_dir,
+                    &self.workspaces,
+                    input,
+                )
+                .await
+            }
+        }
+    }
+
     async fn list_mcp_server_status(
         &self,
         workspace_id: String,

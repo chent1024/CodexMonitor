@@ -69,6 +69,7 @@ export const SETTINGS_SECTION_LABELS: Record<CodexSection, string> = {
   shortcuts: "快捷键",
   "open-apps": "打开应用",
   git: "Git",
+  index: "索引",
   server: "服务器",
   agents: "智能体",
   codex: "Codex",

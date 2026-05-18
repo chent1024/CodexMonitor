@@ -28,6 +28,7 @@ import {
 import { asString } from "@threads/utils/threadNormalize";
 import {
   getParentThreadIdFromThread,
+  getResumedTurnState,
   shouldHideSubagentThreadFromSidebar,
 } from "@threads/utils/threadRpc";
 import { saveThreadActivity } from "@threads/utils/threadStorage";
@@ -706,6 +707,43 @@ export function useThreadActions({
     [getCustomName],
   );
 
+  const reconcileThreadRuntimeStateFromSnapshot = useCallback(
+    (threadId: string, thread: Record<string, unknown>) => {
+      const currentStatus = threadStatusByIdRef.current[threadId];
+      const currentActiveTurnId = activeTurnIdByThreadRef.current[threadId] ?? null;
+      const resumedTurnState = getResumedTurnState(thread);
+      if (resumedTurnState.activeTurnId) {
+        dispatch({
+          type: "markProcessing",
+          threadId,
+          isProcessing: true,
+          timestamp: resumedTurnState.activeTurnStartedAtMs ?? Date.now(),
+        });
+        if (currentActiveTurnId !== resumedTurnState.activeTurnId) {
+          dispatch({
+            type: "setActiveTurnId",
+            threadId,
+            turnId: resumedTurnState.activeTurnId,
+          });
+        }
+        return;
+      }
+      if (!currentStatus?.isProcessing || !resumedTurnState.confidentNoActiveTurn) {
+        return;
+      }
+      dispatch({
+        type: "markProcessing",
+        threadId,
+        isProcessing: false,
+        timestamp: Date.now(),
+      });
+      if (currentActiveTurnId) {
+        dispatch({ type: "setActiveTurnId", threadId, turnId: null });
+      }
+    },
+    [dispatch],
+  );
+
   const listThreadsForWorkspaces = useCallback(
     async (
       workspaces: WorkspaceInfo[],
@@ -858,6 +896,7 @@ export function useThreadActions({
             applyThreadMetadata(workspace.id, threadId, thread, {
               notifySubagent: true,
             });
+            reconcileThreadRuntimeStateFromSnapshot(threadId, thread);
           });
           if (threadListState.didChangeActivity) {
             nextThreadActivity[workspace.id] = threadListState.nextActivityByThread;
@@ -906,6 +945,7 @@ export function useThreadActions({
     [
       applyThreadMetadata,
       buildThreadSummary,
+      reconcileThreadRuntimeStateFromSnapshot,
       dispatchPreviewMessage,
       dispatch,
       onDebug,

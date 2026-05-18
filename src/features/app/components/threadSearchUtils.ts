@@ -30,6 +30,8 @@ export function threadMatchesQuery(
   }
   return (
     includesNormalizedText(thread.name, query) ||
+    includesNormalizedText(thread.searchSnippet ?? null, query) ||
+    includesNormalizedText(thread.searchSource ?? null, query) ||
     includesNormalizedText(workspaceName, query) ||
     includesNormalizedText(thread.modelId ?? null, query) ||
     includesNormalizedText(thread.effort ?? null, query)

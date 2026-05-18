@@ -139,6 +139,45 @@ pub(super) async fn try_handle(
                     .await,
             )
         }
+        "search_threads" => {
+            let input = match parse_input::<shared::thread_search_core::SearchThreadsInput>(params)
+            {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .search_threads(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "get_thread_search_index_status" => Some(
+            state
+                .get_thread_search_index_status()
+                .await
+                .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+        ),
+        "clear_thread_search_index" => Some(
+            state
+                .clear_thread_search_index()
+                .await
+                .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+        ),
+        "rebuild_thread_search_index" => {
+            let input = match parse_input::<shared::thread_search_core::RebuildThreadSearchIndexInput>(
+                params,
+            ) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .rebuild_thread_search_index(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
         "list_mcp_server_status" => {
             let workspace_id = match parse_string(params, "workspaceId") {
                 Ok(value) => value,

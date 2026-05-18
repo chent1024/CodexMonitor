@@ -2,6 +2,7 @@ import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
 import Keyboard from "lucide-react/dist/esm/icons/keyboard";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import Database from "lucide-react/dist/esm/icons/database";
 import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical";
@@ -32,6 +33,7 @@ const NAV_ITEMS: Array<{
   { id: "shortcuts", label: "快捷键", icon: <Keyboard aria-hidden /> },
   { id: "open-apps", label: "打开应用", icon: <ExternalLink aria-hidden /> },
   { id: "git", label: "Git", icon: <GitBranch aria-hidden /> },
+  { id: "index", label: "索引", icon: <Database aria-hidden /> },
   { id: "server", label: "服务器", icon: <ServerCog aria-hidden /> },
   { id: "agents", label: "智能体", icon: <Bot aria-hidden /> },
   { id: "codex", label: "Codex", icon: <TerminalSquare aria-hidden /> },

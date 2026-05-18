@@ -4,6 +4,7 @@ import { SettingsDisplaySection } from "./SettingsDisplaySection";
 import { SettingsEnvironmentsSection } from "./SettingsEnvironmentsSection";
 import { SettingsFeaturesSection } from "./SettingsFeaturesSection";
 import { SettingsGitSection } from "./SettingsGitSection";
+import { SettingsIndexSection } from "./SettingsIndexSection";
 import { SettingsOpenAppsSection } from "./SettingsOpenAppsSection";
 import { SettingsProjectsSection } from "./SettingsProjectsSection";
 import { SettingsServerSection } from "./SettingsServerSection";
@@ -45,6 +46,9 @@ export function SettingsSectionContainers({
   }
   if (activeSection === "git") {
     return <SettingsGitSection {...orchestration.gitSectionProps} />;
+  }
+  if (activeSection === "index") {
+    return <SettingsIndexSection />;
   }
   if (activeSection === "server") {
     return <SettingsServerSection {...orchestration.serverSectionProps} />;

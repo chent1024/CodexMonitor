@@ -15,6 +15,11 @@ import type {
   WorkspaceInfo,
   AppMention,
   WorkspaceSettings,
+  SearchThreadsInput,
+  ThreadSearchIndexStatus,
+  ThreadSearchIndexStats,
+  ThreadSearchResult,
+  RebuildThreadSearchIndexInput,
 } from "../types";
 import type {
   GitFileDiff,
@@ -1446,6 +1451,26 @@ export async function listThreads(
   sortKey?: "created_at" | "updated_at" | null,
 ) {
   return invoke<any>("list_threads", { workspaceId, cursor, limit, sortKey });
+}
+
+export async function searchThreads(
+  input: SearchThreadsInput,
+): Promise<ThreadSearchResult[]> {
+  return invoke<ThreadSearchResult[]>("search_threads", { input });
+}
+
+export async function getThreadSearchIndexStatus(): Promise<ThreadSearchIndexStatus> {
+  return invoke<ThreadSearchIndexStatus>("get_thread_search_index_status");
+}
+
+export async function clearThreadSearchIndex(): Promise<ThreadSearchIndexStatus> {
+  return invoke<ThreadSearchIndexStatus>("clear_thread_search_index");
+}
+
+export async function rebuildThreadSearchIndex(
+  input: RebuildThreadSearchIndexInput,
+): Promise<ThreadSearchIndexStats> {
+  return invoke<ThreadSearchIndexStats>("rebuild_thread_search_index", { input });
 }
 
 export async function listMcpServerStatus(

@@ -15,6 +15,7 @@ use crate::event_sink::TauriEventSink;
 use crate::remote_backend;
 use crate::shared::agents_config_core;
 use crate::shared::codex_core::{self, insert_optional_nullable_string};
+use crate::shared::thread_search_core;
 use crate::state::AppState;
 use crate::types::WorkspaceEntry;
 
@@ -326,6 +327,154 @@ pub(crate) async fn list_threads(
     }
 
     codex_core::list_threads_core(&state.sessions, workspace_id, cursor, limit, sort_key).await
+}
+
+#[tauri::command]
+pub(crate) async fn search_threads(
+    input: thread_search_core::SearchThreadsInput,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Vec<thread_search_core::ThreadSearchResult>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        match remote_backend::call_remote(
+            &*state,
+            app,
+            "search_threads",
+            json!({ "input": input.clone() }),
+        )
+        .await
+        {
+            Ok(response) => return serde_json::from_value(response).map_err(|err| err.to_string()),
+            Err(err) if is_remote_unknown_method(&err, "search_threads") => {}
+            Err(err) => return Err(err),
+        }
+    }
+    search_threads_local(&state, input).await
+}
+
+async fn search_threads_local(
+    state: &AppState,
+    input: thread_search_core::SearchThreadsInput,
+) -> Result<Vec<thread_search_core::ThreadSearchResult>, String> {
+    let data_dir = state
+        .storage_path
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    thread_search_core::search_threads(&data_dir, input)
+}
+
+#[tauri::command]
+pub(crate) async fn get_thread_search_index_status(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<thread_search_core::ThreadSearchIndexStatus, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        match remote_backend::call_remote(&*state, app, "get_thread_search_index_status", json!({}))
+            .await
+        {
+            Ok(response) => return serde_json::from_value(response).map_err(|err| err.to_string()),
+            Err(err) if is_remote_unknown_method(&err, "get_thread_search_index_status") => {}
+            Err(err) => return Err(err),
+        }
+    }
+    get_thread_search_index_status_local(&state).await
+}
+
+async fn get_thread_search_index_status_local(
+    state: &AppState,
+) -> Result<thread_search_core::ThreadSearchIndexStatus, String> {
+    let data_dir = state
+        .storage_path
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    thread_search_core::get_thread_search_index_status(&data_dir)
+}
+
+#[tauri::command]
+pub(crate) async fn clear_thread_search_index(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<thread_search_core::ThreadSearchIndexStatus, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        match remote_backend::call_remote(&*state, app, "clear_thread_search_index", json!({}))
+            .await
+        {
+            Ok(response) => return serde_json::from_value(response).map_err(|err| err.to_string()),
+            Err(err) if is_remote_unknown_method(&err, "clear_thread_search_index") => {}
+            Err(err) => return Err(err),
+        }
+    }
+    clear_thread_search_index_local(&state).await
+}
+
+async fn clear_thread_search_index_local(
+    state: &AppState,
+) -> Result<thread_search_core::ThreadSearchIndexStatus, String> {
+    let data_dir = state
+        .storage_path
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    thread_search_core::clear_thread_search_index(&data_dir)
+}
+
+#[tauri::command]
+pub(crate) async fn rebuild_thread_search_index(
+    input: thread_search_core::RebuildThreadSearchIndexInput,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<thread_search_core::ThreadSearchIndexStats, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        match remote_backend::call_remote(
+            &*state,
+            app,
+            "rebuild_thread_search_index",
+            json!({ "input": input.clone() }),
+        )
+        .await
+        {
+            Ok(response) => return serde_json::from_value(response).map_err(|err| err.to_string()),
+            Err(err) if is_remote_unknown_method(&err, "rebuild_thread_search_index") => {}
+            Err(err) => return Err(err),
+        }
+    }
+    rebuild_thread_search_index_local(&state, input).await
+}
+
+async fn rebuild_thread_search_index_local(
+    state: &AppState,
+    input: thread_search_core::RebuildThreadSearchIndexInput,
+) -> Result<thread_search_core::ThreadSearchIndexStats, String> {
+    let data_dir = state
+        .storage_path
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    match input.source.trim() {
+        "app_server" | "appServer" => {
+            thread_search_core::rebuild_thread_search_index_from_app_server(
+                &data_dir,
+                &state.sessions,
+                &state.workspaces,
+                input,
+            )
+            .await
+        }
+        _ => {
+            thread_search_core::rebuild_thread_search_index_from_codex_sessions(
+                &data_dir,
+                &state.workspaces,
+                input,
+            )
+            .await
+        }
+    }
+}
+
+fn is_remote_unknown_method(err: &str, method: &str) -> bool {
+    err.contains("unknown method") && err.contains(method)
 }
 
 #[tauri::command]

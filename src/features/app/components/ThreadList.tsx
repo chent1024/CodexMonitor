@@ -185,7 +185,9 @@ function areThreadListRowsEqual(prevRows: ThreadListRow[], nextRows: ThreadListR
   return prevRows.every(
     (row, index) =>
       row.thread.id === nextRows[index].thread.id &&
-      row.depth === nextRows[index].depth,
+      row.depth === nextRows[index].depth &&
+      row.thread.searchSnippet === nextRows[index].thread.searchSnippet &&
+      row.thread.searchMatchKind === nextRows[index].thread.searchMatchKind,
   );
 }
 

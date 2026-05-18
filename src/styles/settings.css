@@ -219,6 +219,60 @@
   flex: 1 1 260px;
 }
 
+.settings-index-panel {
+  gap: 14px;
+}
+
+.settings-index-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-index-header .button svg,
+.settings-index-actions .button svg,
+.settings-index-actions .ghost svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+}
+
+.settings-index-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.settings-index-metric {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: var(--surface-control);
+}
+
+.settings-index-metric-label {
+  color: var(--text-subtle);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.settings-index-metric-value {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.settings-index-actions {
+  flex-wrap: wrap;
+}
+
+.settings-index-danger {
+  color: var(--text-danger);
+}
+
 .settings-memory-rebuild-hint {
   color: var(--accent-warning, #9a6700);
   font-size: 12px;
